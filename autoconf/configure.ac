@@ -581,6 +581,29 @@ case "$enableval" in
   *) AC_MSG_ERROR([Invalid setting for --enable-clang-rewriter. Use "yes" or "no"]) ;;
 esac
 
+dnl --enable-clang-upc2c: check whether to enable clang UPC to C translator
+AC_ARG_ENABLE(clang-upc2c,
+              AS_HELP_STRING([--enable-clang-upc2c],
+                             [Enable building of clang upc2c (default is YES)]),,
+                             enableval="default")
+UPC2CDIR="${srcdir}/tools/clang/tools/upc2c"
+case "$enableval" in
+  yes)
+    if ! test -d $UPC2CDIR; then
+      AC_MSG_ERROR([UPC to C translator requested but project does not exists ($UPC2CDIR). ])
+    fi
+    AC_SUBST(ENABLE_CLANG_UPC2C,[1]) ;;
+  no)
+    AC_SUBST(ENABLE_CLANG_UPC2C,[0]) ;;
+  default)
+    if test -d $UPC2CDIR; then
+      AC_SUBST(ENABLE_CLANG_UPC2C,[1])
+    else
+      AC_SUBST(ENABLE_CLANG_UPC2C,[0])
+    fi;;
+  *) AC_MSG_ERROR([Invalid setting for --enable-clang-upc2c. Use "yes" or "no"]) ;;
+esac
+
 dnl --enable-optimized : check whether they want to do an optimized build:
 AC_ARG_ENABLE(optimized, AS_HELP_STRING(
  --enable-optimized,[Compile with optimizations enabled (default is NO)]),,enableval=$optimize)
@@ -1050,6 +1073,26 @@ AC_ARG_WITH(c-include-dirs,
     withval="")
 AC_DEFINE_UNQUOTED(C_INCLUDE_DIRS,"$withval",
                    [Directories clang will search for headers])
+
+# Clang UPC
+AC_ARG_WITH(upc-pts,
+  AS_HELP_STRING([--with-upc-pts],
+    [UPC packed or struct pointer representation.]),,
+    withval="packed")
+AC_DEFINE_UNQUOTED(UPC_PTS,"$withval",
+                   [UPC packed/struct pointer representation.])
+AC_ARG_WITH(upc-packed-bits,
+  AS_HELP_STRING([--with-upc-packed-bits],
+    [UPC packed pointer representation.]),,
+    withval="[20,10,34]")
+AC_DEFINE_UNQUOTED(UPC_PACKED_BITS,"$withval",
+                   [UPC packed pointer representation.])
+AC_ARG_WITH(upc-pts-vaddr-order,
+  AS_HELP_STRING([--with-upc-pts-vaddr-order],
+    [UPC vaddr first or last.]),,
+    withval="first")
+AC_DEFINE_UNQUOTED(UPC_PTS_VADDR_ORDER,"$withval",
+                   [UPC vaddr first or last in the pointer representation.])
 
 # Clang normally uses the system c++ headers and libraries. With this option,
 # clang will use the ones provided by a gcc installation instead. This option should
