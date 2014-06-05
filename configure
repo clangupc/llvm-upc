@@ -690,6 +690,7 @@ ENABLE_CLANG_ARCMT
 ENABLE_CLANG_STATIC_ANALYZER
 ENABLE_CLANG_REWRITER
 ENABLE_CLANG_UPC2C
+ENABLE_CLANG_UPC_RUNTIME
 ENABLE_OPTIMIZED
 ENABLE_PROFILING
 DISABLE_ASSERTIONS
@@ -829,7 +830,8 @@ projects/llvm-java
 projects/llvm-tv
 projects/safecode
 projects/llvm-kernel
-tools/polly'
+tools/polly
+tools/clang/runtime/libupc'
 
 # Initialize some variables set by options.
 ac_init_help=
@@ -1414,6 +1416,9 @@ Optional Features:
                           YES)
   --enable-clang-rewriter Enable building of clang rewriter (default is YES)
   --enable-clang-upc2c    Enable building of clang upc2c (default is YES)
+  --enable-clang-upc-runtime
+                          Enable building of clang upc runtime (default is
+                          YES)
   --enable-optimized      Compile with optimizations enabled (default is NO)
   --enable-profiling      Compile with profiling enabled (default is NO)
   --enable-assertions     Compile with assertion checks enabled (default is
@@ -5311,6 +5316,43 @@ echo "$as_me: error: Invalid setting for --enable-clang-upc2c. Use \"yes\" or \"
    { (exit 1); exit 1; }; } ;;
 esac
 
+# Check whether --enable-clang-upc-runtime was given.
+if test "${enable_clang_upc_runtime+set}" = set; then
+  enableval=$enable_clang_upc_runtime;
+else
+  enableval="default"
+fi
+
+UPCRDIR="${srcdir}/tools/clang/runtime/libupc"
+case "$enableval" in
+  yes)
+    if ! test -d $UPCRDIR; then
+      { { echo "$as_me:$LINENO: error: Build of Clang UPC runtime requested but project does not exists ($UPCRDIR). " >&5
+echo "$as_me: error: Build of Clang UPC runtime requested but project does not exists ($UPCRDIR). " >&2;}
+   { (exit 1); exit 1; }; }
+    fi
+    llvm_cv_clang_upc_runtime=1
+    ENABLE_CLANG_UPC_RUNTIME=1
+ ;;
+  no)
+    llvm_cv_clang_upc_runtime=0
+    ENABLE_CLANG_UPC_RUNTIME=0
+ ;;
+  default)
+    if test -d $UPCRDIR; then
+      llvm_cv_clang_upc_runtime=1
+      ENABLE_CLANG_UPC_RUNTIME=1
+
+    else
+      llvm_cv_clang_upc_runtime=0
+      ENABLE_CLANG_UPC_RUNTIME=0
+
+    fi;;
+  *) { { echo "$as_me:$LINENO: error: Invalid setting for --enable-clang-upc-runtime. Use \"yes\" or \"no\"" >&5
+echo "$as_me: error: Invalid setting for --enable-clang-upc-runtime. Use \"yes\" or \"no\"" >&2;}
+   { (exit 1); exit 1; }; } ;;
+esac
+
 # Check whether --enable-optimized was given.
 if test "${enable_optimized+set}" = set; then
   enableval=$enable_optimized;
@@ -6039,6 +6081,12 @@ cat >>confdefs.h <<_ACEOF
 #define UPC_PTS_VADDR_ORDER "$withval"
 _ACEOF
 
+
+# Check for Clang UPC runtime configuration
+if test "$llvm_cv_clang_upc_runtime" -eq "1" ; then
+  subdirs="$subdirs tools/clang/runtime/libupc"
+
+fi
 
 # Clang normally uses the system c++ headers and libraries. With this option,
 # clang will use the ones provided by a gcc installation instead. This option should
@@ -10666,7 +10714,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 10669 "configure"
+#line 10717 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -23171,6 +23219,7 @@ ENABLE_CLANG_ARCMT!$ENABLE_CLANG_ARCMT$ac_delim
 ENABLE_CLANG_STATIC_ANALYZER!$ENABLE_CLANG_STATIC_ANALYZER$ac_delim
 ENABLE_CLANG_REWRITER!$ENABLE_CLANG_REWRITER$ac_delim
 ENABLE_CLANG_UPC2C!$ENABLE_CLANG_UPC2C$ac_delim
+ENABLE_CLANG_UPC_RUNTIME!$ENABLE_CLANG_UPC_RUNTIME$ac_delim
 ENABLE_OPTIMIZED!$ENABLE_OPTIMIZED$ac_delim
 ENABLE_PROFILING!$ENABLE_PROFILING$ac_delim
 DISABLE_ASSERTIONS!$DISABLE_ASSERTIONS$ac_delim
@@ -23179,7 +23228,6 @@ ENABLE_EXPENSIVE_CHECKS!$ENABLE_EXPENSIVE_CHECKS$ac_delim
 EXPENSIVE_CHECKS!$EXPENSIVE_CHECKS$ac_delim
 DEBUG_RUNTIME!$DEBUG_RUNTIME$ac_delim
 DEBUG_SYMBOLS!$DEBUG_SYMBOLS$ac_delim
-KEEP_SYMBOLS!$KEEP_SYMBOLS$ac_delim
 _ACEOF
 
   if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 97; then
@@ -23221,6 +23269,7 @@ _ACEOF
 ac_delim='%!_!# '
 for ac_last_try in false false false false false :; do
   cat >conf$$subs.sed <<_ACEOF
+KEEP_SYMBOLS!$KEEP_SYMBOLS$ac_delim
 JIT!$JIT$ac_delim
 TARGET_HAS_JIT!$TARGET_HAS_JIT$ac_delim
 ENABLE_DOCS!$ENABLE_DOCS$ac_delim
@@ -23317,7 +23366,6 @@ LLVM_INFODIR!$LLVM_INFODIR$ac_delim
 LLVM_MANDIR!$LLVM_MANDIR$ac_delim
 LLVM_CONFIGTIME!$LLVM_CONFIGTIME$ac_delim
 BINDINGS_TO_BUILD!$BINDINGS_TO_BUILD$ac_delim
-ALL_BINDINGS!$ALL_BINDINGS$ac_delim
 _ACEOF
 
   if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 97; then
@@ -23359,6 +23407,7 @@ _ACEOF
 ac_delim='%!_!# '
 for ac_last_try in false false false false false :; do
   cat >conf$$subs.sed <<_ACEOF
+ALL_BINDINGS!$ALL_BINDINGS$ac_delim
 OCAML_LIBDIR!$OCAML_LIBDIR$ac_delim
 ENABLE_VISIBILITY_INLINES_HIDDEN!$ENABLE_VISIBILITY_INLINES_HIDDEN$ac_delim
 RPATH!$RPATH$ac_delim
@@ -23368,7 +23417,7 @@ LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 7; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 8; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5

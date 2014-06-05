@@ -604,6 +604,33 @@ case "$enableval" in
   *) AC_MSG_ERROR([Invalid setting for --enable-clang-upc2c. Use "yes" or "no"]) ;;
 esac
 
+dnl --enable-clang-upc-runtime: check whether to enable Clang UPC runtime build
+AC_ARG_ENABLE(clang-upc-runtime,
+              AS_HELP_STRING([--enable-clang-upc-runtime],
+                             [Enable building of clang upc runtime (default is YES)]),,
+                             enableval="default")
+UPCRDIR="${srcdir}/tools/clang/runtime/libupc"
+case "$enableval" in
+  yes)
+    if ! test -d $UPCRDIR; then
+      AC_MSG_ERROR([Build of Clang UPC runtime requested but project does not exists ($UPCRDIR). ])
+    fi
+    llvm_cv_clang_upc_runtime=1
+    AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[1]) ;;
+  no)
+    llvm_cv_clang_upc_runtime=0
+    AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[0]) ;;
+  default)
+    if test -d $UPCRDIR; then
+      llvm_cv_clang_upc_runtime=1
+      AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[1])
+    else
+      llvm_cv_clang_upc_runtime=0
+      AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[0])
+    fi;;
+  *) AC_MSG_ERROR([Invalid setting for --enable-clang-upc-runtime. Use "yes" or "no"]) ;;
+esac
+
 dnl --enable-optimized : check whether they want to do an optimized build:
 AC_ARG_ENABLE(optimized, AS_HELP_STRING(
  --enable-optimized,[Compile with optimizations enabled (default is NO)]),,enableval=$optimize)
@@ -1093,6 +1120,11 @@ AC_ARG_WITH(upc-pts-vaddr-order,
     withval="first")
 AC_DEFINE_UNQUOTED(UPC_PTS_VADDR_ORDER,"$withval",
                    [UPC vaddr first or last in the pointer representation.])
+
+# Check for Clang UPC runtime configuration
+if test "$llvm_cv_clang_upc_runtime" -eq "1" ; then
+  AC_CONFIG_SUBDIRS([tools/clang/runtime/libupc])
+fi
 
 # Clang normally uses the system c++ headers and libraries. With this option,
 # clang will use the ones provided by a gcc installation instead. This option should
