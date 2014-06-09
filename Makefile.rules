@@ -1279,18 +1279,9 @@ endif
 # TOOLALIAS is a name to symlink (or copy) the tool to.
 ifdef TOOLALIAS
 ifdef EXAMPLE_TOOL
-ToolAliasBuildPath   := $(ExmplDir)/$(strip $(TOOLALIAS))$(EXEEXT)
+ToolAliasBuildPaths   := $(addsuffix $(EXTEXT),$(addprefix $(ExmplDir)/, $(strip $(TOOLALIAS))))
 else
-ToolAliasBuildPath   := $(ToolDir)/$(strip $(TOOLALIAS))$(EXEEXT)
-endif
-endif
-ifdef UPCTOOLALIAS
-ifdef EXAMPLE_TOOL
-UpcToolAliasBuildPath   := $(ExmplDir)/$(strip $(UPCTOOLALIAS))$(EXEEXT)
-Upc2ToolAliasBuildPath   := $(ExmplDir)/upc$(EXEEXT)
-else
-UpcToolAliasBuildPath   := $(ToolDir)/$(strip $(UPCTOOLALIAS))$(EXEEXT)
-Upc2ToolAliasBuildPath   := $(ToolDir)/upc$(EXEEXT)
+ToolAliasBuildPaths   := $(addsuffix $(EXTEXT),$(addprefix $(ToolDir)/, $(strip $(TOOLALIAS))))
 endif
 endif
 
@@ -1354,18 +1345,14 @@ endif
 #---------------------------------------------------------
 # Provide targets for building the tools
 #---------------------------------------------------------
-all-local:: $(ToolBuildPath) $(ToolAliasBuildPath) $(UpcToolAliasBuildPath)
+all-local:: $(ToolBuildPath) $(ToolAliasBuildPaths)
 
 clean-local::
 ifneq ($(strip $(ToolBuildPath)),)
 	-$(Verb) $(RM) -f $(ToolBuildPath)
 endif
-ifneq ($(strip $(ToolAliasBuildPath)),)
-	-$(Verb) $(RM) -f $(ToolAliasBuildPath)
-endif
-ifneq ($(strip $(UpcToolAliasBuildPath)),)
-	-$(Verb) $(RM) -f $(UpcToolAliasBuildPath)
-	-$(Verb) $(RM) -f $(Upc2ToolAliasBuildPath)
+ifneq ($(strip $(ToolAliasBuildPaths)),)
+	-$(Verb) $(RM) -f $(ToolAliasBuildPaths)
 endif
 
 ifdef EXAMPLE_TOOL
@@ -1394,23 +1381,12 @@ $(ToolBuildPath): $(ObjectsO) $(ProjLibsPaths) $(LLVMLibsPaths)
           $(StripWarnMsg)
 endif
 
-ifneq ($(strip $(ToolAliasBuildPath)),)
-$(ToolAliasBuildPath): $(ToolBuildPath)
-	$(Echo) Creating $(BuildMode) Alias $(TOOLALIAS) $(StripWarnMsg)
-	$(Verb) $(RM) -f $(ToolAliasBuildPath)
-	$(Verb) $(AliasTool) $(notdir $(ToolBuildPath)) $(ToolAliasBuildPath)
-	$(Echo) ======= Finished Creating $(BuildMode) Alias $(TOOLALIAS) \
-          $(StripWarnMsg)
-endif
-
-ifneq ($(strip $(UpcToolAliasBuildPath)),)
-$(UpcToolAliasBuildPath): $(ToolBuildPath)
-	$(Echo) Creating $(BuildMode) Alias $(UPCTOOLALIAS) $(StripWarnMsg)
-	$(Verb) $(RM) -f $(UpcToolAliasBuildPath)
-	$(Verb) $(RM) -f $(Upc2ToolAliasBuildPath)
-	$(Verb) $(AliasTool) $(notdir $(ToolBuildPath)) $(UpcToolAliasBuildPath)
-	$(Verb) $(AliasTool) $(notdir $(ToolBuildPath)) $(Upc2ToolAliasBuildPath)
-	$(Echo) ======= Finished Creating $(BuildMode) Alias $(UPCTOOLALIAS) \
+ifneq ($(strip $(ToolAliasBuildPaths)),)
+$(ToolAliasBuildPaths): $(ToolBuildPath)
+	$(Echo) Creating $(BuildMode) Alias $(notdir $@) $(StripWarnMsg)
+	$(Verb) $(RM) -f $@
+	$(Verb) $(AliasTool) $(notdir $(ToolBuildPath)) $@
+	$(Echo) ======= Finished Creating $(BuildMode) Alias $(notdir $@) \
           $(StripWarnMsg)
 endif
 
@@ -1441,38 +1417,18 @@ uninstall-local::
 
 # TOOLALIAS install.
 ifdef TOOLALIAS
-DestToolAlias = $(ToolBinDir)/$(program_prefix)$(TOOLALIAS)$(EXEEXT)
+DestToolAliases = $(addsuffix $(EXTEXT),$(addprefix $(ToolBinDir)/$(program_prefix), $(strip $(TOOLALIAS))))
 
-install-local:: $(DestToolAlias)
+install-local:: $(DestToolAliases)
 
-$(DestToolAlias): $(DestTool)
-	$(Echo) Installing $(BuildMode) $(DestToolAlias)
-	$(Verb) $(RM) -f $(DestToolAlias)
-	$(Verb) $(AliasTool) $(notdir $(DestTool)) $(DestToolAlias)
-
-uninstall-local::
-	$(Echo) Uninstalling $(BuildMode) $(DestToolAlias)
-	-$(Verb) $(RM) -f $(DestToolAlias)
-endif
-
-# UPCTOOLALIAS install.
-ifdef UPCTOOLALIAS
-DestUpcToolAlias = $(ToolBinDir)/$(program_prefix)$(UPCTOOLALIAS)$(EXEEXT)
-DestUpc2ToolAlias = $(ToolBinDir)/$(program_prefix)upc$(EXEEXT)
-
-install-local:: $(DestUpcToolAlias)
-
-$(DestUpcToolAlias): $(DestTool)
-	$(Echo) Installing $(BuildMode) $(DestUpcToolAlias)
-	$(Verb) $(RM) -f $(DestUpcToolAlias)
-	$(Verb) $(RM) -f $(DestUpc2ToolAlias)
-	$(Verb) $(AliasTool) $(notdir $(DestTool)) $(DestUpcToolAlias)
-	$(Verb) $(AliasTool) $(notdir $(DestTool)) $(DestUpc2ToolAlias)
+$(DestToolAliases): $(DestTool)
+	$(Echo) Installing $(BuildMode) $(notdir $@)
+	$(Verb) $(RM) -f $@
+	$(Verb) $(AliasTool) $(notdir $(DestTool)) $@
 
 uninstall-local::
-	$(Echo) Uninstalling $(BuildMode) $(DestUpcToolAlias)
-	-$(Verb) $(RM) -f $(DestUpcToolAlias)
-	-$(Verb) $(RM) -f $(DestUpc2ToolAlias)
+	$(Echo) Uninstalling $(BuildMode) $(DestToolAliases)
+	-$(Verb) $(RM) -f $(DestToolAliases)
 endif
 
 endif
