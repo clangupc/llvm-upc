@@ -300,6 +300,9 @@
 /* Define to 1 if you have the `opendir' function. */
 #undef HAVE_OPENDIR
 
+/* Define to 1 if you have the <portals4.h> header file. */
+#undef HAVE_PORTALS4_H
+
 /* Define to 1 if you have the `posix_spawn' function. */
 #undef HAVE_POSIX_SPAWN
 
@@ -371,6 +374,9 @@
 
 /* Define to 1 if you have the `sigsetjmp' function. */
 #undef HAVE_SIGSETJMP
+
+/* Define to 1 if you have the <slurm/slurm.h> header file. */
+#undef HAVE_SLURM_SLURM_H
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
@@ -529,6 +535,12 @@
 
 /* Linker version detected at compile time. */
 #undef HOST_LINK_VERSION
+
+/* Portals4 library path */
+#undef LIBUPC_PORTALS4
+
+/* Using SLURM for job launcher */
+#undef LIBUPC_PORTALS4_SLURM
 
 /* Installation directory for binary executables */
 #undef LLVM_BINDIR

@@ -250,6 +250,9 @@ ENABLE_CLANG_STATIC_ANALYZER = @ENABLE_CLANG_STATIC_ANALYZER@
 # When ENABLE_CLANG_UPC2C is enabled, clang will have UPC to C translator.
 ENABLE_CLANG_UPC2C = @ENABLE_CLANG_UPC2C@
 
+# When ENABLE_CLANG_UPC_RUNTIME is enabled, clang will have UPC runtime.
+ENABLE_CLANG_UPC_RUNTIME = @ENABLE_CLANG_UPC_RUNTIME@
+
 # When ENABLE_WERROR is enabled, we'll pass -Werror on the command line
 ENABLE_WERROR = @ENABLE_WERROR@
 

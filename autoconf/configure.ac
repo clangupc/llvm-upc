@@ -604,6 +604,33 @@ case "$enableval" in
   *) AC_MSG_ERROR([Invalid setting for --enable-clang-upc2c. Use "yes" or "no"]) ;;
 esac
 
+dnl --enable-clang-upc-runtime: check whether to enable Clang UPC runtime build
+AC_ARG_ENABLE(clang-upc-runtime,
+              AS_HELP_STRING([--enable-clang-upc-runtime],
+                             [Enable building of clang upc runtime (default is YES)]),,
+                             enableval="default")
+UPCRDIR="${srcdir}/tools/clang/runtime/libupc"
+case "$enableval" in
+  yes)
+    if ! test -d $UPCRDIR; then
+      AC_MSG_ERROR([Build of Clang UPC runtime requested but project does not exists ($UPCRDIR). ])
+    fi
+    llvm_cv_clang_upc_runtime=1
+    AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[1]) ;;
+  no)
+    llvm_cv_clang_upc_runtime=0
+    AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[0]) ;;
+  default)
+    if test -d $UPCRDIR; then
+      llvm_cv_clang_upc_runtime=1
+      AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[1])
+    else
+      llvm_cv_clang_upc_runtime=0
+      AC_SUBST(ENABLE_CLANG_UPC_RUNTIME,[0])
+    fi;;
+  *) AC_MSG_ERROR([Invalid setting for --enable-clang-upc-runtime. Use "yes" or "no"]) ;;
+esac
+
 dnl --enable-optimized : check whether they want to do an optimized build:
 AC_ARG_ENABLE(optimized, AS_HELP_STRING(
  --enable-optimized,[Compile with optimizations enabled (default is NO)]),,enableval=$optimize)
@@ -1081,8 +1108,8 @@ AC_ARG_WITH(upc-pts,
     withval="packed")
 AC_DEFINE_UNQUOTED(UPC_PTS,"$withval",
                    [UPC packed/struct pointer representation.])
-AC_ARG_WITH(upc-packed-bits,
-  AS_HELP_STRING([--with-upc-packed-bits],
+AC_ARG_WITH(upc-pts-packed-bits,
+  AS_HELP_STRING([--with-upc-pts-packed-bits],
     [UPC packed pointer representation.]),,
     withval="[20,10,34]")
 AC_DEFINE_UNQUOTED(UPC_PACKED_BITS,"$withval",
@@ -1093,6 +1120,84 @@ AC_ARG_WITH(upc-pts-vaddr-order,
     withval="first")
 AC_DEFINE_UNQUOTED(UPC_PTS_VADDR_ORDER,"$withval",
                    [UPC vaddr first or last in the pointer representation.])
+
+# Check for runtime model
+AC_MSG_CHECKING([for UPC runtime model])
+AC_ARG_WITH(upc-runtime,
+[AS_HELP_STRING([--with-upc-runtime=MODEL],
+		[specify the runtime implementation model for UPC,
+		 where MODEL may be: 'SMP' (Symmetric Multiprocessing)
+		 or 'Portals4'.  [default='SMP']])],
+[
+  case "$withval" in
+changequote(,)dnl
+    [Ss][Mm][Pp])
+      upc_runtime_model=smp
+      ;;
+    [Pp][Oo][Rr][Tt][Aa][Ll][Ss]4)
+      upc_runtime_model=portals4
+      ;;
+changequote([,])dnl
+    *)
+      AC_MSG_ERROR([$withval is an invalid runtime model for
+      --with-upc-runtime])
+      ;;
+  esac
+],
+[
+  upc_runtime_model=smp
+])
+AC_MSG_RESULT([$upc_runtime_model])
+
+# Additional checks in case of Portals4
+if test "$upc_runtime_model" = "portals4"; then
+  AC_CHECK_HEADERS([portals4.h],[have_p4=yes],[have_p4=no])             
+  AC_ARG_WITH(portals4,
+  [AS_HELP_STRING([--with-portals4=PATH],
+                  [Specify prefix directory for installed portals4 package])],
+  [
+    if test -f "$withval/include/portals4.h"; then
+      AC_DEFINE_UNQUOTED(LIBUPC_PORTALS4, "$withval", [Portals4 library path] )
+    else
+      AC_MSG_ERROR([--with-portals4 specifies wrong prefix for Portals4 package.])
+    fi
+  ],
+  [
+    if test "$have_p4" = "no"; then
+      AC_MSG_ERROR([Portals4 not found - use --with-portals4 to specify one.])
+    fi
+  ])
+
+  # Check if job launcher was specified
+  AC_CHECK_HEADERS([slurm/slurm.h],[have_slurm=yes],[have_slurm=no])             
+  AC_MSG_CHECKING([for UPC runtime Portals4 job launcher])
+  AC_ARG_WITH(upc-job-launcher,
+  [AS_HELP_STRING([--with-upc-job-launcher],
+		  [Select UPC Portals4 job launcher [default=slurm]])],
+  [
+    case $withval in
+    slurm | yod)
+      upc_job_launcher=$withval
+      ;;
+    *)
+      AC_MSG_ERROR([--with-upc-job-launcher accepts only slurm or yod.])
+    esac
+  ],
+  [
+    if test "$have_slurm" = "yes"; then
+      upc_job_launcher="slurm"
+    fi
+  ])
+  AC_MSG_RESULT($upc_job_launcher) 
+  if test "$upc_job_launcher" = "slurm"; then
+      AC_DEFINE(LIBUPC_PORTALS4_SLURM, [1], [Using SLURM for job launcher])
+  fi
+fi
+
+# Check for Clang UPC runtime configuration
+if test "$llvm_cv_clang_upc_runtime" -eq "1" ; then
+  AC_CONFIG_SUBDIRS([tools/clang/runtime/libupc])
+fi
 
 # Clang normally uses the system c++ headers and libraries. With this option,
 # clang will use the ones provided by a gcc installation instead. This option should
