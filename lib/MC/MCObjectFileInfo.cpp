@@ -7,6 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Config/config.h"
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/MC/MCContext.h"
@@ -418,6 +419,13 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
     Ctx->getELFSection(".dtors", ELF::SHT_PROGBITS,
                        ELF::SHF_ALLOC |ELF::SHF_WRITE,
                        SectionKind::getDataRel());
+
+#ifndef LIBUPC_LINK_SCRIPT
+  UPCSection =
+    Ctx->getELFSection("upc_shared", ELF::SHT_NOBITS,
+                       ELF::SHF_WRITE |ELF::SHF_ALLOC,
+                       SectionKind::getReadOnly());
+#endif
 
   // Exception Handling Sections.
 

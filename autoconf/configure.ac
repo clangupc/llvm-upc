@@ -631,6 +631,51 @@ case "$enableval" in
   *) AC_MSG_ERROR([Invalid setting for --enable-clang-upc-runtime. Use "yes" or "no"]) ;;
 esac
 
+AC_MSG_CHECKING([for UPC link script support])
+AC_ARG_ENABLE(upc-link-script,
+[AS_HELP_STRING([--enable-upc-link-script],
+                [Enable UPC's use of a custom linker script;
+                 this will define the UPC shared section as a
+		 no load section on targets where this feature
+		 is supported (requires GNU LD)])],
+[
+  case $enableval in
+  yes | no) ;;
+  *)
+    AC_MSG_ERROR([--enable-upc-link-script accepts only yes or no])
+  esac
+],
+[
+  case "$target" in                                                           
+    # disable linker script for Apple Mac OS X                                
+    *-*-darwin*)                                                              
+      enable_upc_link_script=no                                               
+      ;;                                                                      
+    *)                                                                        
+      enable_upc_link_script=yes                                              
+      ;; 
+  esac
+])
+if test "$enable_upc_link_script" = yes; then
+  if test "$with_gnu_ld" = yes; then
+    gen_ld_script=${srcdir}/gen-upc-ld-script.pl
+    if ! ${LD} --verbose | ${PERL} $gen_ld_script 1>/dev/null ; then
+      # if gen-upc-ld-script did not accept the output of the linker
+      # then disable UPC link script support.
+      AC_MSG_ERROR([selected linker does not support linker scripts])
+    fi
+  fi
+fi
+AC_MSG_RESULT($enable_upc_link_script)
+if test "$enable_upc_link_script" = yes; then
+  AC_DEFINE(LIBUPC_LINK_SCRIPT, 1,
+    [Define to 1 if UPC link script is supported.])
+  LIBUPC_LINK_SCRIPT=1
+else
+  LIBUPC_LINK_SCRIPT=0
+fi
+AC_SUBST(LIBUPC_LINK_SCRIPT)
+
 dnl --enable-optimized : check whether they want to do an optimized build:
 AC_ARG_ENABLE(optimized, AS_HELP_STRING(
  --enable-optimized,[Compile with optimizations enabled (default is NO)]),,enableval=$optimize)
@@ -1288,6 +1333,7 @@ AC_PATH_PROG(FIND, [find], [find])
 AC_PATH_PROG(GREP, [grep], [grep])
 AC_PATH_PROG(MKDIR,[mkdir],[mkdir])
 AC_PATH_PROG(MV,   [mv],   [mv])
+AC_PATH_PROG(LD,   [ld],   [ld])
 AC_PROG_RANLIB
 AC_CHECK_TOOL(AR, ar, false)
 AC_PATH_PROG(RM,   [rm],   [rm])

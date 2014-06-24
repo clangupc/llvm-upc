@@ -536,6 +536,9 @@
 /* Linker version detected at compile time. */
 #undef HOST_LINK_VERSION
 
+/* Define to 1 if UPC link script is supported. */
+#undef LIBUPC_LINK_SCRIPT
+
 /* Portals4 library path */
 #undef LIBUPC_PORTALS4
 

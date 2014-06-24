@@ -686,4 +686,7 @@
 /* Added by Kevin -- Maximum path length */
 #cmakedefine MAXPATHLEN ${MAXPATHLEN}
 
+/* UPC link script enabled. */                                                  
+#cmakedefine LIBUPC_LINK_SCRIPT 1
+
 #endif
