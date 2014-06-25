@@ -425,6 +425,10 @@ void MCObjectFileInfo::InitELFMCObjectFileInfo(Triple T) {
     Ctx->getELFSection("upc_shared", ELF::SHT_NOBITS,
                        ELF::SHF_WRITE |ELF::SHF_ALLOC,
                        SectionKind::getReadOnly());
+  UPCPgmSection =
+    Ctx->getELFSection("upc_pgm_info", ELF::SHT_PROGBITS,
+                       ELF::SHF_ALLOC,
+                       SectionKind::getDataRel());
 #endif
 
   // Exception Handling Sections.

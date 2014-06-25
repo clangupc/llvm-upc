@@ -83,6 +83,9 @@ protected:
   /// UPCSection - UPC shared section
   const MCSection *UPCSection;
 
+  /// UPCPgmSection - UPC program info section
+  const MCSection *UPCPgmSection;
+
   /// LSDASection - If exception handling is supported by the target, this is
   /// the section the Language Specific Data Area information is emitted to.
   const MCSection *LSDASection;
