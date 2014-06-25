@@ -676,6 +676,40 @@ else
 fi
 AC_SUBST(LIBUPC_LINK_SCRIPT)
 
+AC_MSG_CHECKING([for UPC backtrace support])
+# Check if backtrace support library is there
+have_backtrace_lib=yes
+case "$llvm_cv_os_type" in
+  FreeBSD | OpenBSD | NetBSD)
+       AC_SEARCH_LIBS(backtrace, [execinfo], [], [have_backtrace_lib=no]) ;;
+    *) have_backtrace_lib=yes ;;
+esac
+
+AC_ARG_ENABLE(upc-backtrace,
+[AS_HELP_STRING([--enable-upc-backtrace],
+		[Enable UPC backtrace;
+		 Enable stack frame backtrace report
+		 when UPC run-time fatal errors occur
+		 or by user request (via signal)])],
+[
+  case $enableval in
+    yes | no) ;;
+    *)
+      AC_MSG_ERROR([--enable-upc-backtrace accepts only yes or no])
+  esac
+],
+[
+  enable_upc_backtrace=yes
+])
+AC_MSG_RESULT($enable_upc_backtrace)
+if test "$enable_upc_backtrace" = yes &&
+   test "$have_backtrace_lib" = yes; then
+  AC_DEFINE(LIBUPC_ENABLE_BACKTRACE, 1,
+    [Define to 1 if UPC backtrace is enabled.])
+  LIBUPC_ENABLE_BACKTRACE=1
+fi
+AC_SUBST(LIBUPC_ENABLE_BACKTRACE)
+
 dnl --enable-optimized : check whether they want to do an optimized build:
 AC_ARG_ENABLE(optimized, AS_HELP_STRING(
  --enable-optimized,[Compile with optimizations enabled (default is NO)]),,enableval=$optimize)
