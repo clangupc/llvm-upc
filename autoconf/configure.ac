@@ -631,85 +631,6 @@ case "$enableval" in
   *) AC_MSG_ERROR([Invalid setting for --enable-clang-upc-runtime. Use "yes" or "no"]) ;;
 esac
 
-AC_MSG_CHECKING([for UPC link script support])
-AC_ARG_ENABLE(upc-link-script,
-[AS_HELP_STRING([--enable-upc-link-script],
-                [Enable UPC's use of a custom linker script;
-                 this will define the UPC shared section as a
-		 no load section on targets where this feature
-		 is supported (requires GNU LD)])],
-[
-  case $enableval in
-  yes | no) ;;
-  *)
-    AC_MSG_ERROR([--enable-upc-link-script accepts only yes or no])
-  esac
-],
-[
-  case "$target" in                                                           
-    # disable linker script for Apple Mac OS X                                
-    *-*-darwin*)                                                              
-      enable_upc_link_script=no                                               
-      ;;                                                                      
-    *)                                                                        
-      enable_upc_link_script=yes                                              
-      ;; 
-  esac
-])
-if test "$enable_upc_link_script" = yes; then
-  if test "$with_gnu_ld" = yes; then
-    gen_ld_script=${srcdir}/gen-upc-ld-script.pl
-    if ! ${LD} --verbose | ${PERL} $gen_ld_script 1>/dev/null ; then
-      # if gen-upc-ld-script did not accept the output of the linker
-      # then disable UPC link script support.
-      AC_MSG_ERROR([selected linker does not support linker scripts])
-    fi
-  fi
-fi
-AC_MSG_RESULT($enable_upc_link_script)
-if test "$enable_upc_link_script" = yes; then
-  AC_DEFINE(LIBUPC_LINK_SCRIPT, 1,
-    [Define to 1 if UPC link script is supported.])
-  LIBUPC_LINK_SCRIPT=1
-else
-  LIBUPC_LINK_SCRIPT=0
-fi
-AC_SUBST(LIBUPC_LINK_SCRIPT)
-
-AC_MSG_CHECKING([for UPC backtrace support])
-# Check if backtrace support library is there
-have_backtrace_lib=yes
-case "$llvm_cv_os_type" in
-  FreeBSD | OpenBSD | NetBSD)
-       AC_SEARCH_LIBS(backtrace, [execinfo], [], [have_backtrace_lib=no]) ;;
-    *) have_backtrace_lib=yes ;;
-esac
-
-AC_ARG_ENABLE(upc-backtrace,
-[AS_HELP_STRING([--enable-upc-backtrace],
-		[Enable UPC backtrace;
-		 Enable stack frame backtrace report
-		 when UPC run-time fatal errors occur
-		 or by user request (via signal)])],
-[
-  case $enableval in
-    yes | no) ;;
-    *)
-      AC_MSG_ERROR([--enable-upc-backtrace accepts only yes or no])
-  esac
-],
-[
-  enable_upc_backtrace=yes
-])
-AC_MSG_RESULT($enable_upc_backtrace)
-if test "$enable_upc_backtrace" = yes &&
-   test "$have_backtrace_lib" = yes; then
-  AC_DEFINE(LIBUPC_ENABLE_BACKTRACE, 1,
-    [Define to 1 if UPC backtrace is enabled.])
-  LIBUPC_ENABLE_BACKTRACE=1
-fi
-AC_SUBST(LIBUPC_ENABLE_BACKTRACE)
-
 dnl --enable-optimized : check whether they want to do an optimized build:
 AC_ARG_ENABLE(optimized, AS_HELP_STRING(
  --enable-optimized,[Compile with optimizations enabled (default is NO)]),,enableval=$optimize)
@@ -1180,7 +1101,142 @@ AC_ARG_WITH(c-include-dirs,
 AC_DEFINE_UNQUOTED(C_INCLUDE_DIRS,"$withval",
                    [Directories clang will search for headers])
 
-# Clang UPC
+dnl Clang UPC configuration checks
+dnl Clang UPC linker script support
+AC_MSG_CHECKING([for UPC link script support])
+AC_ARG_ENABLE(upc-link-script,
+[AS_HELP_STRING([--enable-upc-link-script],
+                [Enable UPC's use of a custom linker script;
+                 this will define the UPC shared section as a
+		 no load section on targets where this feature
+		 is supported (requires GNU LD)])],
+[
+  case $enableval in
+  yes | no) ;;
+  *)
+    AC_MSG_ERROR([--enable-upc-link-script accepts only yes or no])
+  esac
+],
+[
+  case "$target" in                                                           
+    # disable linker script for Apple Mac OS X                                
+    *-*-darwin*)                                                              
+      enable_upc_link_script=no                                               
+      ;;                                                                      
+    *)                                                                        
+      enable_upc_link_script=yes                                              
+      ;; 
+  esac
+])
+if test "$enable_upc_link_script" = yes; then
+  if test "$with_gnu_ld" = yes; then
+    gen_ld_script=${srcdir}/gen-upc-ld-script.pl
+    if ! ${LD} --verbose | ${PERL} $gen_ld_script 1>/dev/null ; then
+      # if gen-upc-ld-script did not accept the output of the linker
+      # then disable UPC link script support.
+      AC_MSG_ERROR([selected linker does not support linker scripts])
+    fi
+  fi
+fi
+AC_MSG_RESULT($enable_upc_link_script)
+if test "$enable_upc_link_script" = yes; then
+  AC_DEFINE(LIBUPC_LINK_SCRIPT, 1,
+    [Define to 1 if UPC link script is supported.])
+  LIBUPC_LINK_SCRIPT=1
+else
+  LIBUPC_LINK_SCRIPT=0
+fi
+AC_SUBST(LIBUPC_LINK_SCRIPT)
+
+dnl Checking for UPC backtrace
+AC_ARG_WITH(execinfo-lib-path,
+  AS_HELP_STRING([--with-execinfo-lib-path],
+                 [Specify path for execinfo library]),,
+                 withval=none)
+AC_MSG_CHECKING([execinfo lib path])
+case "$withval" in
+  none) ;;
+  *)
+     execinfo_lib_path="$withval" ;;
+esac
+AC_MSG_RESULT([$execinfo_lib_path])
+
+AC_ARG_WITH(execinfo-inc-path,
+  AS_HELP_STRING([--with-execinfo-inc-path],
+                 [Specify path for execinfo include]),,
+                 withval=none)
+AC_MSG_CHECKING([execinfo inc path])
+case "$withval" in
+  none) ;;
+  *)
+     execinfo_inc_path="$withval" ;;
+esac
+AC_MSG_RESULT([$execinfo_inc_path])
+
+dnl Check if backtrace support library is available
+save_CFLAGS="$CFLAGS"
+AC_LANG_PUSH([C])
+if test "x$execinfo_inc_path" != x ; then
+  CFLAGS="$CFLAGS -I$execinfo_inc_path"
+fi
+if test "x$execinfo_lib_path" != x ; then
+  CFLAGS="$CFLAGS -L$execinfo_lib_path"
+fi
+case "$llvm_cv_os_type" in
+  FreeBSD|OpenBSD|NetBSD) CFLAGS="$CFLAGS -lexecinfo" ;;
+  *) ;;
+esac
+AC_LINK_IFELSE(
+[
+  AC_LANG_SOURCE([[
+    #include <execinfo.h>
+    int main () {
+      void *p;
+      return backtrace(&p, 1);
+    }
+  ]])
+],
+[have_backtrace=yes], [have_backtrace=no])
+AC_LANG_POP([C])
+CFLAGS="$save_CFLAGS"
+
+AC_MSG_CHECKING([for UPC backtrace support])
+AC_ARG_ENABLE(upc-backtrace,
+[AS_HELP_STRING([--enable-upc-backtrace],
+		[Enable UPC backtrace;
+		 Enable stack frame backtrace report
+		 when UPC run-time fatal errors occur
+		 or by user request (via signal)])],
+[
+  case $enableval in
+    yes | no) ;;
+    *)
+      AC_MSG_ERROR([--enable-upc-backtrace accepts only yes or no])
+  esac
+],
+[
+  enable_upc_backtrace=yes
+])
+if test "x$enable_upc_backtrace" = xyes &&
+   test "x$have_backtrace" = xyes; then
+  AC_DEFINE(LIBUPC_ENABLE_BACKTRACE, 1,
+    [Define to 1 if UPC backtrace is enabled.])
+  LIBUPC_ENABLE_BACKTRACE=1
+  if test "x$execinfo_lib_path" != x ; then
+    AC_DEFINE_UNQUOTED(LIBUPC_EXECINFO_LIB_PATH,"$execinfo_lib_path",                              
+                       [execinfo library path.]) 
+  fi
+  if test "x$execinfo_inc_path" != x ; then
+    AC_DEFINE_UNQUOTED(LIBUPC_EXECINFO_INC_PATH,"$execinfo_inc_path",                              
+                       [execinfo include path.]) 
+  fi
+else
+  enable_upc_backtrace=no
+fi
+AC_MSG_RESULT($enable_upc_backtrace)
+AC_SUBST(LIBUPC_ENABLE_BACKTRACE)
+
+dnl Clang UPC pointer representation
 AC_ARG_WITH(upc-pts,
   AS_HELP_STRING([--with-upc-pts],
     [UPC packed or struct pointer representation.]),,
@@ -1200,7 +1256,7 @@ AC_ARG_WITH(upc-pts-vaddr-order,
 AC_DEFINE_UNQUOTED(UPC_PTS_VADDR_ORDER,"$withval",
                    [UPC vaddr first or last in the pointer representation.])
 
-# Check for runtime model
+dnl Check for runtime model
 AC_MSG_CHECKING([for UPC runtime model])
 AC_ARG_WITH(upc-runtime,
 [AS_HELP_STRING([--with-upc-runtime=MODEL],
@@ -1228,7 +1284,7 @@ changequote([,])dnl
 ])
 AC_MSG_RESULT([$upc_runtime_model])
 
-# Additional checks in case of Portals4
+dnl Additional checks in case of Portals4
 if test "$upc_runtime_model" = "portals4"; then
   AC_CHECK_HEADERS([portals4.h],[have_p4=yes],[have_p4=no])             
   AC_ARG_WITH(portals4,
@@ -1273,7 +1329,7 @@ if test "$upc_runtime_model" = "portals4"; then
   fi
 fi
 
-# Check for Clang UPC runtime configuration
+dnl Check for Clang UPC runtime configuration
 if test "$llvm_cv_clang_upc_runtime" -eq "1" ; then
   AC_CONFIG_SUBDIRS([tools/clang/runtime/libupc])
 fi

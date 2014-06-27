@@ -536,6 +536,15 @@
 /* Linker version detected at compile time. */
 #undef HOST_LINK_VERSION
 
+/* Define to 1 if UPC backtrace is enabled. */
+#undef LIBUPC_ENABLE_BACKTRACE
+
+/* execinfo include path. */
+#undef LIBUPC_EXECINFO_INC_PATH
+
+/* execinfo library path. */
+#undef LIBUPC_EXECINFO_LIB_PATH
+
 /* Define to 1 if UPC link script is supported. */
 #undef LIBUPC_LINK_SCRIPT
 
