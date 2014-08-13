@@ -297,6 +297,9 @@
 /* Define if the neat program is available */
 #undef HAVE_NEATO
 
+/* Define to 1 if you have the <numa.h> header file. */
+#undef HAVE_NUMA_H
+
 /* Define to 1 if you have the `opendir' function. */
 #undef HAVE_OPENDIR
 
@@ -538,6 +541,9 @@
 
 /* Define to 1 if UPC backtrace is enabled. */
 #undef LIBUPC_ENABLE_BACKTRACE
+
+/* Using NUMA for UPC runtime */
+#undef LIBUPC_ENABLE_NUMA
 
 /* execinfo include path. */
 #undef LIBUPC_EXECINFO_INC_PATH

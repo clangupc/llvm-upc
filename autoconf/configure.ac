@@ -1284,6 +1284,38 @@ changequote([,])dnl
 ])
 AC_MSG_RESULT([$upc_runtime_model])
 
+if test "$upc_runtime_model" = "smp"; then
+  AC_CHECK_HEADERS([numa.h],[numa_available=yes],[numa_available=no])
+  AC_MSG_CHECKING([if NUMA is available])
+  AC_ARG_ENABLE(upc-numa,
+  [AS_HELP_STRING([--enable-upc-numa],
+                  [enable UPC runtime NUMA support [default='yes']])],
+  [
+    case $enableval in
+    yes)
+      if test "x$numa_available" = "xno"; then
+        AC_MSG_ERROR([NUMA enabled but not supported - use --disable-upc-numa])
+      fi
+      upc_numa='yes' ;;
+    no)
+      upc_numa='no' ;;
+    *)
+      AC_MSG_ERROR([--enable-upc-numa accepts only yes or no])                  
+    esac
+  ],
+  [
+    if test "x$numa_available" = "xyes"; then
+      upc_numa=yes
+    else
+      upc_numa=no
+    fi
+  ])
+  AC_MSG_RESULT([$upc_numa])
+  if test "$upc_numa" = yes; then
+    AC_DEFINE(LIBUPC_ENABLE_NUMA, [1], [Using NUMA for UPC runtime])
+  fi
+fi
+
 dnl Additional checks in case of Portals4
 if test "$upc_runtime_model" = "portals4"; then
   AC_CHECK_HEADERS([portals4.h],[have_p4=yes],[have_p4=no])             
