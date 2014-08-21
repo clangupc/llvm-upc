@@ -551,7 +551,7 @@ AC_ARG_ENABLE(clang-static-analyzer,
                              enableval="yes")
 case "$enableval" in
   yes) AC_SUBST(ENABLE_CLANG_STATIC_ANALYZER,[1]) ;;
-  no)  
+  no)
     if test ${clang_arcmt} != "no" ; then
       AC_MSG_ERROR([Cannot enable clang ARC Migration Tool while disabling static analyzer.])
     fi
@@ -568,7 +568,7 @@ AC_ARG_ENABLE(clang-rewriter,
                              enableval="yes")
 case "$enableval" in
   yes) AC_SUBST(ENABLE_CLANG_REWRITER,[1]) ;;
-  no)  
+  no)
     if test ${clang_arcmt} != "no" ; then
       AC_MSG_ERROR([Cannot enable clang ARC Migration Tool while disabling rewriter.])
     fi
@@ -1118,13 +1118,16 @@ AC_ARG_ENABLE(upc-link-script,
   esac
 ],
 [
-  case "$target" in                                                           
-    # disable linker script for Apple Mac OS X                                
-    *-*-darwin*)                                                              
-      enable_upc_link_script=no                                               
-      ;;                                                                      
-    *)                                                                        
-      enable_upc_link_script=yes                                              
+  case "$target" in
+    # disable linker script for Apple Mac OS X and Solaris
+    *-*-darwin*)
+      enable_upc_link_script=no
+      ;;
+    *-*-solaris*)
+      enable_upc_link_script=no
+      ;;
+    *)
+      enable_upc_link_script=yes
       ;; 
   esac
 ])
@@ -1223,11 +1226,11 @@ if test "x$enable_upc_backtrace" = xyes &&
     [Define to 1 if UPC backtrace is enabled.])
   LIBUPC_ENABLE_BACKTRACE=1
   if test "x$execinfo_lib_path" != x ; then
-    AC_DEFINE_UNQUOTED(LIBUPC_EXECINFO_LIB_PATH,"$execinfo_lib_path",                              
+    AC_DEFINE_UNQUOTED(LIBUPC_EXECINFO_LIB_PATH,"$execinfo_lib_path",
                        [execinfo library path.]) 
   fi
   if test "x$execinfo_inc_path" != x ; then
-    AC_DEFINE_UNQUOTED(LIBUPC_EXECINFO_INC_PATH,"$execinfo_inc_path",                              
+    AC_DEFINE_UNQUOTED(LIBUPC_EXECINFO_INC_PATH,"$execinfo_inc_path",
                        [execinfo include path.]) 
   fi
 else
@@ -1300,7 +1303,7 @@ if test "$upc_runtime_model" = "smp"; then
     no)
       upc_numa='no' ;;
     *)
-      AC_MSG_ERROR([--enable-upc-numa accepts only yes or no])                  
+      AC_MSG_ERROR([--enable-upc-numa accepts only yes or no])
     esac
   ],
   [
@@ -1318,7 +1321,7 @@ fi
 
 dnl Additional checks in case of Portals4
 if test "$upc_runtime_model" = "portals4"; then
-  AC_CHECK_HEADERS([portals4.h],[have_p4=yes],[have_p4=no])             
+  AC_CHECK_HEADERS([portals4.h],[have_p4=yes],[have_p4=no])
   AC_ARG_WITH(portals4,
   [AS_HELP_STRING([--with-portals4=PATH],
                   [Specify prefix directory for installed portals4 package])],
@@ -1336,7 +1339,7 @@ if test "$upc_runtime_model" = "portals4"; then
   ])
 
   # Check if job launcher was specified
-  AC_CHECK_HEADERS([slurm/slurm.h],[have_slurm=yes],[have_slurm=no])             
+  AC_CHECK_HEADERS([slurm/slurm.h],[have_slurm=yes],[have_slurm=no])
   AC_MSG_CHECKING([for UPC runtime Portals4 job launcher])
   AC_ARG_WITH(upc-job-launcher,
   [AS_HELP_STRING([--with-upc-job-launcher],

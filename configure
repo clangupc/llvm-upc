@@ -6081,8 +6081,11 @@ echo "$as_me: error: --enable-upc-link-script accepts only yes or no" >&2;}
 else
 
   case "$target" in
-    # disable linker script for Apple Mac OS X
+    # disable linker script for Apple Mac OS X and Solaris
     *-*-darwin*)
+      enable_upc_link_script=no
+      ;;
+    *-*-solaris*)
       enable_upc_link_script=no
       ;;
     *)
@@ -11650,7 +11653,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 11653 "configure"
+#line 11656 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
