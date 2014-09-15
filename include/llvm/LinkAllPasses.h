@@ -35,6 +35,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
 #include "llvm/Transforms/Vectorize.h"
+#include "llvm/Transforms/UPC.h"
 #include <cstdlib>
 
 namespace {
@@ -154,6 +155,7 @@ namespace {
       (void) llvm::createSLPVectorizerPass();
       (void) llvm::createBBVectorizePass();
       (void) llvm::createPartiallyInlineLibCallsPass();
+      (void) llvm::createLowerUPCPointersPass();
 
       (void)new llvm::IntervalPartition();
       (void)new llvm::FindUsedTypes();
