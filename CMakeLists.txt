@@ -216,6 +216,27 @@ set(LLVM_USE_SANITIZER "" CACHE STRING
 option(LLVM_USE_SPLIT_DWARF
   "Use -gsplit-dwarf when compiling llvm." OFF)
 
+# UPC IR Remote Pointer Representation
+set(UPC_IR_REMOTE_POINTER_BITS "20,44" CACHE STRING "UPC remote pointer bits per field (thread,addr) default 20,44")
+string(REPLACE "," ";" UPC_IR_RP_LIST ${UPC_IR_REMOTE_POINTER_BITS})
+list(GET UPC_IR_RP_LIST 0 UPC_RP_THREAD)
+list(GET UPC_IR_RP_LIST 1 UPC_RP_ADDR)
+math(EXPR UPC_RP_SIZE "${UPC_RP_THREAD} + ${UPC_RP_ADDR}")
+if (NOT UPC_RP_SIZE EQUAL 64)
+  message(FATAL_ERROR "UPC Remote Pointer fields must add to 64 bits (UPC_IR_REMOTE_POINTER_BITS).") 
+endif()
+set(UPC_IR_RP_THREAD ${UPC_RP_THREAD})
+set(UPC_IR_RP_ADDR ${UPC_RP_ADDR})
+# UPC IR Remote Pointer address space
+set(UPC_IR_RP_ADDRSPACE "16" CACHE STRING "UPC remote pointer address space")
+set(UPC_IR_RP_ADDRSPACE ${UPC_IR_RP_ADDRSPACE})
+
+# UPC link script enable/disable
+set(LIBUPC_ENABLE_LINK_SCRIPT TRUE CACHE STRING "enable UPC's use of a custom linker script; this will define the UPC shared section as a no load section on targets where this feature is supported (requires GNU LD)")
+set(LIBUPC_LINK_SCRIPT ${LIBUPC_ENABLE_LINK_SCRIPT})
+
+# Define an option controlling whether we should build for 32-bit on 64-bit
+# platforms, where supported.
 # UPC link script enable/disable
 set(LIBUPC_ENABLE_LINK_SCRIPT TRUE CACHE STRING "enable UPC's use of a custom linker script; this will define the UPC shared section as a no load section on targets where this feature is supported (requires GNU LD)")
 set(LIBUPC_LINK_SCRIPT ${LIBUPC_ENABLE_LINK_SCRIPT})

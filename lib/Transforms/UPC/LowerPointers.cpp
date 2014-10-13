@@ -6,12 +6,13 @@
 #include <llvm/IR/Module.h>
 #include <llvm/InitializePasses.h>
 #include <llvm/Transforms/UPC.h>
+#include <llvm/Config/config.h> // for UPC_IR_RP_ADDRSPACE
 
 using namespace llvm;
 
 namespace {
 
-static const int UPC_PTS_ADDR_SPACE = 16;
+static const int UPC_PTS_ADDR_SPACE = UPC_IR_RP_ADDRSPACE;
 
 struct LowerUPCPointers : FunctionPass {
   static char ID;
