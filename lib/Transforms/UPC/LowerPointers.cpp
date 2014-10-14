@@ -40,6 +40,14 @@ struct LowerUPCPointers : FunctionPass {
     }
     return result;
   }
+  Value *getAddr(Value *UPCPtr, Instruction *I) {
+    Value *Shift = ConstantInt::get(UPCPtr->getType(), UPC_IR_RP_THREAD);
+    return BinaryOperator::CreateLShr(UPCPtr, Shift, "addr", I);
+  }
+  Value *getThread(Value *UPCPtr, Instruction *I) {
+    Value *Mask = ConstantInt::get(UPCPtr->getType(), APInt::getLowBitsSet(64, UPC_IR_RP_THREAD));
+    return BinaryOperator::CreateAnd(UPCPtr, Mask, "thread", I);
+  }
   bool handleInstruction(Instruction &I) {
     Type * Int64Ty = Type::getInt64Ty(*Ctx);
     Type * Int8PtrTy = Type::getInt8PtrTy(*Ctx);
@@ -51,7 +59,9 @@ struct LowerUPCPointers : FunctionPass {
         Value * Arg = CastInst::Create(Instruction::BitCast, Tmp, Int8PtrTy, "", &I);
         Value * PtrRep = CastInst::Create(Instruction::PtrToInt, Ptr, Int64Ty, "", &I);
         Value * Size = ConstantInt::get(Int64Ty, Layout->getTypeStoreSize(Ty));
-        Value * args[] = { PtrRep, Arg, Size };
+        Value * Thread = getThread(PtrRep, &I);
+        Value * Addr = getAddr(PtrRep, &I);
+        Value * args[] = { Thread, Addr, Arg, Size };
         if(LI->getOrdering() == SequentiallyConsistent) {
           CallInst::Create(LoadStrictFn, args, "", &I);
         } else {
@@ -72,8 +82,10 @@ struct LowerUPCPointers : FunctionPass {
         Value * PtrRep = CastInst::Create(Instruction::PtrToInt, Ptr, Int64Ty, "", &I);
         Value * Size = ConstantInt::get(Int64Ty, Layout->getTypeStoreSize(Ty));
         new StoreInst(Val, Tmp, false, &I);
+        Value * Thread = getThread(PtrRep, &I);
+        Value * Addr = getAddr(PtrRep, &I);
         Instruction *Result;
-        Value * args[] = { Arg, PtrRep, Size };
+        Value * args[] = { Arg, Thread, Addr, Size };
         if(SI->getOrdering() == SequentiallyConsistent) {
           Result = CallInst::Create(StoreStrictFn, args, "", &I);
         } else {
@@ -106,15 +118,19 @@ struct LowerUPCPointers : FunctionPass {
     Ctx = &M.getContext();
     Type *Int64Ty = Type::getInt64Ty(*Ctx);
     Type *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
+    // void upcr_llvm_getn(long thread, long addr, void* dst, long sz);
     LoadRelaxedFn = M.getOrInsertFunction("upcr_llvm_getn",
                                           Type::getVoidTy(*Ctx),
-                                          Int64Ty, Int8PtrTy, Int64Ty, (Type*)0);
+                                          Int64Ty, Int64Ty, Int8PtrTy, Int64Ty, (Type*)0);
+    // void upcr_llvm_getns(long thread, long addr, void* dst, long sz);
     LoadStrictFn = M.getOrInsertFunction("upcr_llvm_getns",
                                          Type::getVoidTy(*Ctx),
                                          Int64Ty, Int8PtrTy, Int64Ty, (Type*)0);
+    // void upcr_llvm_putn(void* src, long thread, long addr, long sz);
     StoreRelaxedFn = M.getOrInsertFunction("upcr_llvm_putn",
                                           Type::getVoidTy(*Ctx),
                                           Int8PtrTy, Int64Ty, Int64Ty, (Type*)0);
+    // void upcr_llvm_putns(void* src, long thread, long addr, long sz);
     StoreStrictFn = M.getOrInsertFunction("upcr_llvm_putns",
                                          Type::getVoidTy(*Ctx),
                                          Int8PtrTy, Int64Ty, Int64Ty, (Type*)0);
