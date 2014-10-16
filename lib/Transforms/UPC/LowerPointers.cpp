@@ -125,15 +125,15 @@ struct LowerUPCPointers : FunctionPass {
     // void upcr_llvm_getns(long thread, long addr, void* dst, long sz);
     LoadStrictFn = M.getOrInsertFunction("upcr_llvm_getns",
                                          Type::getVoidTy(*Ctx),
-                                         Int64Ty, Int8PtrTy, Int64Ty, (Type*)0);
+                                         Int64Ty, Int64Ty, Int8PtrTy, Int64Ty, (Type*)0);
     // void upcr_llvm_putn(void* src, long thread, long addr, long sz);
     StoreRelaxedFn = M.getOrInsertFunction("upcr_llvm_putn",
-                                          Type::getVoidTy(*Ctx),
-                                          Int8PtrTy, Int64Ty, Int64Ty, (Type*)0);
+                                           Type::getVoidTy(*Ctx),
+                                           Int8PtrTy, Int64Ty, Int64Ty, Int64Ty, (Type*)0);
     // void upcr_llvm_putns(void* src, long thread, long addr, long sz);
     StoreStrictFn = M.getOrInsertFunction("upcr_llvm_putns",
-                                         Type::getVoidTy(*Ctx),
-                                         Int8PtrTy, Int64Ty, Int64Ty, (Type*)0);
+                                          Type::getVoidTy(*Ctx),
+                                          Int8PtrTy, Int64Ty, Int64Ty, Int64Ty, (Type*)0);
     return true;
   }
   LLVMContext *Ctx;
