@@ -73,6 +73,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Config/config.h" // for UPC_IR_RP_ADDRSPACE
 #include <algorithm>
 #include <cstdarg>
 using namespace llvm;
@@ -1769,7 +1770,7 @@ void Verifier::visitLoadInst(LoadInst &LI) {
             "Load cannot have Release ordering", &LI);
     Assert1(LI.getAlignment() != 0,
             "Atomic load must specify explicit alignment", &LI);
-    if (!ElTy->isPointerTy()) {
+    if (!ElTy->isPointerTy() && PTy->getPointerAddressSpace() != UPC_IR_RP_ADDRSPACE) {
       Assert2(ElTy->isIntegerTy(),
               "atomic store operand must have integer type!",
               &LI, ElTy);
@@ -1844,7 +1845,7 @@ void Verifier::visitStoreInst(StoreInst &SI) {
             "Store cannot have Acquire ordering", &SI);
     Assert1(SI.getAlignment() != 0,
             "Atomic store must specify explicit alignment", &SI);
-    if (!ElTy->isPointerTy()) {
+    if (!ElTy->isPointerTy() && PTy->getPointerAddressSpace() != UPC_IR_RP_ADDRSPACE) {
       Assert2(ElTy->isIntegerTy(),
               "atomic store operand must have integer type!",
               &SI, ElTy);
