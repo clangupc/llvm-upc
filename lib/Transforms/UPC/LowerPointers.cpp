@@ -26,6 +26,9 @@ struct LowerUPCPointers : FunctionPass {
         result = true;
       }
     }
+    if(doFinalization(F)) {
+      result = true;
+    }
     return result;
   }
   bool runOnBasicBlock(BasicBlock &BB) {
@@ -111,7 +114,16 @@ struct LowerUPCPointers : FunctionPass {
     BasicBlock &Entry = F.getEntryBlock();
     BasicBlock::iterator iter = Entry.begin();
     while(isa<AllocaInst>(*iter)) ++iter;
-    AllocaInsertPoint = &*iter;
+
+
+    AllocaInsertPoint =
+      new BitCastInst(Constant::getNullValue(Type::getInt32Ty(F.getContext())),
+                      Type::getInt32Ty(F.getContext()),
+                      "lowerpointers alloca point", &*iter);
+    return false;
+  }
+  bool doFinalization(Function &F) {
+    AllocaInsertPoint->eraseFromParent();
     return false;
   }
   bool doInitialization(Module &M) {
