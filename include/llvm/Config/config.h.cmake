@@ -689,4 +689,13 @@
 /* UPC link script enabled. */                                                  
 #cmakedefine LIBUPC_LINK_SCRIPT 1
 
+/* UPC Remote Pointer thread field size */
+#cmakedefine UPC_IR_RP_THREAD ${UPC_IR_RP_THREAD}
+
+/* UPC Remote Pointer address field size */
+#cmakedefine UPC_IR_RP_ADDR ${UPC_IR_RP_ADDR}
+
+/* UPC Remote Pointer address space */
+#cmakedefine UPC_IR_RP_ADDRSPACE ${UPC_IR_RP_ADDRSPACE}
+
 #endif

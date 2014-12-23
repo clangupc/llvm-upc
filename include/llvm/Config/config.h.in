@@ -727,6 +727,15 @@
 /* UPC vaddr first or last in the pointer representation. */
 #undef UPC_PTS_VADDR_ORDER
 
+/* UPC Remote Pointer thread field size. */
+#undef UPC_IR_RP_THREAD
+
+/* UPC Remote Pointer address field size. */
+#undef UPC_IR_RP_ADDR
+
+/* UPC Remote Pointer address space. */
+#undef UPC_IR_RP_ADDRSPACE
+
 /* Define if use udis86 library */
 #undef USE_UDIS86
 
