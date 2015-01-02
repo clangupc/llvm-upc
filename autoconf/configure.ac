@@ -1369,6 +1369,58 @@ if test "$llvm_cv_clang_upc_runtime" -eq "1" ; then
   AC_CONFIG_SUBDIRS([tools/clang/runtime/libupc])
 fi
 
+dnl Check for UPC IR lowering configuration
+AC_MSG_CHECKING([for UPC IR remote pointer address space])
+AC_ARG_WITH(upc-ir-rp-addrspace,
+[AS_HELP_STRING([--with-upc-ir-rp-addrspace=ADDRSPACE],
+                [specify the LLVM address space for the UPC 
+		 remote pointer
+                 [default=16]])],
+[ 
+  # $withval must be a decimal integer
+  if ! echo "$withval" | grep '^[[0-9]][[0-9]]*$' >/dev/null 2>&1; then
+    AC_MSG_ERROR([$withval is an invalid option to
+    --with-upc-ir-rp-addrspace])
+  fi
+  upc_ir_rp_addrspace="$withval"
+],
+[
+  upc_ir_rp_addrspace=16
+])
+AC_MSG_RESULT([$upc_ir_rp_addrspace])
+AC_DEFINE_UNQUOTED(UPC_IR_RP_ADDRSPACE, [$upc_ir_rp_addrspace],
+  [LLVM address space for UPC remote pointer.])
+
+# Perl is required for checking pts representation
+AC_CHECK_PROG(PERL, perl, perl)
+
+AC_MSG_CHECKING([for UPC IR remote pointer representation])
+AC_ARG_WITH([upc-ir-rp-bits],
+AS_HELP_STRING(
+[[[[--with-upc-ir-rp-bits=thread,addr]]]],
+[choose bit distribution in LLVM remote pointer representation (default=20,44)]),
+[
+  UPC_IR_RP_THREAD=`echo "$withval" | $PERL -ne 'm/^(\d+),(\d+)$/;
+						  print $1 if ($1+$2 == 64) && $1>=1;'`
+  UPC_IR_RP_ADDR=`echo "$withval" | $PERL -ne 'm/^(\d+),(\d+)$/;
+						  print $2 if ($1+$2 == 64) && $2>=20;'`
+  if test -z "$UPC_IR_RP_THREAD" \
+       || test -z "$UPC_IR_RP_ADDR" ; then
+      AC_MSG_ERROR([--with-upc-ir-rp-bits=thread,addr requires
+ thread+addr=64 and thread >= 1 and addr >= 20])
+  fi
+],
+[
+  UPC_IR_RP_THREAD=20
+  UPC_IR_RP_ADDR=44
+])
+AC_MSG_RESULT([$UPC_IR_RP_THREAD,$UPC_IR_RP_ADDR])
+AC_DEFINE_UNQUOTED(UPC_IR_RP_THREAD,$UPC_IR_RP_THREAD,
+    [Size of the thread field in LLVM remote pointer.])
+AC_DEFINE_UNQUOTED(UPC_IR_RP_ADDR,$UPC_IR_RP_ADDR,
+    [Size of the address field in LLVM remote pointer.])
+
+
 # Clang normally uses the system c++ headers and libraries. With this option,
 # clang will use the ones provided by a gcc installation instead. This option should
 # be passed the same value that was used with --prefix when configuring gcc.

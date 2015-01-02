@@ -722,6 +722,7 @@ EXTRA_LD_OPTIONS
 CLANG_SRC_ROOT
 LIBUPC_LINK_SCRIPT
 LIBUPC_ENABLE_BACKTRACE
+PERL
 BINUTILS_INCDIR
 INTERNAL_PREFIX
 NM
@@ -1509,6 +1510,12 @@ Optional Packages:
   --with-portals4=PATH    Specify prefix directory for installed portals4
                           package
   --with-upc-job-launcher Select UPC Portals4 job launcher [default=slurm]
+  --with-upc-ir-rp-addrspace=ADDRSPACE
+                          specify the LLVM address space for the UPC remote
+                          pointer [default=16]
+  --with-upc-ir-rp-bits=thread,addr
+                          choose bit distribution in LLVM remote pointer
+                          representation (default=20,44)
   --with-gcc-toolchain    Directory where gcc is installed.
   --with-default-sysroot  Add --sysroot=<path> to all compiler invocations.
   --with-binutils-include Specify path to binutils/include/ containing
@@ -6986,6 +6993,115 @@ if test "$llvm_cv_clang_upc_runtime" -eq "1" ; then
 
 fi
 
+{ echo "$as_me:$LINENO: checking for UPC IR remote pointer address space" >&5
+echo $ECHO_N "checking for UPC IR remote pointer address space... $ECHO_C" >&6; }
+
+# Check whether --with-upc-ir-rp-addrspace was given.
+if test "${with_upc_ir_rp_addrspace+set}" = set; then
+  withval=$with_upc_ir_rp_addrspace;
+  # $withval must be a decimal integer
+  if ! echo "$withval" | grep '^[0-9][0-9]*$' >/dev/null 2>&1; then
+    { { echo "$as_me:$LINENO: error: $withval is an invalid option to
+    --with-upc-ir-rp-addrspace" >&5
+echo "$as_me: error: $withval is an invalid option to
+    --with-upc-ir-rp-addrspace" >&2;}
+   { (exit 1); exit 1; }; }
+  fi
+  upc_ir_rp_addrspace="$withval"
+
+else
+
+  upc_ir_rp_addrspace=16
+
+fi
+
+{ echo "$as_me:$LINENO: result: $upc_ir_rp_addrspace" >&5
+echo "${ECHO_T}$upc_ir_rp_addrspace" >&6; }
+
+cat >>confdefs.h <<_ACEOF
+#define UPC_IR_RP_ADDRSPACE $upc_ir_rp_addrspace
+_ACEOF
+
+
+# Perl is required for checking pts representation
+# Extract the first word of "perl", so it can be a program name with args.
+set dummy perl; ac_word=$2
+{ echo "$as_me:$LINENO: checking for $ac_word" >&5
+echo $ECHO_N "checking for $ac_word... $ECHO_C" >&6; }
+if test "${ac_cv_prog_PERL+set}" = set; then
+  echo $ECHO_N "(cached) $ECHO_C" >&6
+else
+  if test -n "$PERL"; then
+  ac_cv_prog_PERL="$PERL" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+  for ac_exec_ext in '' $ac_executable_extensions; do
+  if { test -f "$as_dir/$ac_word$ac_exec_ext" && $as_executable_p "$as_dir/$ac_word$ac_exec_ext"; }; then
+    ac_cv_prog_PERL="perl"
+    echo "$as_me:$LINENO: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+done
+IFS=$as_save_IFS
+
+fi
+fi
+PERL=$ac_cv_prog_PERL
+if test -n "$PERL"; then
+  { echo "$as_me:$LINENO: result: $PERL" >&5
+echo "${ECHO_T}$PERL" >&6; }
+else
+  { echo "$as_me:$LINENO: result: no" >&5
+echo "${ECHO_T}no" >&6; }
+fi
+
+
+
+{ echo "$as_me:$LINENO: checking for UPC IR remote pointer representation" >&5
+echo $ECHO_N "checking for UPC IR remote pointer representation... $ECHO_C" >&6; }
+
+# Check whether --with-upc-ir-rp-bits was given.
+if test "${with_upc_ir_rp_bits+set}" = set; then
+  withval=$with_upc_ir_rp_bits;
+  UPC_IR_RP_THREAD=`echo "$withval" | $PERL -ne 'm/^(\d+),(\d+)$/;
+						  print $1 if ($1+$2 == 64) && $1>=1;'`
+  UPC_IR_RP_ADDR=`echo "$withval" | $PERL -ne 'm/^(\d+),(\d+)$/;
+						  print $2 if ($1+$2 == 64) && $2>=20;'`
+  if test -z "$UPC_IR_RP_THREAD" \
+       || test -z "$UPC_IR_RP_ADDR" ; then
+      { { echo "$as_me:$LINENO: error: --with-upc-ir-rp-bits=thread,addr requires
+ thread+addr=64 and thread >= 1 and addr >= 20" >&5
+echo "$as_me: error: --with-upc-ir-rp-bits=thread,addr requires
+ thread+addr=64 and thread >= 1 and addr >= 20" >&2;}
+   { (exit 1); exit 1; }; }
+  fi
+
+else
+
+  UPC_IR_RP_THREAD=20
+  UPC_IR_RP_ADDR=44
+
+fi
+
+{ echo "$as_me:$LINENO: result: $UPC_IR_RP_THREAD,$UPC_IR_RP_ADDR" >&5
+echo "${ECHO_T}$UPC_IR_RP_THREAD,$UPC_IR_RP_ADDR" >&6; }
+
+cat >>confdefs.h <<_ACEOF
+#define UPC_IR_RP_THREAD $UPC_IR_RP_THREAD
+_ACEOF
+
+
+cat >>confdefs.h <<_ACEOF
+#define UPC_IR_RP_ADDR $UPC_IR_RP_ADDR
+_ACEOF
+
+
+
 # Clang normally uses the system c++ headers and libraries. With this option,
 # clang will use the ones provided by a gcc installation instead. This option should
 # be passed the same value that was used with --prefix when configuring gcc.
@@ -11653,7 +11769,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<EOF
-#line 11656 "configure"
+#line 11772 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -24231,6 +24347,7 @@ EXTRA_LD_OPTIONS!$EXTRA_LD_OPTIONS$ac_delim
 CLANG_SRC_ROOT!$CLANG_SRC_ROOT$ac_delim
 LIBUPC_LINK_SCRIPT!$LIBUPC_LINK_SCRIPT$ac_delim
 LIBUPC_ENABLE_BACKTRACE!$LIBUPC_ENABLE_BACKTRACE$ac_delim
+PERL!$PERL$ac_delim
 BINUTILS_INCDIR!$BINUTILS_INCDIR$ac_delim
 INTERNAL_PREFIX!$INTERNAL_PREFIX$ac_delim
 NM!$NM$ac_delim
@@ -24304,7 +24421,6 @@ LLVM_DATADIR!$LLVM_DATADIR$ac_delim
 LLVM_DOCSDIR!$LLVM_DOCSDIR$ac_delim
 LLVM_ETCDIR!$LLVM_ETCDIR$ac_delim
 LLVM_INCLUDEDIR!$LLVM_INCLUDEDIR$ac_delim
-LLVM_INFODIR!$LLVM_INFODIR$ac_delim
 _ACEOF
 
   if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 97; then
@@ -24346,6 +24462,7 @@ _ACEOF
 ac_delim='%!_!# '
 for ac_last_try in false false false false false :; do
   cat >conf$$subs.sed <<_ACEOF
+LLVM_INFODIR!$LLVM_INFODIR$ac_delim
 LLVM_MANDIR!$LLVM_MANDIR$ac_delim
 LLVM_CONFIGTIME!$LLVM_CONFIGTIME$ac_delim
 BINDINGS_TO_BUILD!$BINDINGS_TO_BUILD$ac_delim
@@ -24359,7 +24476,7 @@ LIBOBJS!$LIBOBJS$ac_delim
 LTLIBOBJS!$LTLIBOBJS$ac_delim
 _ACEOF
 
-  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 11; then
+  if test `sed -n "s/.*$ac_delim\$/X/p" conf$$subs.sed | grep -c X` = 12; then
     break
   elif $ac_last_try; then
     { { echo "$as_me:$LINENO: error: could not make $CONFIG_STATUS" >&5

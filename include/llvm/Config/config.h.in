@@ -718,6 +718,15 @@
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */
 #undef TM_IN_SYS_TIME
 
+/* Size of the address field in LLVM remote pointer. */
+#undef UPC_IR_RP_ADDR
+
+/* LLVM address space for UPC remote pointer. */
+#undef UPC_IR_RP_ADDRSPACE
+
+/* Size of the thread field in LLVM remote pointer. */
+#undef UPC_IR_RP_THREAD
+
 /* UPC packed pointer representation. */
 #undef UPC_PACKED_BITS
 
@@ -726,15 +735,6 @@
 
 /* UPC vaddr first or last in the pointer representation. */
 #undef UPC_PTS_VADDR_ORDER
-
-/* UPC Remote Pointer thread field size. */
-#undef UPC_IR_RP_THREAD
-
-/* UPC Remote Pointer address field size. */
-#undef UPC_IR_RP_ADDR
-
-/* UPC Remote Pointer address space. */
-#undef UPC_IR_RP_ADDRSPACE
 
 /* Define if use udis86 library */
 #undef USE_UDIS86
