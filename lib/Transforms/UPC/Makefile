@@ -1,4 +1,4 @@
-##===- tools/opt/Makefile ----------------------------------*- Makefile -*-===##
+##===--------- lib/Transforms/UPC/Makefile -----------------*- Makefile -*-===##
 #
 #                     The LLVM Compiler Infrastructure
 #
@@ -7,8 +7,9 @@
 #
 ##===----------------------------------------------------------------------===##
 
-LEVEL := ../..
-TOOLNAME := opt
-LINK_COMPONENTS := bitreader bitwriter asmparser irreader instrumentation scalaropts objcarcopts ipo vectorize upc all-targets
+LEVEL = ../../..
+LIBRARYNAME = LLVMUPC
+BUILD_ARCHIVE = 1
 
 include $(LEVEL)/Makefile.common
+

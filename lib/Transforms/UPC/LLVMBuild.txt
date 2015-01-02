@@ -1,4 +1,4 @@
-;===- ./tools/opt/LLVMBuild.txt --------------------------------*- Conf -*--===;
+;===---- ./lib/Transforms/UPC/LLVMBuild.txt --------------------*- Conf -*--===;
 ;
 ;                     The LLVM Compiler Infrastructure
 ;
@@ -16,7 +16,9 @@
 ;===------------------------------------------------------------------------===;
 
 [component_0]
-type = Tool
-name = opt
-parent = Tools
-required_libraries = AsmParser BitReader BitWriter IRReader IPO Instrumentation Scalar ObjCARC UPC all-targets
+type = Library
+name = UPC
+parent = Transforms
+library_name = UPC
+required_libraries = Analysis Core InstCombine Support Target TransformUtils
+
