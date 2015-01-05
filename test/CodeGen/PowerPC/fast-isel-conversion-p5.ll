@@ -116,6 +116,7 @@ entry:
   ret void
 }
 
+<<<<<<< HEAD
 define void @fptoui_float_i64(float %a) nounwind ssp {
 entry:
 ; ELF64: fptoui_float_i64
@@ -128,6 +129,8 @@ entry:
   ret void
 }
 
+=======
+>>>>>>> merge_35
 define void @fptoui_double_i32(double %a) nounwind ssp {
 entry:
 ; ELF64: fptoui_double_i32
@@ -140,14 +143,3 @@ entry:
   ret void
 }
 
-define void @fptoui_double_i64(double %a) nounwind ssp {
-entry:
-; ELF64: fptoui_double_i64
-  %b.addr = alloca i64, align 8
-  %conv = fptoui double %a to i64
-; ELF64: fctiduz
-; ELF64: stfd
-; ELF64: ld
-  store i64 %conv, i64* %b.addr, align 8
-  ret void
-}
