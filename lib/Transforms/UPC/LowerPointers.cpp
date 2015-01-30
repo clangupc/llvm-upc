@@ -154,12 +154,12 @@ struct LowerUPCPointers : FunctionPass {
   
   virtual void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.setPreservesCFG();
-    AU.addRequired<DataLayout>();
+    AU.addRequired<DataLayoutPass>();
   }
 
   bool doInitialization(Function &F) {
     Ctx = &F.getContext();
-    Layout = &getAnalysis<DataLayout>();
+    Layout = &getAnalysis<DataLayoutPass>().getDataLayout();
 
     BasicBlock &Entry = F.getEntryBlock();
     BasicBlock::iterator iter = Entry.begin();
@@ -242,7 +242,7 @@ struct LowerUPCPointers : FunctionPass {
     return true;
   }
   LLVMContext *Ctx;
-  DataLayout *Layout;
+  const DataLayout *Layout;
   Instruction *AllocaInsertPoint;
   Constant *LoadFns[NumFns][2];
   Constant *StoreFns[NumFns][2];
