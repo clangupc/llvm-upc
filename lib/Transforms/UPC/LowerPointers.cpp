@@ -189,12 +189,12 @@ struct LowerUPCPointers : FunctionPass {
     Type *Int8PtrTy = Type::getInt8PtrTy(*Ctx);
     // void upcr_llvm_getn(long thread, long addr, void* dst, long sz);
     LoadFns[GenericFn][Relaxed] =
-      M.getOrInsertFunction("upcr_llvm_getn",
+      M.getOrInsertFunction("__getblk4",
                             Type::getVoidTy(*Ctx),
                             Int64Ty, Int64Ty, Int8PtrTy, Int64Ty, (Type*)0);
     // void upcr_llvm_getns(long thread, long addr, void* dst, long sz);
     LoadFns[GenericFn][Strict] =
-      M.getOrInsertFunction("upcr_llvm_getns",
+      M.getOrInsertFunction("__getsblk4",
                             Type::getVoidTy(*Ctx),
                             Int64Ty, Int64Ty, Int8PtrTy, Int64Ty, (Type*)0);
     // T upcr_llvm_get_T(long thread, long addr)
@@ -203,24 +203,24 @@ struct LowerUPCPointers : FunctionPass {
                                 type,                           \
                                 Int64Ty, Int64Ty, (Type*)0)
 #define DEF_LOAD_FN2(Fn, name, type)                    \
-    DEF_LOAD_FN(LoadFns[Fn][Relaxed], name, type);      \
-    DEF_LOAD_FN(LoadFns[Fn][Strict], name "s", type)
+    DEF_LOAD_FN(LoadFns[Fn][Relaxed], "__get" name "3", type);      \
+    DEF_LOAD_FN(LoadFns[Fn][Strict], "__gets" name "3", type)
 
-    DEF_LOAD_FN2(I8Fn, "upcr_llvm_get_i8", Int8Ty);
-    DEF_LOAD_FN2(I16Fn, "upcr_llvm_get_i16", Int16Ty);
-    DEF_LOAD_FN2(I32Fn, "upcr_llvm_get_i32", Int32Ty);
-    DEF_LOAD_FN2(I64Fn, "upcr_llvm_get_i64", Int64Ty);
-    DEF_LOAD_FN2(I128Fn, "upcr_llvm_get_i128", Int128Ty);
-    DEF_LOAD_FN2(FloatFn, "upcr_llvm_get_float", FloatTy);
-    DEF_LOAD_FN2(DoubleFn, "upcr_llvm_get_double", DoubleTy);
+    DEF_LOAD_FN2(I8Fn, "qi", Int8Ty);
+    DEF_LOAD_FN2(I16Fn, "hi", Int16Ty);
+    DEF_LOAD_FN2(I32Fn, "si", Int32Ty);
+    DEF_LOAD_FN2(I64Fn, "di", Int64Ty);
+    DEF_LOAD_FN2(I128Fn, "ti", Int128Ty);
+    DEF_LOAD_FN2(FloatFn, "sf", FloatTy);
+    DEF_LOAD_FN2(DoubleFn, "df", DoubleTy);
     // void upcr_llvm_putn(void* src, long thread, long addr, long sz);
     StoreFns[GenericFn][Relaxed] =
-      M.getOrInsertFunction("upcr_llvm_putn",
+      M.getOrInsertFunction("__putblk4",
                             Type::getVoidTy(*Ctx),
                             Int8PtrTy, Int64Ty, Int64Ty, Int64Ty, (Type*)0);
     // void upcr_llvm_putns(void* src, long thread, long addr, long sz);
     StoreFns[GenericFn][Strict] =
-      M.getOrInsertFunction("upcr_llvm_putns",
+      M.getOrInsertFunction("__putsblk4",
                             Type::getVoidTy(*Ctx),
                             Int8PtrTy, Int64Ty, Int64Ty, Int64Ty, (Type*)0);
 #define DEF_STORE_FN(var, name, type)                   \
@@ -228,16 +228,16 @@ struct LowerUPCPointers : FunctionPass {
                                 Int64Ty, Int64Ty, type, \
                                 (Type*)0)
 #define DEF_STORE_FN2(Fn, name, type)                           \
-    DEF_STORE_FN(StoreFns[Fn][Relaxed], name, type);            \
-    DEF_STORE_FN(StoreFns[Fn][Strict], name "s", type)
+    DEF_STORE_FN(StoreFns[Fn][Relaxed], "__put" name "3", type);            \
+    DEF_STORE_FN(StoreFns[Fn][Strict], "__puts" name "3", type)
 
-    DEF_STORE_FN2(I8Fn, "upcr_llvm_put_i8", Int8Ty);
-    DEF_STORE_FN2(I16Fn, "upcr_llvm_put_i16", Int16Ty);
-    DEF_STORE_FN2(I32Fn, "upcr_llvm_put_i32", Int32Ty);
-    DEF_STORE_FN2(I64Fn, "upcr_llvm_put_i64", Int64Ty);
-    DEF_STORE_FN2(I128Fn, "upcr_llvm_put_i128", Int128Ty);
-    DEF_STORE_FN2(FloatFn, "upcr_llvm_put_float", FloatTy);
-    DEF_STORE_FN2(DoubleFn, "upcr_llvm_put_double", DoubleTy);
+    DEF_STORE_FN2(I8Fn, "qi", Int8Ty);
+    DEF_STORE_FN2(I16Fn, "hi", Int16Ty);
+    DEF_STORE_FN2(I32Fn, "si", Int32Ty);
+    DEF_STORE_FN2(I64Fn, "di", Int64Ty);
+    DEF_STORE_FN2(I128Fn, "ti", Int128Ty);
+    DEF_STORE_FN2(FloatFn, "sf", FloatTy);
+    DEF_STORE_FN2(DoubleFn, "df", DoubleTy);
 
     return true;
   }
