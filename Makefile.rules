@@ -651,8 +651,10 @@ ifneq ($(HOST_OS), $(filter $(HOST_OS), Cygwin MingW))
     LD.Flags += $(RDYNAMIC)
   endif
   ifneq ($(HOST_OS), Darwin)
-    ifdef TOOLNAME
-      LD.Flags += $(RPATH) -Wl,'$$ORIGIN/../lib'
+    ifneq ($(HOST_OS), NetBSD)
+      ifdef TOOLNAME
+        LD.Flags += $(RPATH) -Wl,'$$ORIGIN/../lib'
+      endif
     endif
   else
     ifneq ($(DARWIN_MAJVERS),4)
