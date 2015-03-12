@@ -89,6 +89,9 @@
 /* Define to 1 if you have the `exp2' function. */
 #undef HAVE_EXP2
 
+/* Define to 1 if you have the <fabric.h> header file. */
+#undef HAVE_FABRIC_H
+
 /* Define to 1 if you have the <fcntl.h> header file. */
 #undef HAVE_FCNTL_H
 
@@ -477,14 +480,17 @@
 /* execinfo library path. */
 #undef LIBUPC_EXECINFO_LIB_PATH
 
+/* Libfabric library path */
+#undef LIBUPC_FABRIC
+
+/* Using SLURM for job launcher */
+#undef LIBUPC_JOB_LAUNCHER_SLURM
+
 /* Define to 1 if UPC link script is supported. */
 #undef LIBUPC_LINK_SCRIPT
 
 /* Portals4 library path */
 #undef LIBUPC_PORTALS4
-
-/* Using SLURM for job launcher */
-#undef LIBUPC_PORTALS4_SLURM
 
 /* Installation directory for binary executables */
 #undef LLVM_BINDIR

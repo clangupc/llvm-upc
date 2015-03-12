@@ -1366,7 +1366,8 @@ AC_ARG_WITH(upc-runtime,
 [AS_HELP_STRING([--with-upc-runtime=MODEL],
 		[specify the runtime implementation model for UPC,
 		 where MODEL may be: 'SMP' (Symmetric Multiprocessing)
-		 or 'Portals4'.  [default='SMP']])],
+		 or 'Portals4' (Infiniband), or 'Libfabric' (Infiniband).
+		  [default='SMP']])],
 [
   case "$withval" in
 changequote(,)dnl
@@ -1375,6 +1376,9 @@ changequote(,)dnl
       ;;
     [Pp][Oo][Rr][Tt][Aa][Ll][Ss]4)
       upc_runtime_model=portals4
+      ;;
+    [Ff][Aa][Bb][Rr][Ii][Cc])
+      upc_runtime_model=fabric
       ;;
 changequote([,])dnl
     *)
@@ -1438,31 +1442,51 @@ if test "$upc_runtime_model" = "portals4"; then
       AC_MSG_ERROR([Portals4 not found - use --with-portals4 to specify one.])
     fi
   ])
+fi
 
-  # Check if job launcher was specified
-  AC_CHECK_HEADERS([slurm/slurm.h],[have_slurm=yes],[have_slurm=no])
-  AC_MSG_CHECKING([for UPC runtime Portals4 job launcher])
-  AC_ARG_WITH(upc-job-launcher,
-  [AS_HELP_STRING([--with-upc-job-launcher],
-		  [Select UPC Portals4 job launcher [default=slurm]])],
+dnl Additional checks in case of Libfabric
+if test "$upc_runtime_model" = "fabric"; then
+  AC_CHECK_HEADERS([fabric.h],[have_fabric=yes],[have_fabric=no])             
+  AC_ARG_WITH(fabric,
+  [AS_HELP_STRING([--with-fabric=PATH],
+                  [Specify prefix directory for installed libfabric package])],
   [
-    case $withval in
-    slurm | yod)
-      upc_job_launcher=$withval
-      ;;
-    *)
-      AC_MSG_ERROR([--with-upc-job-launcher accepts only slurm or yod.])
-    esac
+    if test -f "$withval/include/rdma/fabric.h"; then
+      AC_DEFINE_UNQUOTED(LIBUPC_FABRIC, "$withval", [Libfabric library path] )
+    else
+      AC_MSG_ERROR([--with-fabric specifies wrong prefix for libfabric package.])
+    fi
   ],
   [
-    if test "$have_slurm" = "yes"; then
-      upc_job_launcher="slurm"
+    if test "$have_fabric" = "no"; then
+      AC_MSG_ERROR([Libfabric not found - use --with-fabric to specify one.])
     fi
   ])
-  AC_MSG_RESULT($upc_job_launcher) 
-  if test "$upc_job_launcher" = "slurm"; then
-      AC_DEFINE(LIBUPC_PORTALS4_SLURM, [1], [Using SLURM for job launcher])
+fi
+
+# Check if job launcher was specified
+AC_CHECK_HEADERS([slurm/slurm.h],[have_slurm=yes],[have_slurm=no])
+AC_MSG_CHECKING([for UPC runtime job launcher])
+AC_ARG_WITH(upc-job-launcher,
+[AS_HELP_STRING([--with-upc-job-launcher],
+		[Select UPC job launcher [default=slurm]])],
+[
+  case $withval in
+  slurm | yod)
+    upc_job_launcher=$withval
+    ;;
+  *)
+    AC_MSG_ERROR([--with-upc-job-launcher accepts only slurm or yod.])
+  esac
+],
+[
+  if test "$have_slurm" = "yes"; then
+    upc_job_launcher="slurm"
   fi
+])
+AC_MSG_RESULT($upc_job_launcher) 
+if test "$upc_job_launcher" = "slurm"; then
+  AC_DEFINE(LIBUPC_JOB_LAUNCHER_SLURM, [1], [Using SLURM for job launcher])
 fi
 
 dnl Check for Clang UPC runtime configuration
