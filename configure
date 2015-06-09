@@ -1464,6 +1464,9 @@ Optional Features:
                           report when UPC run-time fatal errors occur or by
                           user request (via signal)
   --enable-upc-numa       enable UPC runtime NUMA support [default='yes']
+  --enable-upc-runtime-omp-checks
+                          Enable internal UPC runtime checks that validate OMP
+                          threads usage of UPC runtime [default=no]
   --enable-terminfo       Query the terminfo database if available (default is
                           YES)
   --enable-libedit        Use libedit if available (default is YES)
@@ -7186,6 +7189,34 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
+{ echo "$as_me:$LINENO: checking for UPC runtime OMP checking support" >&5
+echo $ECHO_N "checking for UPC runtime OMP checking support... $ECHO_C" >&6; }
+# Check whether --enable-upc-runtime-omp-checks was given.
+if test "${enable_upc_runtime_omp_checks+set}" = set; then
+  enableval=$enable_upc_runtime_omp_checks;
+  case $enableval in
+  yes | no) ;;
+  *)
+    { { echo "$as_me:$LINENO: error: --enable-upc-runtime-omp-checks accepts only yes or no." >&5
+echo "$as_me: error: --enable-upc-runtime-omp-checks accepts only yes or no." >&2;}
+   { (exit 1); exit 1; }; }
+  esac
+
+else
+
+  enable_upc_runtime_omp_checks=no
+
+fi
+
+{ echo "$as_me:$LINENO: result: $enable_upc_runtime_omp_checks" >&5
+echo "${ECHO_T}$enable_upc_runtime_omp_checks" >&6; }
+if test "$enable_upc_runtime_omp_checks" = "yes"; then
+
+cat >>confdefs.h <<\_ACEOF
+#define LIBUPC_ENABLE_OMP_CHECKS 1
+_ACEOF
+
+fi
 
 # Clang normally uses the system c++ headers and libraries. With this option,
 # clang will use the ones provided by a gcc installation instead. This option should

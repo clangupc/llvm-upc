@@ -471,6 +471,9 @@
 /* Using NUMA for UPC runtime */
 #undef LIBUPC_ENABLE_NUMA
 
+/* Define to 1 if UPC runtime OMP checks are supported. */
+#undef LIBUPC_ENABLE_OMP_CHECKS
+
 /* execinfo include path. */
 #undef LIBUPC_EXECINFO_INC_PATH
 
