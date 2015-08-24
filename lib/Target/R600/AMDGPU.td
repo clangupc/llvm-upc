@@ -81,6 +81,27 @@ def FeatureCFALUBug : SubtargetFeature<"cfalubug",
         "true",
         "GPU has CF_ALU bug">;
 
+// XXX - This should probably be removed once enabled by default
+def FeatureEnableLoadStoreOpt : SubtargetFeature <"load-store-opt",
+        "EnableLoadStoreOpt",
+        "true",
+        "Enable SI load/store optimizer pass">;
+
+def FeatureFlatAddressSpace : SubtargetFeature<"flat-address-space",
+        "FlatAddressSpace",
+        "true",
+        "Support flat address space">;
+
+def FeatureVGPRSpilling : SubtargetFeature<"vgpr-spilling",
+        "EnableVGPRSpilling",
+        "true",
+        "Enable spilling of VGPRs to scratch memory">;
+
+def FeatureSGPRInitBug : SubtargetFeature<"sgpr-init-bug",
+        "SGPRInitBug",
+        "true",
+        "VI SGPR initilization bug requiring a fixed SGPR allocation size">;
+
 class SubtargetFeatureFetchLimit <string Value> :
                           SubtargetFeature <"fetch"#Value,
         "TexVTXClauseSize",
@@ -99,6 +120,15 @@ class SubtargetFeatureWavefrontSize <int Value> : SubtargetFeature<
 def FeatureWavefrontSize16 : SubtargetFeatureWavefrontSize<16>;
 def FeatureWavefrontSize32 : SubtargetFeatureWavefrontSize<32>;
 def FeatureWavefrontSize64 : SubtargetFeatureWavefrontSize<64>;
+
+class SubtargetFeatureLDSBankCount <int Value> : SubtargetFeature <
+      "ldsbankcount"#Value,
+      "LDSBankCount",
+      !cast<string>(Value),
+      "The number of LDS banks per compute unit.">;
+
+def FeatureLDSBankCount16 : SubtargetFeatureLDSBankCount<16>;
+def FeatureLDSBankCount32 : SubtargetFeatureLDSBankCount<32>;
 
 class SubtargetFeatureLocalMemorySize <int Value> : SubtargetFeature<
         "localmemorysize"#Value,
@@ -131,20 +161,33 @@ def FeatureNorthernIslands : SubtargetFeatureGeneration<"NORTHERN_ISLANDS",
 
 def FeatureSouthernIslands : SubtargetFeatureGeneration<"SOUTHERN_ISLANDS",
         [Feature64BitPtr, FeatureFP64, FeatureLocalMemorySize32768,
-         FeatureWavefrontSize64]>;
+         FeatureWavefrontSize64, FeatureLDSBankCount32]>;
 
 def FeatureSeaIslands : SubtargetFeatureGeneration<"SEA_ISLANDS",
         [Feature64BitPtr, FeatureFP64, FeatureLocalMemorySize65536,
-         FeatureWavefrontSize64]>;
+         FeatureWavefrontSize64, FeatureFlatAddressSpace]>;
+
+def FeatureVolcanicIslands : SubtargetFeatureGeneration<"VOLCANIC_ISLANDS",
+        [Feature64BitPtr, FeatureFP64, FeatureLocalMemorySize65536,
+         FeatureWavefrontSize64, FeatureFlatAddressSpace,
+         FeatureLDSBankCount32]>;
+
 //===----------------------------------------------------------------------===//
 
 def AMDGPUInstrInfo : InstrInfo {
   let guessInstructionProperties = 1;
 }
 
+def AMDGPUAsmParser : AsmParser {
+  // Some of the R600 registers have the same name, so this crashes.
+  // For example T0_XYZW and T0_XY both have the asm name T0.
+  let ShouldEmitMatchRegisterName = 0;
+}
+
 def AMDGPU : Target {
   // Pull in Instruction Info:
   let InstructionSet = AMDGPUInstrInfo;
+  let AssemblyParsers = [AMDGPUAsmParser];
 }
 
 // Dummy Instruction itineraries for pseudo instructions

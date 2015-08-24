@@ -1,8 +1,8 @@
 llvm-upc: Low Level Virtual Machine (LLVM) for Clang UPC
 ========================================================
 
-This directory and its subdirectories contain source code for the Low Level
-Virtual Machine, a toolkit for the construction of highly optimized compilers,
+This directory and its subdirectories contain source code for LLVM,
+a toolkit for the construction of highly optimized compilers,
 optimizers, and runtime environments.
 
 This version of LLVM (llvm-upc) includes extensions needed
@@ -26,3 +26,4 @@ documentation setup.
 
 If you're writing a package for LLVM, see docs/Packaging.rst for our
 suggestions.
+
