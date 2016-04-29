@@ -154,12 +154,10 @@ struct LowerUPCPointers : FunctionPass {
   
   virtual void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.setPreservesCFG();
-    AU.addRequired<DataLayoutPass>();
   }
 
   bool doInitialization(Function &F) {
     Ctx = &F.getContext();
-    Layout = &getAnalysis<DataLayoutPass>().getDataLayout();
 
     BasicBlock &Entry = F.getEntryBlock();
     BasicBlock::iterator iter = Entry.begin();
@@ -178,6 +176,7 @@ struct LowerUPCPointers : FunctionPass {
   }
   bool doInitialization(Module &M) {
     Ctx = &M.getContext();
+    Layout = &M.getDataLayout();
     Type *VoidTy = Type::getVoidTy(*Ctx);
     Type *Int8Ty = Type::getInt8Ty(*Ctx);
     Type *Int16Ty = Type::getInt16Ty(*Ctx);
