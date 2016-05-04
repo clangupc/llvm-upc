@@ -478,12 +478,10 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(Triple T) {
 #ifndef LIBUPC_LINK_SCRIPT
   UPCSection =
     Ctx->getELFSection("upc_shared", ELF::SHT_NOBITS,
-                       ELF::SHF_WRITE |ELF::SHF_ALLOC,
-                       SectionKind::getReadOnly());
+                       ELF::SHF_WRITE |ELF::SHF_ALLOC);
   UPCPgmSection =
     Ctx->getELFSection("upc_pgm_info", ELF::SHT_PROGBITS,
-                       ELF::SHF_ALLOC,
-                       SectionKind::getDataRel());
+                       ELF::SHF_ALLOC);
 #endif
 
   // Exception Handling Sections.
