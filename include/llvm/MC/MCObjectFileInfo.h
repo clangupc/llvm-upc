@@ -133,6 +133,7 @@ protected:
   MCSection *DwarfGnuPubTypesSection;
 
   MCSection *COFFDebugSymbolsSection;
+  MCSection *COFFDebugTypesSection;
 
   /// Extra TLS Variable Data section.
   ///
@@ -164,6 +165,7 @@ protected:
   MCSection *MergeableConst4Section;
   MCSection *MergeableConst8Section;
   MCSection *MergeableConst16Section;
+  MCSection *MergeableConst32Section;
 
   // MachO specific sections.
 
@@ -189,6 +191,7 @@ protected:
   MCSection *SixteenByteConstantSection;
   MCSection *LazySymbolPointerSection;
   MCSection *NonLazySymbolPointerSection;
+  MCSection *ThreadLocalPointerSection;
 
   /// COFF specific sections.
   MCSection *DrectveSection;
@@ -197,12 +200,8 @@ protected:
   MCSection *SXDataSection;
 
 public:
-  void InitMCObjectFileInfo(const Triple &TT, Reloc::Model RM,
-                            CodeModel::Model CM, MCContext &ctx);
-  LLVM_ATTRIBUTE_DEPRECATED(
-      void InitMCObjectFileInfo(StringRef TT, Reloc::Model RM,
-                                CodeModel::Model CM, MCContext &ctx),
-      "StringRef GNU Triple argument replaced by a llvm::Triple object");
+  void InitMCObjectFileInfo(const Triple &TT, bool PIC, CodeModel::Model CM,
+                            MCContext &ctx);
 
   bool getSupportsWeakOmittedEHFrame() const {
     return SupportsWeakOmittedEHFrame;
@@ -280,6 +279,10 @@ public:
   MCSection *getCOFFDebugSymbolsSection() const {
     return COFFDebugSymbolsSection;
   }
+  MCSection *getCOFFDebugTypesSection() const {
+    return COFFDebugTypesSection;
+  }
+
 
   MCSection *getTLSExtraDataSection() const { return TLSExtraDataSection; }
   const MCSection *getTLSDataSection() const { return TLSDataSection; }
@@ -298,6 +301,9 @@ public:
   }
   const MCSection *getMergeableConst16Section() const {
     return MergeableConst16Section;
+  }
+  const MCSection *getMergeableConst32Section() const {
+    return MergeableConst32Section;
   }
 
   // MachO specific sections.
@@ -330,6 +336,9 @@ public:
   MCSection *getNonLazySymbolPointerSection() const {
     return NonLazySymbolPointerSection;
   }
+  MCSection *getThreadLocalPointerSection() const {
+    return ThreadLocalPointerSection;
+  }
 
   // COFF specific sections.
   MCSection *getDrectveSection() const { return DrectveSection; }
@@ -344,18 +353,18 @@ public:
   enum Environment { IsMachO, IsELF, IsCOFF };
   Environment getObjectFileType() const { return Env; }
 
-  Reloc::Model getRelocM() const { return RelocM; }
+  bool isPositionIndependent() const { return PositionIndependent; }
 
 private:
   Environment Env;
-  Reloc::Model RelocM;
+  bool PositionIndependent;
   CodeModel::Model CMModel;
   MCContext *Ctx;
   Triple TT;
 
-  void initMachOMCObjectFileInfo(Triple T);
-  void initELFMCObjectFileInfo(Triple T);
-  void initCOFFMCObjectFileInfo(Triple T);
+  void initMachOMCObjectFileInfo(const Triple &T);
+  void initELFMCObjectFileInfo(const Triple &T);
+  void initCOFFMCObjectFileInfo(const Triple &T);
 
 public:
   const Triple &getTargetTriple() const { return TT; }
