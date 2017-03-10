@@ -91,7 +91,7 @@ struct LowerUPCPointers : FunctionPass {
       if(LI->getPointerAddressSpace() == UPC_PTS_ADDR_SPACE){
         Value * Ptr = LI->getPointerOperand();
         Type * Ty = Ptr->getType()->getPointerElementType();
-        int IsStrict = LI->getOrdering() == SequentiallyConsistent?
+        int IsStrict = LI->getOrdering() == AtomicOrdering::SequentiallyConsistent?
           Strict : Relaxed;
         FnID Fn = ChooseFn(Ty);
         Value * PtrRep = CastInst::Create(Instruction::PtrToInt, Ptr, Int64Ty, "", &I);
@@ -123,7 +123,7 @@ struct LowerUPCPointers : FunctionPass {
         Value * Val = SI->getValueOperand();
         Value * Ptr = SI->getPointerOperand();
         Type * Ty = Val->getType();
-        int IsStrict = SI->getOrdering() == SequentiallyConsistent?
+        int IsStrict = SI->getOrdering() == AtomicOrdering::SequentiallyConsistent?
           Strict : Relaxed;
         FnID Fn = ChooseFn(Ty);
         Value * PtrRep = CastInst::Create(Instruction::PtrToInt, Ptr, Int64Ty, "", &I);
