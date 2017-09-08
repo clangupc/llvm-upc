@@ -1,6 +1,6 @@
 ; RUN: llc -march=amdgcn -verify-machineinstrs< %s | FileCheck -check-prefix=SI -check-prefix=ALIGNED %s
 ; RUN: llc -march=amdgcn -mcpu=bonaire -mattr=+unaligned-buffer-access -verify-machineinstrs< %s | FileCheck -check-prefix=SI -check-prefix=UNALIGNED %s
-; RUN: llc -march=amdgcn -mcpu=tonga -verify-machineinstrs< %s | FileCheck -check-prefix=SI -check-prefix=ALIGNED %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs< %s | FileCheck -check-prefix=SI -check-prefix=ALIGNED %s
 
 ; SI-LABEL: {{^}}local_unaligned_load_store_i16:
 ; SI: ds_read_u8
@@ -549,6 +549,55 @@ define void @constant_align4_merge_load_2_i32(i32 addrspace(2)* %p, i32 addrspac
   %gep1 = getelementptr i32, i32 addrspace(1)* %r, i64 1
   store i32 %v0, i32 addrspace(1)* %r, align 4
   store i32 %v1, i32 addrspace(1)* %gep1, align 4
+  ret void
+}
+
+; SI-LABEL: {{^}}local_load_align1_v16i8:
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+; SI: ds_read_u8
+
+; SI: ScratchSize: 0{{$}}
+define void @local_load_align1_v16i8(<16 x i8> addrspace(1)* %out, <16 x i8> addrspace(3)* %in) #0 {
+  %ld = load <16 x i8>, <16 x i8> addrspace(3)* %in, align 1
+  store <16 x i8> %ld, <16 x i8> addrspace(1)* %out
+  ret void
+}
+
+; SI-LABEL: {{^}}local_store_align1_v16i8:
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+; SI: ds_write_b8
+
+; SI: ScratchSize: 0{{$}}
+define void @local_store_align1_v16i8(<16 x i8> addrspace(3)* %out) #0 {
+  store <16 x i8> zeroinitializer, <16 x i8> addrspace(3)* %out, align 1
   ret void
 }
 

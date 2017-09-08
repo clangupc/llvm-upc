@@ -1,8 +1,8 @@
 ; RUN: llc -march=amdgcn -mattr=-promote-alloca,+max-private-element-size-16 -verify-machineinstrs < %s | FileCheck -check-prefix=SI-ALLOCA16 -check-prefix=SI %s
 ; RUN: llc -march=amdgcn -mattr=-promote-alloca,+max-private-element-size-4 -verify-machineinstrs < %s | FileCheck -check-prefix=SI-ALLOCA4 -check-prefix=SI %s
 ; RUN: llc -march=amdgcn -mattr=+promote-alloca -verify-machineinstrs < %s | FileCheck -check-prefix=SI-PROMOTE -check-prefix=SI %s
-; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-promote-alloca,+max-private-element-size-16 -verify-machineinstrs < %s | FileCheck -check-prefix=CI-ALLOCA16 -check-prefix=SI %s
-; RUN: llc -march=amdgcn -mcpu=tonga -mattr=+promote-alloca -verify-machineinstrs < %s | FileCheck -check-prefix=CI-PROMOTE -check-prefix=SI %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -mattr=-promote-alloca,+max-private-element-size-16 -verify-machineinstrs < %s | FileCheck -check-prefix=CI-ALLOCA16 -check-prefix=SI %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -mattr=+promote-alloca -verify-machineinstrs < %s | FileCheck -check-prefix=CI-PROMOTE -check-prefix=SI %s
 
 declare void @llvm.amdgcn.s.barrier() #0
 
@@ -121,4 +121,4 @@ define void @private_access_v2i64_alloca(<2 x i64> addrspace(1)* noalias %out, <
 }
 
 attributes #0 = { convergent nounwind }
-attributes #1 = { nounwind "amdgpu-max-waves-per-eu"="2" "amdgpu-max-work-group-size"="64" }
+attributes #1 = { nounwind "amdgpu-waves-per-eu"="1,2" "amdgpu-flat-work-group-size"="64,64" }

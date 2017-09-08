@@ -1,6 +1,6 @@
 ; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=FUNC %s
 ; RUN: llc -mtriple=amdgcn--amdhsa -mcpu=kaveri -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-HSA -check-prefix=FUNC %s
-; RUN: llc -march=amdgcn -mcpu=tonga -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=FUNC %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=GCN-NOHSA -check-prefix=FUNC %s
 ; RUN: llc -march=r600 -mcpu=redwood < %s | FileCheck -check-prefix=EG -check-prefix=FUNC %s
 
 
@@ -360,7 +360,7 @@ define void @global_zextload_v16i32_to_v16i64(<16 x i64> addrspace(1)* %out, <16
 ; GCN-NOHSA: buffer_load_dwordx4
 ; GCN-NOHSA: buffer_load_dwordx4
 ; GCN-NOHSA: buffer_load_dwordx4
-; GCN-NOHSA: buffer_load_dwordx4
+; GCN-NOHSA-DAG: buffer_load_dwordx4
 
 ; GCN-HSA: flat_load_dwordx4
 ; GCN-HSA: flat_load_dwordx4

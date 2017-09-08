@@ -64,7 +64,7 @@ public:
 
   bool runOnFunction(Function &Fn) override;
 
-  const char *getPassName() const override { return "Constant Hoisting"; }
+  StringRef getPassName() const override { return "Constant Hoisting"; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
@@ -136,8 +136,16 @@ Instruction *ConstantHoistingPass::findMatInsertPt(Instruction *Inst,
   if (Idx != ~0U && isa<PHINode>(Inst))
     return cast<PHINode>(Inst)->getIncomingBlock(Idx)->getTerminator();
 
-  BasicBlock *IDom = DT->getNode(Inst->getParent())->getIDom()->getBlock();
-  return IDom->getTerminator();
+  // This must be an EH pad. Iterate over immediate dominators until we find a
+  // non-EH pad. We need to skip over catchswitch blocks, which are both EH pads
+  // and terminators.
+  auto IDom = DT->getNode(Inst->getParent())->getIDom();
+  while (IDom->getBlock()->isEHPad()) {
+    assert(Entry != IDom->getBlock() && "eh pad in entry block");
+    IDom = IDom->getIDom();
+  }
+
+  return IDom->getBlock()->getTerminator();
 }
 
 /// \brief Find an insertion point that dominates all uses.
@@ -444,7 +452,7 @@ void ConstantHoistingPass::findBaseConstants() {
 
 /// \brief Updates the operand at Idx in instruction Inst with the result of
 ///        instruction Mat. If the instruction is a PHI node then special
-///        handling for duplicate values form the same incomming basic block is
+///        handling for duplicate values form the same incoming basic block is
 ///        required.
 /// \return The update will always succeed, but the return value indicated if
 ///         Mat was used for the update or not.

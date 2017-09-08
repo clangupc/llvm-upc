@@ -65,12 +65,6 @@ protected:
   /// constants.
   MCSection *ReadOnlySection;
 
-  /// This section contains the static constructor pointer list.
-  MCSection *StaticCtorSection;
-
-  /// This section contains the static destructor pointer list.
-  MCSection *StaticDtorSection;
-
   /// UPCSection - UPC shared section
   const MCSection *UPCSection;
 

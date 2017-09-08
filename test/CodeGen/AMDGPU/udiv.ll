@@ -1,5 +1,5 @@
 ; RUN: llc -march=amdgcn -mcpu=verde -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
-; RUN: llc -march=amdgcn -mcpu=tonga -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
 ; RUN: llc -march=r600 -mcpu=redwood < %s | FileCheck -check-prefix=EG -check-prefix=FUNC %s
 
 ; FUNC-LABEL: {{^}}udiv_i32:
@@ -143,5 +143,18 @@ define void @v_udiv_i24(i32 addrspace(1)* %out, i24 addrspace(1)* %in) {
   %result = udiv i24 %num, %den
   %result.ext = zext i24 %result to i32
   store i32 %result.ext, i32 addrspace(1)* %out
+  ret void
+}
+
+; FUNC-LABEL: @scalarize_mulhu_4xi32
+; SI: v_mul_hi_u32
+; SI: v_mul_hi_u32
+; SI: v_mul_hi_u32
+; SI: v_mul_hi_u32
+
+define void @scalarize_mulhu_4xi32(<4 x i32> addrspace(1)* nocapture readonly %in, <4 x i32> addrspace(1)* nocapture %out) {
+  %1 = load <4 x i32>, <4 x i32> addrspace(1)* %in, align 16
+  %2 = udiv <4 x i32> %1, <i32 53668, i32 53668, i32 53668, i32 53668>
+  store <4 x i32> %2, <4 x i32> addrspace(1)* %out, align 16
   ret void
 }

@@ -25,6 +25,8 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/TypeFinder.h"
 #include "llvm/Support/Dwarf.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/RandomNumberGenerator.h"
 #include <algorithm>
@@ -404,23 +406,23 @@ void Module::setMaterializer(GVMaterializer *GVM) {
   Materializer.reset(GVM);
 }
 
-std::error_code Module::materialize(GlobalValue *GV) {
+Error Module::materialize(GlobalValue *GV) {
   if (!Materializer)
-    return std::error_code();
+    return Error::success();
 
   return Materializer->materialize(GV);
 }
 
-std::error_code Module::materializeAll() {
+Error Module::materializeAll() {
   if (!Materializer)
-    return std::error_code();
+    return Error::success();
   std::unique_ptr<GVMaterializer> M = std::move(Materializer);
   return M->materializeModule();
 }
 
-std::error_code Module::materializeMetadata() {
+Error Module::materializeMetadata() {
   if (!Materializer)
-    return std::error_code();
+    return Error::success();
   return Materializer->materializeMetadata();
 }
 
@@ -461,6 +463,14 @@ void Module::dropAllReferences() {
 
   for (GlobalIFunc &GIF : ifuncs())
     GIF.dropAllReferences();
+}
+
+unsigned Module::getNumberRegisterParameters() const {
+  auto *Val =
+      cast_or_null<ConstantAsMetadata>(getModuleFlag("NumRegisterParameters"));
+  if (!Val)
+    return 0;
+  return cast<ConstantInt>(Val->getValue())->getZExtValue();
 }
 
 unsigned Module::getDwarfVersion() const {
@@ -517,6 +527,10 @@ void Module::setProfileSummary(Metadata *M) {
 
 Metadata *Module::getProfileSummary() {
   return getModuleFlag("ProfileSummary");
+}
+
+void Module::setOwnedMemoryBuffer(std::unique_ptr<MemoryBuffer> MB) {
+  OwnedMemoryBuffer = std::move(MB);
 }
 
 GlobalVariable *llvm::collectUsedGlobalVariables(

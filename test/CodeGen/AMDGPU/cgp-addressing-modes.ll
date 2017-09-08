@@ -1,9 +1,9 @@
 ; RUN: opt -S -codegenprepare -mtriple=amdgcn-unknown-unknown -mcpu=tahiti < %s | FileCheck -check-prefix=OPT -check-prefix=OPT-SI %s
 ; RUN: opt -S -codegenprepare -mtriple=amdgcn-unknown-unknown -mcpu=bonaire < %s | FileCheck -check-prefix=OPT -check-prefix=OPT-CI %s
-; RUN: opt -S -codegenprepare -mtriple=amdgcn-unknown-unknown -mcpu=tonga < %s | FileCheck -check-prefix=OPT -check-prefix=OPT-VI %s
+; RUN: opt -S -codegenprepare -mtriple=amdgcn-unknown-unknown -mcpu=tonga -mattr=-flat-for-global < %s | FileCheck -check-prefix=OPT -check-prefix=OPT-VI %s
 ; RUN: llc -march=amdgcn -mcpu=tahiti -mattr=-promote-alloca -amdgpu-sroa=0 < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
 ; RUN: llc -march=amdgcn -mcpu=bonaire -mattr=-promote-alloca -amdgpu-sroa=0 < %s | FileCheck -check-prefix=GCN -check-prefix=CI %s
-; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-promote-alloca -amdgpu-sroa=0 < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -mattr=-promote-alloca -amdgpu-sroa=0 < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
 
 ; OPT-LABEL: @test_sink_global_small_offset_i32(
 ; OPT-CI-NOT: getelementptr i32, i32 addrspace(1)* %in
@@ -126,8 +126,8 @@ done:
 
 ; GCN-LABEL: {{^}}test_sink_scratch_small_offset_i32:
 ; GCN: s_and_saveexec_b64
-; GCN: buffer_store_dword {{v[0-9]+}}, {{v[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, {{s[0-9]+}} offen offset:4092{{$}}
-; GCN: buffer_load_dword {{v[0-9]+}}, {{v[0-9]+}}, {{s\[[0-9]+:[0-9]+\]}}, {{s[0-9]+}} offen offset:4092{{$}}
+; GCN: buffer_store_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, {{s[0-9]+}} offset:4092{{$}}
+; GCN: buffer_load_dword {{v[0-9]+}}, off, {{s\[[0-9]+:[0-9]+\]}}, {{s[0-9]+}} offset:4092{{$}}
 ; GCN: {{^}}BB4_2:
 define void @test_sink_scratch_small_offset_i32(i32 addrspace(1)* %out, i32 addrspace(1)* %in, i32 %arg) {
 entry:
@@ -219,11 +219,6 @@ endif:
 done:
   ret void
 }
-
-attributes #0 = { nounwind readnone }
-attributes #1 = { nounwind }
-
-
 
 ; OPT-LABEL: @test_sink_constant_small_offset_i32
 ; OPT-NOT:  getelementptr i32, i32 addrspace(2)*
@@ -475,6 +470,37 @@ bb34:
   unreachable
 }
 
+; Address offset is not a multiple of 4. This is a valid mubuf offset,
+; but not smrd.
+
+; OPT-LABEL: @test_sink_constant_small_max_mubuf_offset_load_i32_align_1(
+; OPT: br i1 %tmp0,
+; OPT: if:
+; OPT: %sunkaddr = ptrtoint i8 addrspace(2)* %in to i64
+; OPT: %sunkaddr1 = add i64 %sunkaddr, 4095
+define void @test_sink_constant_small_max_mubuf_offset_load_i32_align_1(i32 addrspace(1)* %out, i8 addrspace(2)* %in) {
+entry:
+  %out.gep = getelementptr i32, i32 addrspace(1)* %out, i32 1024
+  %in.gep = getelementptr i8, i8 addrspace(2)* %in, i64 4095
+  %tid = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #0
+  %tmp0 = icmp eq i32 %tid, 0
+  br i1 %tmp0, label %endif, label %if
+
+if:
+  %bitcast = bitcast i8 addrspace(2)* %in.gep to i32 addrspace(2)*
+  %tmp1 = load i32, i32 addrspace(2)* %bitcast, align 1
+  br label %endif
+
+endif:
+  %x = phi i32 [ %tmp1, %if ], [ 0, %entry ]
+  store i32 %x, i32 addrspace(1)* %out.gep
+  br label %done
+
+done:
+  ret void
+}
+
 declare i32 @llvm.amdgcn.mbcnt.lo(i32, i32) #0
 
 attributes #0 = { nounwind readnone }
+attributes #1 = { nounwind }

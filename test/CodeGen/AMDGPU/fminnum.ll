@@ -1,5 +1,5 @@
 ; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
-; RUN: llc -march=amdgcn -mcpu=tonga -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs < %s | FileCheck -check-prefix=SI -check-prefix=FUNC %s
 ; RUN: llc -march=r600 -mcpu=cypress < %s | FileCheck -check-prefix=EG -check-prefix=FUNC %s
 
 declare float @llvm.minnum.f32(float, float) #0
@@ -233,7 +233,7 @@ define void @constant_fold_fmin_f32_n0_n0(float addrspace(1)* %out) nounwind {
 }
 
 ; FUNC-LABEL: @fmin_var_immediate_f32
-; SI: v_min_f32_e64 {{v[0-9]+}}, 2.0, {{s[0-9]+}}
+; SI: v_min_f32_e64 {{v[0-9]+}}, {{s[0-9]+}}, 2.0
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[OUT:T[0-9]+\.[XYZW]]]
 ; EG: MIN_DX10 {{.*}}[[OUT]], {{KC0\[[0-9]\].[XYZW]}}, literal.{{[xy]}}
@@ -244,7 +244,7 @@ define void @fmin_var_immediate_f32(float addrspace(1)* %out, float %a) nounwind
 }
 
 ; FUNC-LABEL: @fmin_immediate_var_f32
-; SI: v_min_f32_e64 {{v[0-9]+}}, 2.0, {{s[0-9]+}}
+; SI: v_min_f32_e64 {{v[0-9]+}}, {{s[0-9]+}}, 2.0
 
 ; EG: MEM_RAT_CACHELESS STORE_RAW [[OUT:T[0-9]+\.[XYZW]]]
 ; EG: MIN_DX10 {{.*}}[[OUT]], {{KC0\[[0-9]\].[XYZW]}}, literal.{{[xy]}}
