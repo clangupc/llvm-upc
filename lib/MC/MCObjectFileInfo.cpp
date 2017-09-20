@@ -496,7 +496,7 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T) {
 
 #ifndef LIBUPC_LINK_SCRIPT
   UPCSection =
-    Ctx->getELFSection("upc_shared", ELF::SHT_NOBITS,
+    Ctx->getELFSection("upc_shared", ELF::SHT_PROGBITS,
                        ELF::SHF_WRITE |ELF::SHF_ALLOC);
   UPCPgmSection =
     Ctx->getELFSection("upc_pgm_info", ELF::SHT_PROGBITS,

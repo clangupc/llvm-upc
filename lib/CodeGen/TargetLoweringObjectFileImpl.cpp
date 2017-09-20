@@ -169,7 +169,7 @@ static unsigned getELFSectionType(StringRef Name, SectionKind K) {
     return ELF::SHT_PREINIT_ARRAY;
 
   if (Name == "upc_shared")
-    return ELF::SHT_NOBITS;
+    return ELF::SHT_PROGBITS;
 
   if (K.isBSS() || K.isThreadBSS())
     return ELF::SHT_NOBITS;
