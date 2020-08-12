@@ -1,7 +1,7 @@
 // This test checks that the COFF object emitter works for the most basic
 // programs.
 
-// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | llvm-readobj -h -s -sr -sd -t | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | llvm-readobj -h -S --sr --sd --symbols | FileCheck %s
 
 .def	 _main;
 	.scl	2;
@@ -11,7 +11,7 @@
 	.globl	_main
 	.align	16, 0x90
 _main:                                  # @main
-# BB#0:                                 # %entry
+# %bb.0:                                # %entry
 	subl	$4, %esp
 	movl	$L_.str, (%esp)
 	call	_printf

@@ -6,9 +6,9 @@
 define void @average_va(i32 %count, ...) nounwind {
 entry:
 ; CHECK: pushq
-; CHECK: movq   %r9, 40(%rsp)
-; CHECK: movq   %r8, 32(%rsp)
-; CHECK: movq   %rdx, 24(%rsp)
+; CHECK-DAG: movq   %r9, 40(%rsp)
+; CHECK-DAG: movq   %r8, 32(%rsp)
+; CHECK-DAG: movq   %rdx, 24(%rsp)
 ; CHECK: leaq   24(%rsp), %rax
 
   %ap = alloca i8*, align 8                       ; <i8**> [#uses=1]
@@ -94,9 +94,7 @@ entry:
 
 ; CHECK-LABEL: arg4:
 ; CHECK: pushq
-; va_start:
-; CHECK: leaq 48(%rsp), [[REG_arg4_1:%[a-z]+]]
-; CHECK: movq [[REG_arg4_1]], (%rsp)
+; va_start (optimized away as overwritten by va_arg)
 ; va_arg:
 ; CHECK: leaq 52(%rsp), [[REG_arg4_2:%[a-z]+]]
 ; CHECK: movq [[REG_arg4_2]], (%rsp)
@@ -123,10 +121,11 @@ entry:
 }
 ; CHECK-LABEL: sret_arg:
 ; CHECK: pushq
+; CHECK: movq %rcx, %rax
 ; CHECK-DAG: movq %r9, 40(%rsp)
 ; CHECK-DAG: movq %r8, 32(%rsp)
-; CHECK: movl 32(%rsp), %[[tmp:[^ ]*]]
-; CHECK: movl %[[tmp]], (%[[sret:[^ ]*]])
-; CHECK: movq %[[sret]], %rax
+; CHECK-DAG: leaq 36(%rsp), %[[sret:[^ ]*]]
+; CHECK-DAG: movl %r8d, (%rax)
+; CHECK-DAG: movq %[[sret]], (%rsp)
 ; CHECK: popq
 ; CHECK: retq

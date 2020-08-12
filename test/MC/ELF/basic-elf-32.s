@@ -1,11 +1,11 @@
-// RUN: llvm-mc -filetype=obj -triple i686-pc-linux-gnu %s -o - | llvm-readobj -h -s -r -t | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple i686-pc-linux-gnu %s -o - | llvm-readobj -h -S -r --symbols | FileCheck %s
 
 	.text
 	.globl	main
 	.align	16, 0x90
 	.type	main,@function
 main:                                   # @main
-# BB#0:
+# %bb.0:
 	subl	$4, %esp
 	movl	$.L.str1, (%esp)
 	calll	puts

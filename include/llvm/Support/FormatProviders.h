@@ -1,9 +1,8 @@
 //===- FormatProviders.h - Formatters for common LLVM types -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,6 +17,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/FormatVariadicDetails.h"
 #include "llvm/Support/NativeFormatting.h"
 
@@ -45,9 +45,8 @@ struct is_cstring
 
 template <typename T>
 struct use_string_formatter
-    : public std::integral_constant<
-          bool, is_one_of<T, llvm::StringRef, std::string>::value ||
-                    is_cstring<T>::value> {};
+    : public std::integral_constant<bool,
+                                    std::is_convertible<T, llvm::StringRef>::value> {};
 
 template <typename T>
 struct use_pointer_formatter
@@ -205,8 +204,19 @@ struct format_provider<
     if (!Style.empty() && Style.getAsInteger(10, N)) {
       assert(false && "Style is not a valid integer");
     }
-    llvm::StringRef S(V);
+    llvm::StringRef S = V;
     Stream << S.substr(0, N);
+  }
+};
+
+/// Implementation of format_provider<T> for llvm::Twine.
+///
+/// This follows the same rules as the string formatter.
+
+template <> struct format_provider<Twine> {
+  static void format(const Twine &V, llvm::raw_ostream &Stream,
+                     StringRef Style) {
+    format_provider<std::string>::format(V.str(), Stream, Style);
   }
 };
 
@@ -359,8 +369,7 @@ template <typename IterT> class format_provider<llvm::iterator_range<IterT>> {
       return Default;
     }
 
-    std::vector<const char *> Delims = {"[]", "<>", "()"};
-    for (const char *D : Delims) {
+    for (const char *D : {"[]", "<>", "()"}) {
       if (Style.front() != D[0])
         continue;
       size_t End = Style.find_first_of(D[1]);

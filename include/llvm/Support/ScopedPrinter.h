@@ -1,9 +1,8 @@
-//===-- ScopedPrinter.h ---------------------------------------------------===//
+//===-- ScopedPrinter.h ----------------------------------------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -80,6 +79,8 @@ public:
 
   void resetIndent() { IndentLevel = 0; }
 
+  int getIndentLevel() { return IndentLevel; }
+
   void setPrefix(StringRef P) { Prefix = P; }
 
   void printIndent() {
@@ -136,7 +137,7 @@ public:
       }
     }
 
-    std::sort(SetFlags.begin(), SetFlags.end(), &flagName<TFlag>);
+    llvm::sort(SetFlags, &flagName<TFlag>);
 
     startLine() << Label << " [ (" << hex(Value) << ")\n";
     for (const auto &Flag : SetFlags) {
@@ -261,7 +262,11 @@ public:
   }
 
   void printString(StringRef Label, const std::string &Value) {
-    startLine() << Label << ": " << Value << "\n";
+    printString(Label, StringRef(Value));
+  }
+
+  void printString(StringRef Label, const char* Value) {
+    printString(Label, StringRef(Value));
   }
 
   template <typename T>
@@ -293,6 +298,11 @@ public:
     auto V = makeArrayRef(reinterpret_cast<const uint8_t *>(Value.data()),
                           Value.size());
     printBinaryImpl(Label, StringRef(), V, false);
+  }
+
+  void printBinaryBlock(StringRef Label, ArrayRef<uint8_t> Value,
+                        uint32_t StartOffset) {
+    printBinaryImpl(Label, StringRef(), Value, true, StartOffset);
   }
 
   void printBinaryBlock(StringRef Label, ArrayRef<uint8_t> Value) {
@@ -333,7 +343,7 @@ private:
   }
 
   void printBinaryImpl(StringRef Label, StringRef Str, ArrayRef<uint8_t> Value,
-                       bool Block);
+                       bool Block, uint32_t StartOffset = 0);
 
   raw_ostream &OS;
   int IndentLevel;

@@ -1,9 +1,8 @@
-//=- HexagonFrameLowering.h - Define frame lowering for Hexagon --*- C++ -*--=//
+//==- HexagonFrameLowering.h - Define frame lowering for Hexagon -*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,13 +14,18 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
-#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
 #include <vector>
 
 namespace llvm {
 
+class BitVector;
 class HexagonInstrInfo;
 class HexagonRegisterInfo;
+class MachineFunction;
+class MachineInstr;
+class MachineRegisterInfo;
+class TargetRegisterClass;
 
 class HexagonFrameLowering : public TargetFrameLowering {
 public:
@@ -36,6 +40,8 @@ public:
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const
       override {}
 
+  bool enableCalleeSaveSkip(const MachineFunction &MF) const override;
+
   bool spillCalleeSavedRegisters(MachineBasicBlock &MBB,
       MachineBasicBlock::iterator MI, const std::vector<CalleeSavedInfo> &CSI,
       const TargetRegisterInfo *TRI) const override {
@@ -43,8 +49,19 @@ public:
   }
 
   bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
-      MachineBasicBlock::iterator MI, const std::vector<CalleeSavedInfo> &CSI,
+      MachineBasicBlock::iterator MI, std::vector<CalleeSavedInfo> &CSI,
       const TargetRegisterInfo *TRI) const override {
+    return true;
+  }
+
+  bool hasReservedCallFrame(const MachineFunction &MF) const override {
+    // We always reserve call frame as a part of the initial stack allocation.
+    return true;
+  }
+
+  bool canSimplifyCallFramePseudos(const MachineFunction &MF) const override {
+    // Override this function to avoid calling hasFP before CSI is set
+    // (the default implementation calls hasFP).
     return true;
   }
 
@@ -88,12 +105,14 @@ public:
   void insertCFIInstructions(MachineFunction &MF) const;
 
 private:
-  typedef std::vector<CalleeSavedInfo> CSIVect;
+  using CSIVect = std::vector<CalleeSavedInfo>;
 
   void expandAlloca(MachineInstr *AI, const HexagonInstrInfo &TII,
       unsigned SP, unsigned CF) const;
   void insertPrologueInBlock(MachineBasicBlock &MBB, bool PrologueStubs) const;
   void insertEpilogueInBlock(MachineBasicBlock &MBB) const;
+  void insertAllocframe(MachineBasicBlock &MBB,
+      MachineBasicBlock::iterator InsertPt, unsigned NumBytes) const;
   bool insertCSRSpillsInBlock(MachineBasicBlock &MBB, const CSIVect &CSI,
       const HexagonRegisterInfo &HRI, bool &PrologueStubs) const;
   bool insertCSRRestoresInBlock(MachineBasicBlock &MBB, const CSIVect &CSI,
@@ -148,9 +167,9 @@ private:
 
   void addCalleeSaveRegistersAsImpOperand(MachineInstr *MI, const CSIVect &CSI,
       bool IsDef, bool IsKill) const;
-  bool shouldInlineCSR(MachineFunction &MF, const CSIVect &CSI) const;
-  bool useSpillFunction(MachineFunction &MF, const CSIVect &CSI) const;
-  bool useRestoreFunction(MachineFunction &MF, const CSIVect &CSI) const;
+  bool shouldInlineCSR(const MachineFunction &MF, const CSIVect &CSI) const;
+  bool useSpillFunction(const MachineFunction &MF, const CSIVect &CSI) const;
+  bool useRestoreFunction(const MachineFunction &MF, const CSIVect &CSI) const;
   bool mayOverflowFrameOffset(MachineFunction &MF) const;
 };
 

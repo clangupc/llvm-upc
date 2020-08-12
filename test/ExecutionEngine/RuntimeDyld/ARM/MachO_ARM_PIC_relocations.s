@@ -1,5 +1,6 @@
-# RUN: llvm-mc -triple=armv7s-apple-ios7.0.0 -filetype=obj -o %T/foo.o %s
-# RUN: llvm-rtdyld -triple=armv7s-apple-ios7.0.0 -verify -check=%s %/T/foo.o
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: llvm-mc -triple=armv7s-apple-ios7.0.0 -filetype=obj -o %t/foo.o %s
+# RUN: llvm-rtdyld -triple=armv7s-apple-ios7.0.0 -verify -check=%s %t/foo.o
 
         .syntax unified
         .section        __TEXT,__text,regular,pure_instructions
@@ -21,15 +22,15 @@ nextPC:
 # Check both the content of the stub, and the reference to the stub.
 # Stub should contain '0xe51ff004' (ldr pc, [pc, #-4]), followed by the target.
 #
-# rtdyld-check: *{4}(stub_addr(foo.o, __text, baz)) = 0xe51ff004
-# rtdyld-check: *{4}(stub_addr(foo.o, __text, baz) + 4) = baz
+# rtdyld-check: *{4}(stub_addr(foo.o/__text, baz)) = 0xe51ff004
+# rtdyld-check: *{4}(stub_addr(foo.o/__text, baz) + 4) = baz
 #
-# rtdyld-check: decode_operand(insn3, 0) = stub_addr(foo.o, __text, baz) - (insn3 + 8)
+# rtdyld-check: decode_operand(insn3, 0) = stub_addr(foo.o/__text, baz) - (insn3 + 8)
 insn3:
         bl      baz
 
 # Check stub generation for internal symbols by referencing 'bar'.
-# rtdyld-check: *{4}(stub_addr(foo.o, __text, bar) + 4) = bar
+# rtdyld-check: *{4}(stub_addr(foo.o/__text, bar) + 4) = bar
 insn4:
         bl      bar
         bx	lr

@@ -1,14 +1,13 @@
 //===- unittests/Support/MathExtrasTest.cpp - math utils tests ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#include "gtest/gtest.h"
 #include "llvm/Support/MathExtras.h"
+#include "gtest/gtest.h"
 
 using namespace llvm;
 
@@ -64,6 +63,31 @@ TEST(MathExtras, countLeadingZeros) {
   for (unsigned i = 0; i <= 62; ++i) {
     EXPECT_EQ(63 - i, countLeadingZeros(1ULL << i));
   }
+}
+
+TEST(MathExtras, onesMask) {
+  EXPECT_EQ(0U, maskLeadingOnes<uint8_t>(0));
+  EXPECT_EQ(0U, maskTrailingOnes<uint8_t>(0));
+  EXPECT_EQ(0U, maskLeadingOnes<uint16_t>(0));
+  EXPECT_EQ(0U, maskTrailingOnes<uint16_t>(0));
+  EXPECT_EQ(0U, maskLeadingOnes<uint32_t>(0));
+  EXPECT_EQ(0U, maskTrailingOnes<uint32_t>(0));
+  EXPECT_EQ(0U, maskLeadingOnes<uint64_t>(0));
+  EXPECT_EQ(0U, maskTrailingOnes<uint64_t>(0));
+
+  EXPECT_EQ(0x00000003U, maskTrailingOnes<uint32_t>(2U));
+  EXPECT_EQ(0xC0000000U, maskLeadingOnes<uint32_t>(2U));
+
+  EXPECT_EQ(0x000007FFU, maskTrailingOnes<uint32_t>(11U));
+  EXPECT_EQ(0xFFE00000U, maskLeadingOnes<uint32_t>(11U));
+
+  EXPECT_EQ(0xFFFFFFFFU, maskTrailingOnes<uint32_t>(32U));
+  EXPECT_EQ(0xFFFFFFFFU, maskLeadingOnes<uint32_t>(32U));
+  EXPECT_EQ(0xFFFFFFFFFFFFFFFFULL, maskTrailingOnes<uint64_t>(64U));
+  EXPECT_EQ(0xFFFFFFFFFFFFFFFFULL, maskLeadingOnes<uint64_t>(64U));
+
+  EXPECT_EQ(0x0000FFFFFFFFFFFFULL, maskTrailingOnes<uint64_t>(48U));
+  EXPECT_EQ(0xFFFFFFFFFFFF0000ULL, maskLeadingOnes<uint64_t>(48U));
 }
 
 TEST(MathExtras, findFirstSet) {
@@ -152,6 +176,7 @@ TEST(MathExtras, reverseBits) {
 }
 
 TEST(MathExtras, isPowerOf2_32) {
+  EXPECT_FALSE(isPowerOf2_32(0));
   EXPECT_TRUE(isPowerOf2_32(1 << 6));
   EXPECT_TRUE(isPowerOf2_32(1 << 12));
   EXPECT_FALSE(isPowerOf2_32((1 << 19) + 3));
@@ -159,6 +184,7 @@ TEST(MathExtras, isPowerOf2_32) {
 }
 
 TEST(MathExtras, isPowerOf2_64) {
+  EXPECT_FALSE(isPowerOf2_64(0));
   EXPECT_TRUE(isPowerOf2_64(1LL << 46));
   EXPECT_TRUE(isPowerOf2_64(1LL << 12));
   EXPECT_FALSE(isPowerOf2_64((1LL << 53) + 3));

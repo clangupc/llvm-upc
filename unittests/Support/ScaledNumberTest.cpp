@@ -1,9 +1,8 @@
 //===- llvm/unittest/Support/ScaledNumberTest.cpp - ScaledPair tests -----==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -335,10 +334,12 @@ TEST(ScaledNumberHelpersTest, matchScales) {
     EXPECT_EQ(SOut, matchScales(LDx, LSx, RDx, RSx));                          \
     EXPECT_EQ(LDy, LDx);                                                       \
     EXPECT_EQ(RDy, RDx);                                                       \
-    if (LDy)                                                                   \
+    if (LDy) {                                                                 \
       EXPECT_EQ(Sy, LSx);                                                      \
-    if (RDy)                                                                   \
+    }                                                                          \
+    if (RDy) {                                                                 \
       EXPECT_EQ(Sy, RSx);                                                      \
+    }                                                                          \
   } while (false)
 
   MATCH_SCALES(uint32_t, 0, 0, 0, 0, 0, 0, 0);
@@ -560,5 +561,8 @@ TEST(ScaledNumberHelpersTest, toIntBug) {
   ScaledNumber<uint32_t> n(1, 0);
   EXPECT_EQ(1u, (n * n).toInt<uint32_t>());
 }
+
+static_assert(is_trivially_copyable<ScaledNumber<uint32_t>>::value,
+              "trivially copyable");
 
 } // end namespace

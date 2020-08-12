@@ -1,9 +1,8 @@
 //===- DWARFYAML.cpp - DWARF YAMLIO implementation ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -54,6 +53,8 @@ void MappingTraits<DWARFYAML::AttributeAbbrev>::mapping(
     IO &IO, DWARFYAML::AttributeAbbrev &AttAbbrev) {
   IO.mapRequired("Attribute", AttAbbrev.Attribute);
   IO.mapRequired("Form", AttAbbrev.Form);
+  if(AttAbbrev.Form == dwarf::DW_FORM_implicit_const)
+    IO.mapRequired("Value", AttAbbrev.Value);
 }
 
 void MappingTraits<DWARFYAML::ARangeDescriptor>::mapping(
@@ -97,6 +98,8 @@ void MappingTraits<DWARFYAML::PubSection>::mapping(
 void MappingTraits<DWARFYAML::Unit>::mapping(IO &IO, DWARFYAML::Unit &Unit) {
   IO.mapRequired("Length", Unit.Length);
   IO.mapRequired("Version", Unit.Version);
+  if (Unit.Version >= 5)
+    IO.mapRequired("UnitType", Unit.Type);
   IO.mapRequired("AbbrOffset", Unit.AbbrOffset);
   IO.mapRequired("AddrSize", Unit.AddrSize);
   IO.mapOptional("Entries", Unit.Entries);
@@ -144,9 +147,7 @@ void MappingTraits<DWARFYAML::LineTableOpcode>::mapping(
 
 void MappingTraits<DWARFYAML::LineTable>::mapping(
     IO &IO, DWARFYAML::LineTable &LineTable) {
-  IO.mapRequired("TotalLength", LineTable.TotalLength);
-  if (LineTable.TotalLength == UINT32_MAX)
-    IO.mapRequired("TotalLength64", LineTable.TotalLength64);
+  IO.mapRequired("Length", LineTable.Length);
   IO.mapRequired("Version", LineTable.Version);
   IO.mapRequired("PrologueLength", LineTable.PrologueLength);
   IO.mapRequired("MinInstLength", LineTable.MinInstLength);
@@ -162,6 +163,13 @@ void MappingTraits<DWARFYAML::LineTable>::mapping(
   IO.mapRequired("Opcodes", LineTable.Opcodes);
 }
 
-} // namespace llvm::yaml
+void MappingTraits<DWARFYAML::InitialLength>::mapping(
+    IO &IO, DWARFYAML::InitialLength &InitialLength) {
+  IO.mapRequired("TotalLength", InitialLength.TotalLength);
+  if (InitialLength.isDWARF64())
+    IO.mapRequired("TotalLength64", InitialLength.TotalLength64);
+}
 
-} // namespace llvm
+} // end namespace yaml
+
+} // end namespace llvm

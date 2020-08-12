@@ -1,9 +1,8 @@
 //===- MachineLoopInfo.cpp - Natural Loop Calculator ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,6 +17,7 @@
 #include "llvm/Analysis/LoopInfoImpl.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -85,6 +85,22 @@ MachineBasicBlock *MachineLoop::findLoopControlBlock() {
       return getExitingBlock();
   }
   return nullptr;
+}
+
+DebugLoc MachineLoop::getStartLoc() const {
+  // Try the pre-header first.
+  if (MachineBasicBlock *PHeadMBB = getLoopPreheader())
+    if (const BasicBlock *PHeadBB = PHeadMBB->getBasicBlock())
+      if (DebugLoc DL = PHeadBB->getTerminator()->getDebugLoc())
+        return DL;
+
+  // If we have no pre-header or there are no instructions with debug
+  // info in it, try the header.
+  if (MachineBasicBlock *HeadMBB = getHeader())
+    if (const BasicBlock *HeadBB = HeadMBB->getBasicBlock())
+      return HeadBB->getTerminator()->getDebugLoc();
+
+  return DebugLoc();
 }
 
 MachineBasicBlock *

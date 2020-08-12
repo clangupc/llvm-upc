@@ -1,9 +1,8 @@
-//===----------- ReductionRules.h - Reduction Rules -------------*- C++ -*-===//
+//===- ReductionRules.h - Reduction Rules -----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,21 +16,23 @@
 #include "Graph.h"
 #include "Math.h"
 #include "Solution.h"
+#include <cassert>
+#include <limits>
 
 namespace llvm {
 namespace PBQP {
 
-  /// \brief Reduce a node of degree one.
+  /// Reduce a node of degree one.
   ///
   /// Propagate costs from the given node, which must be of degree one, to its
   /// neighbor. Notify the problem domain.
   template <typename GraphT>
   void applyR1(GraphT &G, typename GraphT::NodeId NId) {
-    typedef typename GraphT::NodeId NodeId;
-    typedef typename GraphT::EdgeId EdgeId;
-    typedef typename GraphT::Vector Vector;
-    typedef typename GraphT::Matrix Matrix;
-    typedef typename GraphT::RawVector RawVector;
+    using NodeId = typename GraphT::NodeId;
+    using EdgeId = typename GraphT::EdgeId;
+    using Vector = typename GraphT::Vector;
+    using Matrix = typename GraphT::Matrix;
+    using RawVector = typename GraphT::RawVector;
 
     assert(G.getNodeDegree(NId) == 1 &&
            "R1 applied to node with degree != 1.");
@@ -71,11 +72,11 @@ namespace PBQP {
 
   template <typename GraphT>
   void applyR2(GraphT &G, typename GraphT::NodeId NId) {
-    typedef typename GraphT::NodeId NodeId;
-    typedef typename GraphT::EdgeId EdgeId;
-    typedef typename GraphT::Vector Vector;
-    typedef typename GraphT::Matrix Matrix;
-    typedef typename GraphT::RawMatrix RawMatrix;
+    using NodeId = typename GraphT::NodeId;
+    using EdgeId = typename GraphT::EdgeId;
+    using Vector = typename GraphT::Vector;
+    using Matrix = typename GraphT::Matrix;
+    using RawMatrix = typename GraphT::RawMatrix;
 
     assert(G.getNodeDegree(NId) == 2 &&
            "R2 applied to node with degree != 2.");
@@ -164,7 +165,7 @@ namespace PBQP {
   }
 #endif
 
-  // \brief Find a solution to a fully reduced graph by backpropagation.
+  // Find a solution to a fully reduced graph by backpropagation.
   //
   // Given a graph and a reduction order, pop each node from the reduction
   // order and greedily compute a minimum solution based on the node costs, and
@@ -177,9 +178,9 @@ namespace PBQP {
   //        state.
   template <typename GraphT, typename StackT>
   Solution backpropagate(GraphT& G, StackT stack) {
-    typedef GraphBase::NodeId NodeId;
-    typedef typename GraphT::Matrix Matrix;
-    typedef typename GraphT::RawVector RawVector;
+    using NodeId = GraphBase::NodeId;
+    using Matrix = typename GraphT::Matrix;
+    using RawVector = typename GraphT::RawVector;
 
     Solution s;
 
@@ -215,7 +216,7 @@ namespace PBQP {
     return s;
   }
 
-} // namespace PBQP
-} // namespace llvm
+} // end namespace PBQP
+} // end namespace llvm
 
-#endif
+#endif // LLVM_CODEGEN_PBQP_REDUCTIONRULES_H

@@ -1,9 +1,8 @@
 //===- FunctionImportUtils.h - Importing support utilities -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -32,7 +31,7 @@ class FunctionImportGlobalProcessing {
 
   /// Globals to import from this module, all other functions will be
   /// imported as declarations instead of definitions.
-  DenseSet<const GlobalValue *> *GlobalsToImport;
+  SetVector<GlobalValue *> *GlobalsToImport;
 
   /// Set to true if the given ModuleSummaryIndex contains any functions
   /// from this source module, in which case we must conservatively assume
@@ -43,6 +42,11 @@ class FunctionImportGlobalProcessing {
   /// Set of llvm.*used values, in order to validate that we don't try
   /// to promote any non-renamable values.
   SmallPtrSet<GlobalValue *, 8> Used;
+
+  /// Keep track of any COMDATs that require renaming (because COMDAT
+  /// leader was promoted and renamed). Maps from original COMDAT to one
+  /// with new name.
+  DenseMap<const Comdat *, Comdat *> RenamedComdats;
 
   /// Check if we should promote the given local value to global scope.
   bool shouldPromoteLocalToGlobal(const GlobalValue *SGV);
@@ -85,7 +89,7 @@ class FunctionImportGlobalProcessing {
 public:
   FunctionImportGlobalProcessing(
       Module &M, const ModuleSummaryIndex &Index,
-      DenseSet<const GlobalValue *> *GlobalsToImport = nullptr)
+      SetVector<GlobalValue *> *GlobalsToImport = nullptr)
       : M(M), ImportIndex(Index), GlobalsToImport(GlobalsToImport) {
     // If we have a ModuleSummaryIndex but no function to import,
     // then this is the primary module being compiled in a ThinLTO
@@ -104,16 +108,18 @@ public:
 
   bool run();
 
-  static bool
-  doImportAsDefinition(const GlobalValue *SGV,
-                       DenseSet<const GlobalValue *> *GlobalsToImport);
+  static bool doImportAsDefinition(const GlobalValue *SGV,
+                                   SetVector<GlobalValue *> *GlobalsToImport);
 };
 
 /// Perform in-place global value handling on the given Module for
 /// exported local functions renamed and promoted for ThinLTO.
 bool renameModuleForThinLTO(
     Module &M, const ModuleSummaryIndex &Index,
-    DenseSet<const GlobalValue *> *GlobalsToImport = nullptr);
+    SetVector<GlobalValue *> *GlobalsToImport = nullptr);
+
+/// Compute synthetic function entry counts.
+void computeSyntheticCounts(ModuleSummaryIndex &Index);
 
 } // End llvm namespace
 

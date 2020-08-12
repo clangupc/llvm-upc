@@ -1,5 +1,5 @@
 @ RUN: llvm-mc -n -triple armv7-apple-darwin10 %s -filetype=obj -o %t.obj
-@ RUN: llvm-readobj -file-headers -s -sd -r -t -macho-segment -macho-dysymtab -macho-indirect-symbols < %t.obj > %t.dump
+@ RUN: llvm-readobj --file-headers -S --sd -r --symbols --macho-segment --macho-dysymtab --macho-indirect-symbols < %t.obj > %t.dump
 @ RUN: FileCheck < %t.dump %s
 
 	.syntax unified
@@ -99,7 +99,7 @@ Lsc0_0:
 @ CHECK: ]
 @ CHECK: Relocations [
 @ CHECK:   Section __text {
-@ CHECK:     0x4 1 2 0 ARM_RELOC_BR24 0 __text
+@ CHECK:     0x4 1 2 1 ARM_RELOC_BR24 0 _f0
 @ CHECK:     0x0 1 2 1 ARM_RELOC_BR24 0 _printf
 @ CHECK:   }
 @ CHECK:   Section __data {

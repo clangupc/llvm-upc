@@ -3,7 +3,7 @@
 ; RUN: llvm-link %s %p/type-unique-simple-b.ll -S -o %t
 ; RUN: cat %t | FileCheck %s -check-prefix=LINK
 ; RUN: %llc_dwarf -filetype=obj -O0 < %t > %t2
-; RUN: llvm-dwarfdump -debug-dump=info %t2 | FileCheck %s
+; RUN: llvm-dwarfdump -v -debug-info %t2 | FileCheck %s
 
 ; Make sure the backend generates a single DIE and uses ref_addr.
 ; CHECK: 0x[[BASE:.*]]: DW_TAG_structure_type
@@ -15,9 +15,9 @@
 
 ; CHECK: DW_TAG_compile_unit
 ; CHECK: DW_TAG_formal_parameter
-; CHECK: DW_AT_type [DW_FORM_ref_addr] {{.*}}[[INT]])
+; CHECK: DW_AT_type [DW_FORM_ref_addr] {{.*}}[[INT]]
 ; CHECK: DW_TAG_variable
-; CHECK: DW_AT_type [DW_FORM_ref_addr] {{.*}}[[BASE]])
+; CHECK: DW_AT_type [DW_FORM_ref_addr] {{.*}}[[BASE]]
 
 ; Make sure llvm-link only generates a single copy of the struct.
 ; LINK: DW_TAG_structure_type
@@ -68,7 +68,7 @@ attributes #1 = { nounwind readnone }
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!14, !20}
 
-!0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, producer: "clang version 3.4 (http://llvm.org/git/clang.git c23b1db6268c8e7ce64026d57d1510c1aac200a0) (http://llvm.org/git/llvm.git 09b98fe3978eddefc2145adc1056cf21580ce945)", isOptimized: false, emissionKind: FullDebug, file: !1, enums: !2, retainedTypes: !3, globals: !2, imports: !2)
+!0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, producer: "clang version 3.4", isOptimized: false, emissionKind: FullDebug, file: !1, enums: !2, retainedTypes: !3, globals: !2, imports: !2)
 !1 = !DIFile(filename: "foo.cpp", directory: "/Users/mren/c_testing/type_unique_air/simple")
 !2 = !{}
 !3 = !{!4}
@@ -77,7 +77,7 @@ attributes #1 = { nounwind readnone }
 !6 = !{!7}
 !7 = !DIDerivedType(tag: DW_TAG_member, name: "a", line: 2, size: 32, align: 32, file: !5, scope: !4, baseType: !8)
 !8 = !DIBasicType(tag: DW_TAG_base_type, name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
-!10 = distinct !DISubprogram(name: "f", linkageName: "_Z1fi", line: 3, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !0, scopeLine: 3, file: !1, scope: !11, type: !12, variables: !2)
+!10 = distinct !DISubprogram(name: "f", linkageName: "_Z1fi", line: 3, isLocal: false, isDefinition: true, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !0, scopeLine: 3, file: !1, scope: !11, type: !12, retainedNodes: !2)
 !11 = !DIFile(filename: "foo.cpp", directory: "/Users/mren/c_testing/type_unique_air/simple")
 !12 = !DISubroutineType(types: !13)
 !13 = !{null, !8}

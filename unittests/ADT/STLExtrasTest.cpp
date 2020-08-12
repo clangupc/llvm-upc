@@ -1,9 +1,8 @@
 //===- STLExtrasTest.cpp - Unit tests for STL extras ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -48,7 +47,7 @@ TEST(STLExtrasTest, EnumerateLValue) {
   std::vector<CharPairType> CharResults;
 
   for (auto X : llvm::enumerate(foo)) {
-    CharResults.emplace_back(X.Index, X.Value);
+    CharResults.emplace_back(X.index(), X.value());
   }
   ASSERT_EQ(3u, CharResults.size());
   EXPECT_EQ(CharPairType(0u, 'a'), CharResults[0]);
@@ -60,7 +59,7 @@ TEST(STLExtrasTest, EnumerateLValue) {
   std::vector<IntPairType> IntResults;
   const std::vector<int> bar = {1, 2, 3};
   for (auto X : llvm::enumerate(bar)) {
-    IntResults.emplace_back(X.Index, X.Value);
+    IntResults.emplace_back(X.index(), X.value());
   }
   ASSERT_EQ(3u, IntResults.size());
   EXPECT_EQ(IntPairType(0u, 1), IntResults[0]);
@@ -69,9 +68,9 @@ TEST(STLExtrasTest, EnumerateLValue) {
 
   // Test an empty range.
   IntResults.clear();
-  const std::vector<int> baz;
+  const std::vector<int> baz{};
   for (auto X : llvm::enumerate(baz)) {
-    IntResults.emplace_back(X.Index, X.Value);
+    IntResults.emplace_back(X.index(), X.value());
   }
   EXPECT_TRUE(IntResults.empty());
 }
@@ -82,7 +81,7 @@ TEST(STLExtrasTest, EnumerateModifyLValue) {
   std::vector<char> foo = {'a', 'b', 'c'};
 
   for (auto X : llvm::enumerate(foo)) {
-    ++X.Value;
+    ++X.value();
   }
   EXPECT_EQ('b', foo[0]);
   EXPECT_EQ('c', foo[1]);
@@ -97,7 +96,7 @@ TEST(STLExtrasTest, EnumerateRValueRef) {
   auto Enumerator = llvm::enumerate(std::vector<int>{1, 2, 3});
 
   for (auto X : llvm::enumerate(std::vector<int>{1, 2, 3})) {
-    Results.emplace_back(X.Index, X.Value);
+    Results.emplace_back(X.index(), X.value());
   }
 
   ASSERT_EQ(3u, Results.size());
@@ -114,8 +113,8 @@ TEST(STLExtrasTest, EnumerateModifyRValue) {
   std::vector<PairType> Results;
 
   for (auto X : llvm::enumerate(std::vector<char>{'1', '2', '3'})) {
-    ++X.Value;
-    Results.emplace_back(X.Index, X.Value);
+    ++X.value();
+    Results.emplace_back(X.index(), X.value());
   }
 
   ASSERT_EQ(3u, Results.size());
@@ -255,6 +254,24 @@ TEST(STLExtrasTest, CountAdaptor) {
   EXPECT_EQ(1, count(v, 4));
 }
 
+TEST(STLExtrasTest, for_each) {
+  std::vector<int> v{0, 1, 2, 3, 4};
+  int count = 0;
+
+  llvm::for_each(v, [&count](int) { ++count; });
+  EXPECT_EQ(5, count);
+}
+
+TEST(STLExtrasTest, ToVector) {
+  std::vector<char> v = {'a', 'b', 'c'};
+  auto Enumerated = to_vector<4>(enumerate(v));
+  ASSERT_EQ(3u, Enumerated.size());
+  for (size_t I = 0; I < v.size(); ++I) {
+    EXPECT_EQ(I, Enumerated[I].index());
+    EXPECT_EQ(v[I], Enumerated[I].value());
+  }
+}
+
 TEST(STLExtrasTest, ConcatRange) {
   std::vector<int> Expected = {1, 2, 3, 4, 5, 6, 7, 8};
   std::vector<int> Test;
@@ -284,8 +301,8 @@ TEST(STLExtrasTest, PartitionAdaptor) {
   ASSERT_EQ(V.begin() + 4, I);
 
   // Sort the two halves as partition may have messed with the order.
-  std::sort(V.begin(), I);
-  std::sort(I, V.end());
+  llvm::sort(V.begin(), I);
+  llvm::sort(I, V.end());
 
   EXPECT_EQ(2, V[0]);
   EXPECT_EQ(4, V[1]);
@@ -308,4 +325,158 @@ TEST(STLExtrasTest, EraseIf) {
   EXPECT_EQ(7, V[3]);
 }
 
+namespace some_namespace {
+struct some_struct {
+  std::vector<int> data;
+  std::string swap_val;
+};
+
+std::vector<int>::const_iterator begin(const some_struct &s) {
+  return s.data.begin();
 }
+
+std::vector<int>::const_iterator end(const some_struct &s) {
+  return s.data.end();
+}
+
+void swap(some_struct &lhs, some_struct &rhs) {
+  // make swap visible as non-adl swap would even seem to
+  // work with std::swap which defaults to moving
+  lhs.swap_val = "lhs";
+  rhs.swap_val = "rhs";
+}
+} // namespace some_namespace
+
+TEST(STLExtrasTest, ADLTest) {
+  some_namespace::some_struct s{{1, 2, 3, 4, 5}, ""};
+  some_namespace::some_struct s2{{2, 4, 6, 8, 10}, ""};
+
+  EXPECT_EQ(*adl_begin(s), 1);
+  EXPECT_EQ(*(adl_end(s) - 1), 5);
+
+  adl_swap(s, s2);
+  EXPECT_EQ(s.swap_val, "lhs");
+  EXPECT_EQ(s2.swap_val, "rhs");
+
+  int count = 0;
+  llvm::for_each(s, [&count](int) { ++count; });
+  EXPECT_EQ(5, count);
+}
+
+TEST(STLExtrasTest, EmptyTest) {
+  std::vector<void*> V;
+  EXPECT_TRUE(llvm::empty(V));
+  V.push_back(nullptr);
+  EXPECT_FALSE(llvm::empty(V));
+
+  std::initializer_list<int> E = {};
+  std::initializer_list<int> NotE = {7, 13, 42};
+  EXPECT_TRUE(llvm::empty(E));
+  EXPECT_FALSE(llvm::empty(NotE));
+
+  auto R0 = make_range(V.begin(), V.begin());
+  EXPECT_TRUE(llvm::empty(R0));
+  auto R1 = make_range(V.begin(), V.end());
+  EXPECT_FALSE(llvm::empty(R1));
+}
+
+TEST(STLExtrasTest, EarlyIncrementTest) {
+  std::list<int> L = {1, 2, 3, 4};
+
+  auto EIR = make_early_inc_range(L);
+
+  auto I = EIR.begin();
+  auto EI = EIR.end();
+  EXPECT_NE(I, EI);
+
+  EXPECT_EQ(1, *I);
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
+  // Repeated dereferences are not allowed.
+  EXPECT_DEATH(*I, "Cannot dereference");
+  // Comparison after dereference is not allowed.
+  EXPECT_DEATH((void)(I == EI), "Cannot compare");
+  EXPECT_DEATH((void)(I != EI), "Cannot compare");
+#endif
+#endif
+
+  ++I;
+  EXPECT_NE(I, EI);
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
+  // You cannot increment prior to dereference.
+  EXPECT_DEATH(++I, "Cannot increment");
+#endif
+#endif
+  EXPECT_EQ(2, *I);
+#if LLVM_ENABLE_ABI_BREAKING_CHECKS
+#ifndef NDEBUG
+  // Repeated dereferences are not allowed.
+  EXPECT_DEATH(*I, "Cannot dereference");
+#endif
+#endif
+
+  // Inserting shouldn't break anything. We should be able to keep dereferencing
+  // the currrent iterator and increment. The increment to go to the "next"
+  // iterator from before we inserted.
+  L.insert(std::next(L.begin(), 2), -1);
+  ++I;
+  EXPECT_EQ(3, *I);
+
+  // Erasing the front including the current doesn't break incrementing.
+  L.erase(L.begin(), std::prev(L.end()));
+  ++I;
+  EXPECT_EQ(4, *I);
+  ++I;
+  EXPECT_EQ(EIR.end(), I);
+}
+
+TEST(STLExtrasTest, splat) {
+  std::vector<int> V;
+  EXPECT_FALSE(is_splat(V));
+
+  V.push_back(1);
+  EXPECT_TRUE(is_splat(V));
+
+  V.push_back(1);
+  V.push_back(1);
+  EXPECT_TRUE(is_splat(V));
+
+  V.push_back(2);
+  EXPECT_FALSE(is_splat(V));
+}
+
+TEST(STLExtrasTest, to_address) {
+  int *V1 = new int;
+  EXPECT_EQ(V1, to_address(V1));
+
+  // Check fancy pointer overload for unique_ptr
+  std::unique_ptr<int> V2 = make_unique<int>(0);
+  EXPECT_EQ(V2.get(), to_address(V2));
+
+  V2.reset(V1);
+  EXPECT_EQ(V1, to_address(V2));
+  V2.release();
+
+  // Check fancy pointer overload for shared_ptr
+  std::shared_ptr<int> V3 = std::make_shared<int>(0);
+  std::shared_ptr<int> V4 = V3;
+  EXPECT_EQ(V3.get(), V4.get());
+  EXPECT_EQ(V3.get(), to_address(V3));
+  EXPECT_EQ(V4.get(), to_address(V4));
+
+  V3.reset(V1);
+  EXPECT_EQ(V1, to_address(V3));
+}
+
+TEST(STLExtrasTest, partition_point) {
+  std::vector<int> V = {1, 3, 5, 7, 9};
+
+  // Range version.
+  EXPECT_EQ(V.begin() + 3,
+            partition_point(V, [](unsigned X) { return X < 7; }));
+  EXPECT_EQ(V.begin(), partition_point(V, [](unsigned X) { return X < 1; }));
+  EXPECT_EQ(V.end(), partition_point(V, [](unsigned X) { return X < 50; }));
+}
+
+} // namespace

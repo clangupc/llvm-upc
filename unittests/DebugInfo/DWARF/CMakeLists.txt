@@ -4,15 +4,16 @@ set(LLVM_LINK_COMPONENTS
   DebugInfoDWARF
   MC
   Object
+  ObjectYAML
   Support
   )
 
-set(DebugInfoSources
+add_llvm_unittest(DebugInfoDWARFTests
   DwarfGenerator.cpp
+  DwarfUtils.cpp
   DWARFDebugInfoTest.cpp
+  DWARFDebugLineTest.cpp
   DWARFFormValueTest.cpp
   )
 
-add_llvm_unittest(DebugInfoDWARFTests
-  ${DebugInfoSources}
-  )
+target_link_libraries(DebugInfoDWARFTests PRIVATE LLVMTestingSupport)

@@ -1,10 +1,9 @@
 //===- MCLinkerOptimizationHint.h - LOH interface ---------------*- C++ -*-===//
 //
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,13 +20,14 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/raw_ostream.h"
+#include <cassert>
+#include <cstdint>
 
 namespace llvm {
 
-// Forward declarations.
+class MachObjectWriter;
 class MCAsmLayout;
 class MCSymbol;
-class MachObjectWriter;
 
 /// Linker Optimization Hint Type.
 enum MCLOHType {
@@ -110,7 +110,7 @@ class MCLOHDirective {
                  const MCAsmLayout &Layout) const;
 
 public:
-  typedef SmallVectorImpl<MCSymbol *> LOHArgs;
+  using LOHArgs = SmallVectorImpl<MCSymbol *>;
 
   MCLOHDirective(MCLOHType Kind, const LOHArgs &Args)
       : Kind(Kind), Args(Args.begin(), Args.end()) {
@@ -133,15 +133,15 @@ public:
 
 class MCLOHContainer {
   /// Keep track of the emit size of all the LOHs.
-  mutable uint64_t EmitSize;
+  mutable uint64_t EmitSize = 0;
 
   /// Keep track of all LOH directives.
   SmallVector<MCLOHDirective, 32> Directives;
 
 public:
-  typedef SmallVectorImpl<MCLOHDirective> LOHDirectives;
+  using LOHDirectives = SmallVectorImpl<MCLOHDirective>;
 
-  MCLOHContainer() : EmitSize(0) {}
+  MCLOHContainer() = default;
 
   /// Const accessor to the directives.
   const LOHDirectives &getDirectives() const {
@@ -178,9 +178,9 @@ public:
 };
 
 // Add types for specialized template using MCSymbol.
-typedef MCLOHDirective::LOHArgs MCLOHArgs;
-typedef MCLOHContainer::LOHDirectives MCLOHDirectives;
+using MCLOHArgs = MCLOHDirective::LOHArgs;
+using MCLOHDirectives = MCLOHContainer::LOHDirectives;
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_MC_MCLINKEROPTIMIZATIONHINT_H

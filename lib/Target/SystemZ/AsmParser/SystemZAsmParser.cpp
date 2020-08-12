@@ -1,23 +1,39 @@
 //===-- SystemZAsmParser.cpp - Parse SystemZ assembly instructions --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
+#include "MCTargetDesc/SystemZInstPrinter.h"
 #include "MCTargetDesc/SystemZMCTargetDesc.h"
+#include "TargetInfo/SystemZTargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstBuilder.h"
+#include "llvm/MC/MCParser/MCAsmLexer.h"
+#include "llvm/MC/MCParser/MCAsmParser.h"
+#include "llvm/MC/MCParser/MCAsmParserExtension.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/SMLoc.h"
 #include "llvm/Support/TargetRegistry.h"
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <string>
 
 using namespace llvm;
 
@@ -31,6 +47,7 @@ static bool inRange(const MCExpr *Expr, int64_t MinValue, int64_t MaxValue) {
 }
 
 namespace {
+
 enum RegisterKind {
   GR32Reg,
   GRH32Reg,
@@ -45,6 +62,7 @@ enum RegisterKind {
   VR64Reg,
   VR128Reg,
   AR32Reg,
+  CR64Reg,
 };
 
 enum MemoryKind {
@@ -56,7 +74,6 @@ enum MemoryKind {
 };
 
 class SystemZOperand : public MCParsedAsmOperand {
-public:
 private:
   enum OperandKind {
     KindInvalid,
@@ -140,12 +157,14 @@ public:
                                                        SMLoc EndLoc) {
     return make_unique<SystemZOperand>(KindInvalid, StartLoc, EndLoc);
   }
+
   static std::unique_ptr<SystemZOperand> createToken(StringRef Str, SMLoc Loc) {
     auto Op = make_unique<SystemZOperand>(KindToken, Loc, Loc);
     Op->Token.Data = Str.data();
     Op->Token.Length = Str.size();
     return Op;
   }
+
   static std::unique_ptr<SystemZOperand>
   createReg(RegisterKind Kind, unsigned Num, SMLoc StartLoc, SMLoc EndLoc) {
     auto Op = make_unique<SystemZOperand>(KindReg, StartLoc, EndLoc);
@@ -153,12 +172,14 @@ public:
     Op->Reg.Num = Num;
     return Op;
   }
+
   static std::unique_ptr<SystemZOperand>
   createImm(const MCExpr *Expr, SMLoc StartLoc, SMLoc EndLoc) {
     auto Op = make_unique<SystemZOperand>(KindImm, StartLoc, EndLoc);
     Op->Imm = Expr;
     return Op;
   }
+
   static std::unique_ptr<SystemZOperand>
   createMem(MemoryKind MemKind, RegisterKind RegKind, unsigned Base,
             const MCExpr *Disp, unsigned Index, const MCExpr *LengthImm,
@@ -175,6 +196,7 @@ public:
       Op->Mem.Length.Reg = LengthReg;
     return Op;
   }
+
   static std::unique_ptr<SystemZOperand>
   createImmTLS(const MCExpr *Imm, const MCExpr *Sym,
                SMLoc StartLoc, SMLoc EndLoc) {
@@ -222,6 +244,11 @@ public:
     return Kind == KindImmTLS;
   }
 
+  const ImmTLSOp getImmTLS() const {
+    assert(Kind == KindImmTLS && "Not a TLS immediate");
+    return ImmTLS;
+  }
+
   // Memory operands.
   bool isMem() const override {
     return Kind == KindMem;
@@ -242,14 +269,26 @@ public:
   bool isMemDisp20(MemoryKind MemKind, RegisterKind RegKind) const {
     return isMem(MemKind, RegKind) && inRange(Mem.Disp, -524288, 524287);
   }
+  bool isMemDisp12Len4(RegisterKind RegKind) const {
+    return isMemDisp12(BDLMem, RegKind) && inRange(Mem.Length.Imm, 1, 0x10);
+  }
   bool isMemDisp12Len8(RegisterKind RegKind) const {
     return isMemDisp12(BDLMem, RegKind) && inRange(Mem.Length.Imm, 1, 0x100);
+  }
+
+  const MemOp& getMem() const {
+    assert(Kind == KindMem && "Not a Mem operand");
+    return Mem;
   }
 
   // Override MCParsedAsmOperand.
   SMLoc getStartLoc() const override { return StartLoc; }
   SMLoc getEndLoc() const override { return EndLoc; }
   void print(raw_ostream &OS) const override;
+
+  /// getLocRange - Get the range between the first and last token of this
+  /// operand.
+  SMRange getLocRange() const { return SMRange(StartLoc, EndLoc); }
 
   // Used by the TableGen code to add particular types of operand
   // to an instruction.
@@ -320,6 +359,7 @@ public:
   bool isVF128() const { return false; }
   bool isVR128() const { return isReg(VR128Reg); }
   bool isAR32() const { return isReg(AR32Reg); }
+  bool isCR64() const { return isReg(CR64Reg); }
   bool isAnyReg() const { return (isReg() || isImm(0, 15)); }
   bool isBDAddr32Disp12() const { return isMemDisp12(BDMem, ADDR32Reg); }
   bool isBDAddr32Disp20() const { return isMemDisp20(BDMem, ADDR32Reg); }
@@ -327,6 +367,7 @@ public:
   bool isBDAddr64Disp20() const { return isMemDisp20(BDMem, ADDR64Reg); }
   bool isBDXAddr64Disp12() const { return isMemDisp12(BDXMem, ADDR64Reg); }
   bool isBDXAddr64Disp20() const { return isMemDisp20(BDXMem, ADDR64Reg); }
+  bool isBDLAddr64Disp12Len4() const { return isMemDisp12Len4(ADDR64Reg); }
   bool isBDLAddr64Disp12Len8() const { return isMemDisp12Len8(ADDR64Reg); }
   bool isBDRAddr64Disp12() const { return isMemDisp12(BDRMem, ADDR64Reg); }
   bool isBDVAddr64Disp12() const { return isMemDisp12(BDVMem, ADDR64Reg); }
@@ -355,7 +396,8 @@ private:
     RegGR,
     RegFP,
     RegV,
-    RegAR
+    RegAR,
+    RegCR
   };
   struct Register {
     RegisterGroup Group;
@@ -394,7 +436,7 @@ public:
   SystemZAsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
                    const MCInstrInfo &MII,
                    const MCTargetOptions &Options)
-    : MCTargetAsmParser(Options, sti), Parser(parser) {
+    : MCTargetAsmParser(Options, sti, MII), Parser(parser) {
     MCAsmParserExtension::Initialize(Parser);
 
     // Alias the .word directive to .short.
@@ -463,6 +505,9 @@ public:
   OperandMatchResultTy parseAR32(OperandVector &Operands) {
     return parseRegister(Operands, RegAR, SystemZMC::AR32Regs, AR32Reg);
   }
+  OperandMatchResultTy parseCR64(OperandVector &Operands) {
+    return parseRegister(Operands, RegCR, SystemZMC::CR64Regs, CR64Reg);
+  }
   OperandMatchResultTy parseAnyReg(OperandVector &Operands) {
     return parseAnyRegister(Operands);
   }
@@ -503,11 +548,13 @@ public:
     return parsePCRel(Operands, -(1LL << 32), (1LL << 32) - 1, true);
   }
 };
+
 } // end anonymous namespace
 
 #define GET_REGISTER_MATCHER
 #define GET_SUBTARGET_FEATURE_NAME
 #define GET_MATCHER_IMPLEMENTATION
+#define GET_MNEMONIC_SPELL_CHECKER
 #include "SystemZGenAsmMatcher.inc"
 
 // Used for the .insn directives; contains information needed to parse the
@@ -587,8 +634,60 @@ static struct InsnMatchEntry InsnMatchTable[] = {
     { MCK_U48Imm, MCK_BDAddr64Disp12, MCK_BDAddr64Disp12, MCK_AnyReg } }
 };
 
+static void printMCExpr(const MCExpr *E, raw_ostream &OS) {
+  if (!E)
+    return;
+  if (auto *CE = dyn_cast<MCConstantExpr>(E))
+    OS << *CE;
+  else if (auto *UE = dyn_cast<MCUnaryExpr>(E))
+    OS << *UE;
+  else if (auto *BE = dyn_cast<MCBinaryExpr>(E))
+    OS << *BE;
+  else if (auto *SRE = dyn_cast<MCSymbolRefExpr>(E))
+    OS << *SRE;
+  else
+    OS << *E;
+}
+
 void SystemZOperand::print(raw_ostream &OS) const {
-  llvm_unreachable("Not implemented");
+  switch (Kind) {
+  case KindToken:
+    OS << "Token:" << getToken();
+    break;
+  case KindReg:
+    OS << "Reg:" << SystemZInstPrinter::getRegisterName(getReg());
+    break;
+  case KindImm:
+    OS << "Imm:";
+    printMCExpr(getImm(), OS);
+    break;
+  case KindImmTLS:
+    OS << "ImmTLS:";
+    printMCExpr(getImmTLS().Imm, OS);
+    if (getImmTLS().Sym) {
+      OS << ", ";
+      printMCExpr(getImmTLS().Sym, OS);
+    }
+    break;
+  case KindMem: {
+    const MemOp &Op = getMem();
+    OS << "Mem:" << *cast<MCConstantExpr>(Op.Disp);
+    if (Op.Base) {
+      OS << "(";
+      if (Op.MemKind == BDLMem)
+        OS << *cast<MCConstantExpr>(Op.Length.Imm) << ",";
+      else if (Op.MemKind == BDRMem)
+        OS << SystemZInstPrinter::getRegisterName(Op.Length.Reg) << ",";
+      if (Op.Index)
+        OS << SystemZInstPrinter::getRegisterName(Op.Index) << ",";
+      OS << SystemZInstPrinter::getRegisterName(Op.Base);
+      OS << ")";
+    }
+    break;
+  }
+  case KindInvalid:
+    break;
+  }
 }
 
 // Parse one register of the form %<prefix><number>.
@@ -623,6 +722,8 @@ bool SystemZAsmParser::parseRegister(Register &Reg) {
     Reg.Group = RegV;
   else if (Prefix == 'a' && Reg.Num < 16)
     Reg.Group = RegAR;
+  else if (Prefix == 'c' && Reg.Num < 16)
+    Reg.Group = RegCR;
   else
     return Error(Reg.StartLoc, "invalid register");
 
@@ -715,6 +816,10 @@ SystemZAsmParser::parseAnyRegister(OperandVector &Operands) {
     else if (Reg.Group == RegAR) {
       Kind = AR32Reg;
       RegNo = SystemZMC::AR32Regs[Reg.Num];
+    }
+    else if (Reg.Group == RegCR) {
+      Kind = CR64Reg;
+      RegNo = SystemZMC::CR64Regs[Reg.Num];
     }
     else {
       return MatchOperand_ParseFail;
@@ -1031,6 +1136,8 @@ bool SystemZAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
     RegNo = SystemZMC::VR128Regs[Reg.Num];
   else if (Reg.Group == RegAR)
     RegNo = SystemZMC::AR32Regs[Reg.Num];
+  else if (Reg.Group == RegCR)
+    RegNo = SystemZMC::CR64Regs[Reg.Num];
   StartLoc = Reg.StartLoc;
   EndLoc = Reg.EndLoc;
   return false;
@@ -1073,8 +1180,10 @@ bool SystemZAsmParser::parseOperand(OperandVector &Operands,
   // features to be available during the operand check, or else we will fail to
   // find the custom parser, and then we will later get an InvalidOperand error
   // instead of a MissingFeature errror.
-  uint64_t AvailableFeatures = getAvailableFeatures();
-  setAvailableFeatures(~(uint64_t)0);
+  FeatureBitset AvailableFeatures = getAvailableFeatures();
+  FeatureBitset All;
+  All.set();
+  setAvailableFeatures(All);
   OperandMatchResultTy ResTy = MatchOperandParserImpl(Operands, Mnemonic);
   setAvailableFeatures(AvailableFeatures);
   if (ResTy == MatchOperand_Success)
@@ -1125,6 +1234,10 @@ bool SystemZAsmParser::parseOperand(OperandVector &Operands,
   return false;
 }
 
+static std::string SystemZMnemonicSpellCheck(StringRef S,
+                                             const FeatureBitset &FBS,
+                                             unsigned VariantID = 0);
+
 bool SystemZAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                                OperandVector &Operands,
                                                MCStreamer &Out,
@@ -1133,8 +1246,9 @@ bool SystemZAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   MCInst Inst;
   unsigned MatchResult;
 
+  FeatureBitset MissingFeatures;
   MatchResult = MatchInstructionImpl(Operands, Inst, ErrorInfo,
-                                     MatchingInlineAsm);
+                                     MissingFeatures, MatchingInlineAsm);
   switch (MatchResult) {
   case Match_Success:
     Inst.setLoc(IDLoc);
@@ -1142,17 +1256,15 @@ bool SystemZAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     return false;
 
   case Match_MissingFeature: {
-    assert(ErrorInfo && "Unknown missing feature!");
+    assert(MissingFeatures.any() && "Unknown missing feature!");
     // Special case the error message for the very common case where only
     // a single subtarget feature is missing
     std::string Msg = "instruction requires:";
-    uint64_t Mask = 1;
-    for (unsigned I = 0; I < sizeof(ErrorInfo) * 8 - 1; ++I) {
-      if (ErrorInfo & Mask) {
+    for (unsigned I = 0, E = MissingFeatures.size(); I != E; ++I) {
+      if (MissingFeatures[I]) {
         Msg += " ";
-        Msg += getSubtargetFeatureName(ErrorInfo & Mask);
+        Msg += getSubtargetFeatureName(I);
       }
-      Mask <<= 1;
     }
     return Error(IDLoc, Msg);
   }
@@ -1170,8 +1282,13 @@ bool SystemZAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     return Error(ErrorLoc, "invalid operand for instruction");
   }
 
-  case Match_MnemonicFail:
-    return Error(IDLoc, "invalid instruction");
+  case Match_MnemonicFail: {
+    FeatureBitset FBS = ComputeAvailableFeatures(getSTI().getFeatureBits());
+    std::string Suggestion = SystemZMnemonicSpellCheck(
+      ((SystemZOperand &)*Operands[0]).getToken(), FBS);
+    return Error(IDLoc, "invalid instruction" + Suggestion,
+                 ((SystemZOperand &)*Operands[0]).getLocRange());
+  }
   }
 
   llvm_unreachable("Unexpected match type");

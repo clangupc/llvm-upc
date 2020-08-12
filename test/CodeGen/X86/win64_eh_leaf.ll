@@ -1,6 +1,6 @@
 ; RUN: llc < %s -O1 -mtriple=x86_64-pc-win32 | FileCheck %s -check-prefix=ASM
 ; RUN: llc < %s -O1 -mtriple=x86_64-pc-win32 -filetype=obj -o %t
-; RUN: llvm-readobj -unwind %t | FileCheck %s -check-prefix=READOBJ
+; RUN: llvm-readobj --unwind %t | FileCheck %s -check-prefix=READOBJ
 
 declare void @g(i32)
 
@@ -29,3 +29,12 @@ entry:
 ; and no unwind info in the object file.
 ; READOBJ-NOT: leaf_func
 }
+
+define void @naked_func() naked {
+  call void asm sideeffect "ret", ""()
+  unreachable
+}
+; ASM-LABEL: naked_func:
+; ASM-NOT: .seh_
+; ASM: ret
+; ASM-NOT: .seh_

@@ -1,13 +1,13 @@
-//===- ObjectLinkingLayer.h - Add object files to a JIT process -*- C++ -*-===//
+//===-- ObjectLinkingLayer.h - JITLink-based jit linking layer --*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
-// Contains the definition for the object layer of the JIT.
+// Contains the definition for an JITLink-based, in-process object linking
+// layer.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,14 +17,13 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/JITLink/JITLink.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
-#include "llvm/ExecutionEngine/RuntimeDyld.h"
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
-#include "llvm/Object/ObjectFile.h"
+#include "llvm/ExecutionEngine/Orc/Core.h"
+#include "llvm/ExecutionEngine/Orc/Layer.h"
 #include "llvm/Support/Error.h"
-#include <cassert>
 #include <algorithm>
+#include <cassert>
 #include <functional>
 #include <list>
 #include <memory>
@@ -33,327 +32,131 @@
 #include <vector>
 
 namespace llvm {
+
+namespace jitlink {
+class EHFrameRegistrar;
+} // namespace jitlink
+
+namespace object {
+class ObjectFile;
+} // namespace object
+
 namespace orc {
 
-class ObjectLinkingLayerBase {
-protected:
-  /// @brief Holds a set of objects to be allocated/linked as a unit in the JIT.
-  ///
-  /// An instance of this class will be created for each set of objects added
-  /// via JITObjectLayer::addObjectSet. Deleting the instance (via
-  /// removeObjectSet) frees its memory, removing all symbol definitions that
-  /// had been provided by this instance. Higher level layers are responsible
-  /// for taking any action required to handle the missing symbols.
-  class LinkedObjectSet {
-  public:
-    LinkedObjectSet() = default;
-    LinkedObjectSet(const LinkedObjectSet&) = delete;
-    void operator=(const LinkedObjectSet&) = delete;
-    virtual ~LinkedObjectSet() = default;
+class ObjectLinkingLayerJITLinkContext;
 
-    virtual void finalize() = 0;
-
-    virtual JITSymbol::GetAddressFtor
-    getSymbolMaterializer(std::string Name) = 0;
-
-    virtual void mapSectionAddress(const void *LocalAddress,
-                                   JITTargetAddress TargetAddr) const = 0;
-
-    JITSymbol getSymbol(StringRef Name, bool ExportedSymbolsOnly) {
-      auto SymEntry = SymbolTable.find(Name);
-      if (SymEntry == SymbolTable.end())
-        return nullptr;
-      if (!SymEntry->second.getFlags().isExported() && ExportedSymbolsOnly)
-        return nullptr;
-      if (!Finalized)
-        return JITSymbol(getSymbolMaterializer(Name),
-                         SymEntry->second.getFlags());
-      return JITSymbol(SymEntry->second);
-    }
-
-  protected:
-    StringMap<JITEvaluatedSymbol> SymbolTable;
-    bool Finalized = false;
-  };
-
-  typedef std::list<std::unique_ptr<LinkedObjectSet>> LinkedObjectSetListT;
-
-public:
-  /// @brief Handle to a set of loaded objects.
-  typedef LinkedObjectSetListT::iterator ObjSetHandleT;
-};
-
-/// @brief Default (no-op) action to perform when loading objects.
-class DoNothingOnNotifyLoaded {
-public:
-  template <typename ObjSetT, typename LoadResult>
-  void operator()(ObjectLinkingLayerBase::ObjSetHandleT, const ObjSetT &,
-                  const LoadResult &) {}
-};
-
-/// @brief Bare bones object linking layer.
+/// An ObjectLayer implementation built on JITLink.
 ///
-///   This class is intended to be used as the base layer for a JIT. It allows
-/// object files to be loaded into memory, linked, and the addresses of their
-/// symbols queried. All objects added to this layer can see each other's
-/// symbols.
-template <typename NotifyLoadedFtor = DoNothingOnNotifyLoaded>
-class ObjectLinkingLayer : public ObjectLinkingLayerBase {
+/// Clients can use this class to add relocatable object files to an
+/// ExecutionSession, and it typically serves as the base layer (underneath
+/// a compiling layer like IRCompileLayer) for the rest of the JIT.
+class ObjectLinkingLayer : public ObjectLayer {
+  friend class ObjectLinkingLayerJITLinkContext;
+
 public:
-  /// @brief Functor for receiving finalization notifications.
-  typedef std::function<void(ObjSetHandleT)> NotifyFinalizedFtor;
-
-private:
-  template <typename ObjSetT, typename MemoryManagerPtrT,
-            typename SymbolResolverPtrT, typename FinalizerFtor>
-  class ConcreteLinkedObjectSet : public LinkedObjectSet {
+  /// Plugin instances can be added to the ObjectLinkingLayer to receive
+  /// callbacks when code is loaded or emitted, and when JITLink is being
+  /// configured.
+  class Plugin {
   public:
-    ConcreteLinkedObjectSet(ObjSetT Objects, MemoryManagerPtrT MemMgr,
-                            SymbolResolverPtrT Resolver,
-                            FinalizerFtor Finalizer,
-                            bool ProcessAllSections)
-      : MemMgr(std::move(MemMgr)),
-        PFC(llvm::make_unique<PreFinalizeContents>(std::move(Objects),
-                                                   std::move(Resolver),
-                                                   std::move(Finalizer),
-                                                   ProcessAllSections)) {
-      buildInitialSymbolTable(PFC->Objects);
+    virtual ~Plugin();
+    virtual void modifyPassConfig(MaterializationResponsibility &MR,
+                                  const Triple &TT,
+                                  jitlink::PassConfiguration &Config) {}
+    virtual void notifyLoaded(MaterializationResponsibility &MR) {}
+    virtual Error notifyEmitted(MaterializationResponsibility &MR) {
+      return Error::success();
     }
-
-    void setHandle(ObjSetHandleT H) {
-      PFC->Handle = H;
+    virtual Error notifyRemovingModule(VModuleKey K) {
+      return Error::success();
     }
-
-    void finalize() override {
-      assert(PFC && "mapSectionAddress called on finalized LinkedObjectSet");
-
-      RuntimeDyld RTDyld(*MemMgr, *PFC->Resolver);
-      RTDyld.setProcessAllSections(PFC->ProcessAllSections);
-      PFC->RTDyld = &RTDyld;
-
-      this->Finalized = true;
-      PFC->Finalizer(PFC->Handle, RTDyld, std::move(PFC->Objects),
-                     [&]() {
-                       this->updateSymbolTable(RTDyld);
-                     });
-
-      // Release resources.
-      PFC = nullptr;
-    }
-
-    JITSymbol::GetAddressFtor getSymbolMaterializer(std::string Name) override {
-      return
-        [this, Name]() {
-          // The symbol may be materialized between the creation of this lambda
-          // and its execution, so we need to double check.
-          if (!this->Finalized)
-            this->finalize();
-          return this->getSymbol(Name, false).getAddress();
-        };
-    }
-
-    void mapSectionAddress(const void *LocalAddress,
-                           JITTargetAddress TargetAddr) const override {
-      assert(PFC && "mapSectionAddress called on finalized LinkedObjectSet");
-      assert(PFC->RTDyld && "mapSectionAddress called on raw LinkedObjectSet");
-      PFC->RTDyld->mapSectionAddress(LocalAddress, TargetAddr);
-    }
-
-  private:
-    void buildInitialSymbolTable(const ObjSetT &Objects) {
-      for (const auto &Obj : Objects)
-        for (auto &Symbol : getObject(*Obj).symbols()) {
-          if (Symbol.getFlags() & object::SymbolRef::SF_Undefined)
-            continue;
-          Expected<StringRef> SymbolName = Symbol.getName();
-          // FIXME: Raise an error for bad symbols.
-          if (!SymbolName) {
-            consumeError(SymbolName.takeError());
-            continue;
-          }
-          auto Flags = JITSymbolFlags::fromObjectSymbol(Symbol);
-          SymbolTable.insert(
-            std::make_pair(*SymbolName, JITEvaluatedSymbol(0, Flags)));
-        }
-    }
-
-    void updateSymbolTable(const RuntimeDyld &RTDyld) {
-      for (auto &SymEntry : SymbolTable)
-        SymEntry.second = RTDyld.getSymbol(SymEntry.first());
-    }
-
-    // Contains the information needed prior to finalization: the object files,
-    // memory manager, resolver, and flags needed for RuntimeDyld.
-    struct PreFinalizeContents {
-      PreFinalizeContents(ObjSetT Objects, SymbolResolverPtrT Resolver,
-                          FinalizerFtor Finalizer, bool ProcessAllSections)
-        : Objects(std::move(Objects)), Resolver(std::move(Resolver)),
-          Finalizer(std::move(Finalizer)),
-          ProcessAllSections(ProcessAllSections) {}
-
-      ObjSetT Objects;
-      SymbolResolverPtrT Resolver;
-      FinalizerFtor Finalizer;
-      bool ProcessAllSections;
-      ObjSetHandleT Handle;
-      RuntimeDyld *RTDyld;
-    };
-
-    MemoryManagerPtrT MemMgr;
-    std::unique_ptr<PreFinalizeContents> PFC;
+    virtual Error notifyRemovingAllModules() { return Error::success(); }
   };
 
-  template <typename ObjSetT, typename MemoryManagerPtrT,
-            typename SymbolResolverPtrT, typename FinalizerFtor>
-  std::unique_ptr<
-    ConcreteLinkedObjectSet<ObjSetT, MemoryManagerPtrT,
-                            SymbolResolverPtrT, FinalizerFtor>>
-  createLinkedObjectSet(ObjSetT Objects, MemoryManagerPtrT MemMgr,
-                        SymbolResolverPtrT Resolver,
-                        FinalizerFtor Finalizer,
-                        bool ProcessAllSections) {
-    typedef ConcreteLinkedObjectSet<ObjSetT, MemoryManagerPtrT,
-                                    SymbolResolverPtrT, FinalizerFtor> LOS;
-    return llvm::make_unique<LOS>(std::move(Objects), std::move(MemMgr),
-                                  std::move(Resolver), std::move(Finalizer),
-                                  ProcessAllSections);
+  /// Construct an ObjectLinkingLayer with the given NotifyLoaded,
+  /// and NotifyEmitted functors.
+  ObjectLinkingLayer(ExecutionSession &ES,
+                     jitlink::JITLinkMemoryManager &MemMgr);
+
+  /// Destruct an ObjectLinkingLayer.
+  ~ObjectLinkingLayer();
+
+  /// Add a pass-config modifier.
+  ObjectLinkingLayer &addPlugin(std::unique_ptr<Plugin> P) {
+    std::lock_guard<std::mutex> Lock(LayerMutex);
+    Plugins.push_back(std::move(P));
+    return *this;
   }
 
-public:
-  /// @brief LoadedObjectInfo list. Contains a list of owning pointers to
-  ///        RuntimeDyld::LoadedObjectInfo instances.
-  typedef std::vector<std::unique_ptr<RuntimeDyld::LoadedObjectInfo>>
-      LoadedObjInfoList;
+  /// Emit the object.
+  void emit(MaterializationResponsibility R,
+            std::unique_ptr<MemoryBuffer> O) override;
 
-  /// @brief Construct an ObjectLinkingLayer with the given NotifyLoaded,
-  ///        and NotifyFinalized functors.
-  ObjectLinkingLayer(
-      NotifyLoadedFtor NotifyLoaded = NotifyLoadedFtor(),
-      NotifyFinalizedFtor NotifyFinalized = NotifyFinalizedFtor())
-      : NotifyLoaded(std::move(NotifyLoaded)),
-        NotifyFinalized(std::move(NotifyFinalized)),
-        ProcessAllSections(false) {}
-
-  /// @brief Set the 'ProcessAllSections' flag.
+  /// Instructs this ObjectLinkingLayer instance to override the symbol flags
+  /// found in the AtomGraph with the flags supplied by the
+  /// MaterializationResponsibility instance. This is a workaround to support
+  /// symbol visibility in COFF, which does not use the libObject's
+  /// SF_Exported flag. Use only when generating / adding COFF object files.
   ///
-  /// If set to true, all sections in each object file will be allocated using
-  /// the memory manager, rather than just the sections required for execution.
-  ///
-  /// This is kludgy, and may be removed in the future.
-  void setProcessAllSections(bool ProcessAllSections) {
-    this->ProcessAllSections = ProcessAllSections;
+  /// FIXME: We should be able to remove this if/when COFF properly tracks
+  /// exported symbols.
+  ObjectLinkingLayer &
+  setOverrideObjectFlagsWithResponsibilityFlags(bool OverrideObjectFlags) {
+    this->OverrideObjectFlags = OverrideObjectFlags;
+    return *this;
   }
 
-  /// @brief Add a set of objects (or archives) that will be treated as a unit
-  ///        for the purposes of symbol lookup and memory management.
-  ///
-  /// @return A handle that can be used to refer to the loaded objects (for 
-  ///         symbol searching, finalization, freeing memory, etc.).
-  template <typename ObjSetT,
-            typename MemoryManagerPtrT,
-            typename SymbolResolverPtrT>
-  ObjSetHandleT addObjectSet(ObjSetT Objects,
-                             MemoryManagerPtrT MemMgr,
-                             SymbolResolverPtrT Resolver) {
-    auto Finalizer = [&](ObjSetHandleT H, RuntimeDyld &RTDyld,
-                         const ObjSetT &Objs,
-                         std::function<void()> LOSHandleLoad) {
-      LoadedObjInfoList LoadedObjInfos;
-
-      for (auto &Obj : Objs)
-        LoadedObjInfos.push_back(RTDyld.loadObject(this->getObject(*Obj)));
-
-      LOSHandleLoad();
-
-      this->NotifyLoaded(H, Objs, LoadedObjInfos);
-
-      RTDyld.finalizeWithMemoryManagerLocking();
-
-      if (this->NotifyFinalized)
-        this->NotifyFinalized(H);
-    };
-
-    auto LOS =
-      createLinkedObjectSet(std::move(Objects), std::move(MemMgr),
-                            std::move(Resolver), std::move(Finalizer),
-                            ProcessAllSections);
-    // LOS is an owning-ptr. Keep a non-owning one so that we can set the handle
-    // below.
-    auto *LOSPtr = LOS.get();
-
-    ObjSetHandleT Handle = LinkedObjSetList.insert(LinkedObjSetList.end(),
-                                                   std::move(LOS));
-    LOSPtr->setHandle(Handle);
-
-    return Handle;
-  }
-
-  /// @brief Remove the set of objects associated with handle H.
-  ///
-  ///   All memory allocated for the objects will be freed, and the sections and
-  /// symbols they provided will no longer be available. No attempt is made to
-  /// re-emit the missing symbols, and any use of these symbols (directly or
-  /// indirectly) will result in undefined behavior. If dependence tracking is
-  /// required to detect or resolve such issues it should be added at a higher
-  /// layer.
-  void removeObjectSet(ObjSetHandleT H) {
-    // How do we invalidate the symbols in H?
-    LinkedObjSetList.erase(H);
-  }
-
-  /// @brief Search for the given named symbol.
-  /// @param Name The name of the symbol to search for.
-  /// @param ExportedSymbolsOnly If true, search only for exported symbols.
-  /// @return A handle for the given named symbol, if it exists.
-  JITSymbol findSymbol(StringRef Name, bool ExportedSymbolsOnly) {
-    for (auto I = LinkedObjSetList.begin(), E = LinkedObjSetList.end(); I != E;
-         ++I)
-      if (auto Symbol = findSymbolIn(I, Name, ExportedSymbolsOnly))
-        return Symbol;
-
-    return nullptr;
-  }
-
-  /// @brief Search for the given named symbol in the context of the set of
-  ///        loaded objects represented by the handle H.
-  /// @param H The handle for the object set to search in.
-  /// @param Name The name of the symbol to search for.
-  /// @param ExportedSymbolsOnly If true, search only for exported symbols.
-  /// @return A handle for the given named symbol, if it is found in the
-  ///         given object set.
-  JITSymbol findSymbolIn(ObjSetHandleT H, StringRef Name,
-                         bool ExportedSymbolsOnly) {
-    return (*H)->getSymbol(Name, ExportedSymbolsOnly);
-  }
-
-  /// @brief Map section addresses for the objects associated with the handle H.
-  void mapSectionAddress(ObjSetHandleT H, const void *LocalAddress,
-                         JITTargetAddress TargetAddr) {
-    (*H)->mapSectionAddress(LocalAddress, TargetAddr);
-  }
-
-  /// @brief Immediately emit and finalize the object set represented by the
-  ///        given handle.
-  /// @param H Handle for object set to emit/finalize.
-  void emitAndFinalize(ObjSetHandleT H) {
-    (*H)->finalize();
+  /// If set, this ObjectLinkingLayer instance will claim responsibility
+  /// for any symbols provided by a given object file that were not already in
+  /// the MaterializationResponsibility instance. Setting this flag allows
+  /// higher-level program representations (e.g. LLVM IR) to be added based on
+  /// only a subset of the symbols they provide, without having to write
+  /// intervening layers to scan and add the additional symbols. This trades
+  /// diagnostic quality for convenience however: If all symbols are enumerated
+  /// up-front then clashes can be detected and reported early (and usually
+  /// deterministically). If this option is set, clashes for the additional
+  /// symbols may not be detected until late, and detection may depend on
+  /// the flow of control through JIT'd code. Use with care.
+  ObjectLinkingLayer &
+  setAutoClaimResponsibilityForObjectSymbols(bool AutoClaimObjectSymbols) {
+    this->AutoClaimObjectSymbols = AutoClaimObjectSymbols;
+    return *this;
   }
 
 private:
-  static const object::ObjectFile& getObject(const object::ObjectFile &Obj) {
-    return Obj;
-  }
+  using AllocPtr = std::unique_ptr<jitlink::JITLinkMemoryManager::Allocation>;
 
-  template <typename ObjT>
-  static const object::ObjectFile&
-  getObject(const object::OwningBinary<ObjT> &Obj) {
-    return *Obj.getBinary();
-  }
+  void modifyPassConfig(MaterializationResponsibility &MR, const Triple &TT,
+                        jitlink::PassConfiguration &PassConfig);
+  void notifyLoaded(MaterializationResponsibility &MR);
+  Error notifyEmitted(MaterializationResponsibility &MR, AllocPtr Alloc);
 
-  LinkedObjectSetListT LinkedObjSetList;
-  NotifyLoadedFtor NotifyLoaded;
-  NotifyFinalizedFtor NotifyFinalized;
-  bool ProcessAllSections;
+  Error removeModule(VModuleKey K);
+  Error removeAllModules();
+
+  mutable std::mutex LayerMutex;
+  jitlink::JITLinkMemoryManager &MemMgr;
+  bool OverrideObjectFlags = false;
+  bool AutoClaimObjectSymbols = false;
+  DenseMap<VModuleKey, AllocPtr> TrackedAllocs;
+  std::vector<AllocPtr> UntrackedAllocs;
+  std::vector<std::unique_ptr<Plugin>> Plugins;
+};
+
+class EHFrameRegistrationPlugin : public ObjectLinkingLayer::Plugin {
+public:
+  EHFrameRegistrationPlugin(jitlink::EHFrameRegistrar &Registrar);
+  Error notifyEmitted(MaterializationResponsibility &MR) override;
+  void modifyPassConfig(MaterializationResponsibility &MR, const Triple &TT,
+                        jitlink::PassConfiguration &PassConfig) override;
+  Error notifyRemovingModule(VModuleKey K) override;
+  Error notifyRemovingAllModules() override;
+
+private:
+  jitlink::EHFrameRegistrar &Registrar;
+  DenseMap<MaterializationResponsibility *, JITTargetAddress> InProcessLinks;
+  DenseMap<VModuleKey, JITTargetAddress> TrackedEHFrameAddrs;
+  std::vector<JITTargetAddress> UntrackedEHFrameAddrs;
 };
 
 } // end namespace orc

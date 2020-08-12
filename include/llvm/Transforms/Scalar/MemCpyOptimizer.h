@@ -1,9 +1,8 @@
-//===---- MemCpyOptimizer.h - memcpy optimization ---------------*- C++ -*-===//
+//===- MemCpyOptimizer.h - memcpy optimization ------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,19 +14,27 @@
 #ifndef LLVM_TRANSFORMS_SCALAR_MEMCPYOPTIMIZER_H
 #define LLVM_TRANSFORMS_SCALAR_MEMCPYOPTIMIZER_H
 
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/AssumptionCache.h"
-#include "llvm/Analysis/GlobalsModRef.h"
-#include "llvm/Analysis/MemoryDependenceAnalysis.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/IR/Dominators.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/PassManager.h"
+#include <cstdint>
+#include <functional>
 
 namespace llvm {
+
+class AssumptionCache;
+class CallInst;
+class DominatorTree;
+class Function;
+class Instruction;
+class MemCpyInst;
+class MemMoveInst;
+class MemoryDependenceResults;
+class MemSetInst;
+class StoreInst;
+class TargetLibraryInfo;
+class Value;
 
 class MemCpyOptPass : public PassInfoMixin<MemCpyOptPass> {
   MemoryDependenceResults *MD = nullptr;
@@ -37,8 +44,10 @@ class MemCpyOptPass : public PassInfoMixin<MemCpyOptPass> {
   std::function<DominatorTree &()> LookupDomTree;
 
 public:
-  MemCpyOptPass() {}
+  MemCpyOptPass() = default;
+
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
+
   // Glue for the old PM.
   bool runImpl(Function &F, MemoryDependenceResults *MD_,
                TargetLibraryInfo *TLI_,
@@ -63,6 +72,7 @@ private:
 
   bool iterateOnFunction(Function &F);
 };
-}
+
+} // end namespace llvm
 
 #endif // LLVM_TRANSFORMS_SCALAR_MEMCPYOPTIMIZER_H

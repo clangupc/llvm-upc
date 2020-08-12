@@ -1,21 +1,20 @@
 //===- lib/MC/MCObjectWriter.cpp - MCObjectWriter implementation ----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCExpr.h"
-#include "llvm/MC/MCObjectWriter.h"
+#include "llvm/MC/MCFragment.h"
 #include "llvm/MC/MCSymbol.h"
 
 using namespace llvm;
 
-MCObjectWriter::~MCObjectWriter() {
-}
+MCObjectWriter::~MCObjectWriter() = default;
 
 bool MCObjectWriter::isSymbolRefDifferenceFullyResolved(
     const MCAssembler &Asm, const MCSymbolRefExpr *A, const MCSymbolRefExpr *B,
@@ -51,5 +50,3 @@ bool MCObjectWriter::isSymbolRefDifferenceFullyResolvedImpl(
   // On ELF and COFF  A - B is absolute if A and B are in the same section.
   return &SecA == &SecB;
 }
-
-bool MCObjectWriter::isWeak(const MCSymbol &) const { return false; }

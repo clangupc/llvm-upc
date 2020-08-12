@@ -1,8 +1,8 @@
 ; Test 8-bit atomic min/max operations.
 ;
-; RUN: llc < %s -mtriple=s390x-linux-gnu | FileCheck %s
-; RUN: llc < %s -mtriple=s390x-linux-gnu | FileCheck %s -check-prefix=CHECK-SHIFT1
-; RUN: llc < %s -mtriple=s390x-linux-gnu | FileCheck %s -check-prefix=CHECK-SHIFT2
+; RUN: llc < %s -mtriple=s390x-linux-gnu -disable-block-placement | FileCheck %s
+; RUN: llc < %s -mtriple=s390x-linux-gnu -disable-block-placement | FileCheck %s -check-prefix=CHECK-SHIFT1
+; RUN: llc < %s -mtriple=s390x-linux-gnu -disable-block-placement | FileCheck %s -check-prefix=CHECK-SHIFT2
 
 ; Check signed minimum.
 ; - CHECK is for the main loop.
@@ -15,8 +15,8 @@
 define i8 @f1(i8 *%src, i8 %b) {
 ; CHECK-LABEL: f1:
 ; CHECK: risbg [[RISBG:%r[1-9]+]], %r2, 0, 189, 0{{$}}
-; CHECK: sll %r2, 3
-; CHECK: l [[OLD:%r[0-9]+]], 0([[RISBG]])
+; CHECK-DAG: sll %r2, 3
+; CHECK-DAG: l [[OLD:%r[0-9]+]], 0([[RISBG]])
 ; CHECK: [[LOOP:\.[^:]*]]:
 ; CHECK: rll [[ROT:%r[0-9]+]], [[OLD]], 0(%r2)
 ; CHECK: crjle [[ROT]], %r3, [[KEEP:\..*]]
@@ -51,8 +51,8 @@ define i8 @f1(i8 *%src, i8 %b) {
 define i8 @f2(i8 *%src, i8 %b) {
 ; CHECK-LABEL: f2:
 ; CHECK: risbg [[RISBG:%r[1-9]+]], %r2, 0, 189, 0{{$}}
-; CHECK: sll %r2, 3
-; CHECK: l [[OLD:%r[0-9]+]], 0([[RISBG]])
+; CHECK-DAG: sll %r2, 3
+; CHECK-DAG: l [[OLD:%r[0-9]+]], 0([[RISBG]])
 ; CHECK: [[LOOP:\.[^:]*]]:
 ; CHECK: rll [[ROT:%r[0-9]+]], [[OLD]], 0(%r2)
 ; CHECK: crjhe [[ROT]], %r3, [[KEEP:\..*]]
@@ -87,8 +87,8 @@ define i8 @f2(i8 *%src, i8 %b) {
 define i8 @f3(i8 *%src, i8 %b) {
 ; CHECK-LABEL: f3:
 ; CHECK: risbg [[RISBG:%r[1-9]+]], %r2, 0, 189, 0{{$}}
-; CHECK: sll %r2, 3
-; CHECK: l [[OLD:%r[0-9]+]], 0([[RISBG]])
+; CHECK-DAG: sll %r2, 3
+; CHECK-DAG: l [[OLD:%r[0-9]+]], 0([[RISBG]])
 ; CHECK: [[LOOP:\.[^:]*]]:
 ; CHECK: rll [[ROT:%r[0-9]+]], [[OLD]], 0(%r2)
 ; CHECK: clrjle [[ROT]], %r3, [[KEEP:\..*]]
@@ -123,8 +123,8 @@ define i8 @f3(i8 *%src, i8 %b) {
 define i8 @f4(i8 *%src, i8 %b) {
 ; CHECK-LABEL: f4:
 ; CHECK: risbg [[RISBG:%r[1-9]+]], %r2, 0, 189, 0{{$}}
-; CHECK: sll %r2, 3
-; CHECK: l [[OLD:%r[0-9]+]], 0([[RISBG]])
+; CHECK-DAG: sll %r2, 3
+; CHECK-DAG: l [[OLD:%r[0-9]+]], 0([[RISBG]])
 ; CHECK: [[LOOP:\.[^:]*]]:
 ; CHECK: rll [[ROT:%r[0-9]+]], [[OLD]], 0(%r2)
 ; CHECK: clrjhe [[ROT]], %r3, [[KEEP:\..*]]

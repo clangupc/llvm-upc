@@ -1,4 +1,4 @@
-; RUN: llc < %s -regalloc=greedy -mcpu=cortex-a8 -relocation-model=pic -disable-fp-elim -verify-machineinstrs | FileCheck %s
+; RUN: llc < %s -regalloc=greedy -mcpu=cortex-a8 -relocation-model=pic -frame-pointer=all -verify-machineinstrs | FileCheck %s
 ;
 ; ARM tests that crash or fail with the greedy register allocator.
 
@@ -7,11 +7,11 @@ target triple = "thumbv7-apple-darwin"
 declare double @exp(double)
 
 ; CHECK: remat_subreg
-define void @remat_subreg(float* nocapture %x, i32* %y, i32 %n, i32 %z, float %c, float %lambda, float* nocapture %ret_f, float* nocapture %ret_df) nounwind {
+define void @remat_subreg(float* nocapture %x, i32* %y, i32 %n, i32 %z, float %c, float %lambda, float* nocapture %ret_f, float* nocapture %ret_df, i1 %cond) nounwind {
 entry:
   %conv16 = fpext float %lambda to double
   %mul17 = fmul double %conv16, -1.000000e+00
-  br i1 undef, label %cond.end.us, label %cond.end
+  br i1 %cond, label %cond.end.us, label %cond.end
 
 cond.end.us:                                      ; preds = %entry
   unreachable
@@ -61,7 +61,7 @@ for.end:                                          ; preds = %cond.end
 
 ; CHECK: insert_elem
 ; This test has a sub-register copy with a kill flag:
-;   %vreg6:ssub_3<def> = COPY %vreg6:ssub_2<kill>; QPR_VFP2:%vreg6
+;   %6:ssub_3 = COPY killed %6:ssub_2; QPR_VFP2:%6
 ; The rewriter must do something sensible with that, or the scavenger crashes.
 define void @insert_elem() nounwind {
 entry:

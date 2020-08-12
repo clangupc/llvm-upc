@@ -1,6 +1,6 @@
-; RUN: llc -verify-machineinstrs < %s -mtriple=aarch64-none-linux-gnu -disable-fp-elim -tailcallopt | FileCheck %s -check-prefix CHECK-TAIL
-; RUN: llc -verify-machineinstrs < %s -mtriple=aarch64-none-linux-gnu -disable-fp-elim | FileCheck %s
-; RUN: llc -verify-machineinstrs < %s -mtriple=aarch64-none-linux-gnu -disable-fp-elim -tailcallopt -aarch64-redzone | FileCheck %s -check-prefix CHECK-TAIL-RZ
+; RUN: llc -verify-machineinstrs < %s -mtriple=aarch64-none-linux-gnu -frame-pointer=all -tailcallopt | FileCheck %s -check-prefix CHECK-TAIL
+; RUN: llc -verify-machineinstrs < %s -mtriple=aarch64-none-linux-gnu -frame-pointer=all | FileCheck %s
+; RUN: llc -verify-machineinstrs < %s -mtriple=aarch64-none-linux-gnu -frame-pointer=all -tailcallopt -aarch64-redzone | FileCheck %s -check-prefix CHECK-TAIL-RZ
 
 ; Without tailcallopt fastcc still means the caller cleans up the
 ; stack, so try to make sure this is respected.
@@ -21,9 +21,11 @@ define fastcc void @func_stack0() {
   call fastcc void @func_stack8([8 x i32] undef, i32 42)
 ; CHECK:  bl func_stack8
 ; CHECK-NOT: sub sp, sp,
+; CHECK-NOT: [sp, #{{[-0-9]+}}]!
+; CHECK-NOT: [sp], #{{[-0-9]+}}
 
 ; CHECK-TAIL: bl func_stack8
-; CHECK-TAIL: sub sp, sp, #16
+; CHECK-TAIL: stp xzr, xzr, [sp, #-16]!
 
 
   call fastcc void @func_stack32([8 x i32] undef, i128 0, i128 9)
@@ -72,10 +74,12 @@ define fastcc void @func_stack8([8 x i32], i32 %stacked) {
   call fastcc void @func_stack8([8 x i32] undef, i32 42)
 ; CHECK:  bl func_stack8
 ; CHECK-NOT: sub sp, sp,
+; CHECK-NOT: [sp, #{{[-0-9]+}}]!
+; CHECK-NOT: [sp], #{{[-0-9]+}}
 
 
 ; CHECK-TAIL: bl func_stack8
-; CHECK-TAIL: sub sp, sp, #16
+; CHECK-TAIL: stp xzr, xzr, [sp, #-16]!
 
 
   call fastcc void @func_stack32([8 x i32] undef, i128 0, i128 9)
@@ -116,9 +120,11 @@ define fastcc void @func_stack32([8 x i32], i128 %stacked0, i128 %stacked1) {
   call fastcc void @func_stack8([8 x i32] undef, i32 42)
 ; CHECK:  bl func_stack8
 ; CHECK-NOT: sub sp, sp,
+; CHECK-NOT: [sp, #{{[-0-9]+}}]!
+; CHECK-NOT: [sp], #{{[-0-9]+}}
 
 ; CHECK-TAIL: bl func_stack8
-; CHECK-TAIL: sub sp, sp, #16
+; CHECK-TAIL: stp xzr, xzr, [sp, #-16]!
 
 
   call fastcc void @func_stack32([8 x i32] undef, i128 0, i128 9)

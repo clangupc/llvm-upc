@@ -1,9 +1,8 @@
 //==- llvm/Support/ArrayRecycler.h - Recycling of Arrays ---------*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -47,7 +46,9 @@ template <class T, size_t Align = alignof(T)> class ArrayRecycler {
     FreeList *Entry = Bucket[Idx];
     if (!Entry)
       return nullptr;
+    __asan_unpoison_memory_region(Entry, Capacity::get(Idx).getSize());
     Bucket[Idx] = Entry->Next;
+    __msan_allocated_memory(Entry, Capacity::get(Idx).getSize());
     return reinterpret_cast<T*>(Entry);
   }
 
@@ -59,6 +60,7 @@ template <class T, size_t Align = alignof(T)> class ArrayRecycler {
       Bucket.resize(size_t(Idx) + 1);
     Entry->Next = Bucket[Idx];
     Bucket[Idx] = Entry;
+    __asan_poison_memory_region(Ptr, Capacity::get(Idx).getSize());
   }
 
 public:

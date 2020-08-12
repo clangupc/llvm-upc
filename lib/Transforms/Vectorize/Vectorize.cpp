@@ -1,9 +1,8 @@
 //===-- Vectorize.cpp -----------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,27 +16,21 @@
 #include "llvm-c/Initialization.h"
 #include "llvm-c/Transforms/Vectorize.h"
 #include "llvm/Analysis/Passes.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/InitializePasses.h"
 
 using namespace llvm;
 
 /// initializeVectorizationPasses - Initialize all passes linked into the
 /// Vectorization library.
 void llvm::initializeVectorization(PassRegistry &Registry) {
-  initializeBBVectorizePass(Registry);
   initializeLoopVectorizePass(Registry);
   initializeSLPVectorizerPass(Registry);
-  initializeLoadStoreVectorizerPass(Registry);
+  initializeLoadStoreVectorizerLegacyPassPass(Registry);
 }
 
 void LLVMInitializeVectorization(LLVMPassRegistryRef R) {
   initializeVectorization(*unwrap(R));
-}
-
-void LLVMAddBBVectorizePass(LLVMPassManagerRef PM) {
-  unwrap(PM)->add(createBBVectorizePass());
 }
 
 void LLVMAddLoopVectorizePass(LLVMPassManagerRef PM) {

@@ -1,9 +1,8 @@
 //===- DeadMachineInstructionElim.cpp - Remove dead machine instructions --===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,19 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/Passes.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
-#define DEBUG_TYPE "codegen-dce"
+#define DEBUG_TYPE "dead-mi-elimination"
 
 STATISTIC(NumDeletes,          "Number of dead instructions deleted");
 
@@ -54,7 +52,7 @@ namespace {
 char DeadMachineInstructionElim::ID = 0;
 char &llvm::DeadMachineInstructionElimID = DeadMachineInstructionElim::ID;
 
-INITIALIZE_PASS(DeadMachineInstructionElim, "dead-mi-elimination",
+INITIALIZE_PASS(DeadMachineInstructionElim, DEBUG_TYPE,
                 "Remove dead machine instructions", false, false)
 
 bool DeadMachineInstructionElim::isDead(const MachineInstr *MI) const {
@@ -83,9 +81,11 @@ bool DeadMachineInstructionElim::isDead(const MachineInstr *MI) const {
         if (LivePhysRegs.test(Reg) || MRI->isReserved(Reg))
           return false;
       } else {
-        if (!MRI->use_nodbg_empty(Reg))
-          // This def has a non-debug use. Don't delete the instruction!
-          return false;
+        for (const MachineInstr &Use : MRI->use_nodbg_instructions(Reg)) {
+          if (&Use != MI)
+            // This def has a non-debug use. Don't delete the instruction!
+            return false;
+        }
       }
     }
   }
@@ -95,7 +95,7 @@ bool DeadMachineInstructionElim::isDead(const MachineInstr *MI) const {
 }
 
 bool DeadMachineInstructionElim::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(*MF.getFunction()))
+  if (skipFunction(MF.getFunction()))
     return false;
 
   bool AnyChanges = false;
@@ -110,7 +110,7 @@ bool DeadMachineInstructionElim::runOnMachineFunction(MachineFunction &MF) {
     // Start out assuming that reserved registers are live out of this block.
     LivePhysRegs = MRI->getReservedRegs();
 
-    // Add live-ins from sucessors to LivePhysRegs. Normally, physregs are not
+    // Add live-ins from successors to LivePhysRegs. Normally, physregs are not
     // live across blocks, but some targets (x86) can have flags live out of a
     // block.
     for (MachineBasicBlock::succ_iterator S = MBB.succ_begin(),
@@ -126,7 +126,7 @@ bool DeadMachineInstructionElim::runOnMachineFunction(MachineFunction &MF) {
 
       // If the instruction is dead, delete it!
       if (isDead(MI)) {
-        DEBUG(dbgs() << "DeadMachineInstructionElim: DELETING: " << *MI);
+        LLVM_DEBUG(dbgs() << "DeadMachineInstructionElim: DELETING: " << *MI);
         // It is possible that some DBG_VALUE instructions refer to this
         // instruction.  They get marked as undef and will be deleted
         // in the live debug variable analysis.

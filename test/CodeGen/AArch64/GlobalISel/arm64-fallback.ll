@@ -1,8 +1,9 @@
-; RUN: not llc -O0 -global-isel -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=ERROR
+; RUN: not llc -O0 -global-isel -global-isel-abort=1 -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=ERROR
 ; RUN: llc -O0 -global-isel -global-isel-abort=0 -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=FALLBACK
-; RUN: llc -O0 -global-isel -global-isel-abort=2 -verify-machineinstrs %s -o %t.out 2> %t.err
+; RUN: llc -O0 -global-isel -global-isel-abort=2 -pass-remarks-missed='gisel*' -verify-machineinstrs %s -o %t.out 2> %t.err
 ; RUN: FileCheck %s --check-prefix=FALLBACK-WITH-REPORT-OUT < %t.out
 ; RUN: FileCheck %s --check-prefix=FALLBACK-WITH-REPORT-ERR < %t.err
+; RUN: not llc -global-isel -mtriple aarch64_be %s -o - 2>&1 | FileCheck %s --check-prefix=BIG-ENDIAN
 ; This file checks that the fallback path to selection dag works.
 ; The test is fragile in the sense that it must be updated to expose
 ; something that fails with global-isel.
@@ -12,12 +13,15 @@
 target datalayout = "e-m:o-i64:64-i128:128-n32:64-S128"
 target triple = "aarch64--"
 
+; BIG-ENDIAN: unable to translate in big endian mode
+
 ; We use __fixunstfti as the common denominator for __fixunstfti on Linux and
 ; ___fixunstfti on iOS
-; ERROR: Unable to lower arguments
+; ERROR: unable to lower arguments: i128 (i128)* (in function: ABIi128)
 ; FALLBACK: ldr q0,
 ; FALLBACK-NEXT: bl __fixunstfti
 ;
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to lower arguments: i128 (i128)* (in function: ABIi128)
 ; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for ABIi128
 ; FALLBACK-WITH-REPORT-OUT-LABEL: ABIi128:
 ; FALLBACK-WITH-REPORT-OUT: ldr q0,
@@ -28,19 +32,10 @@ define i128 @ABIi128(i128 %arg1) {
   ret i128 %res
 }
 
-; It happens that we don't handle ConstantArray instances yet during
-; translation. Any other constant would be fine too.
-
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for constant
-; FALLBACK-WITH-REPORT-OUT-LABEL: constant:
-; FALLBACK-WITH-REPORT-OUT: fmov d0, #1.0
-define [1 x double] @constant() {
-  ret [1 x double] [double 1.0]
-}
-
   ; The key problem here is that we may fail to create an MBB referenced by a
   ; PHI. If so, we cannot complete the G_PHI and mustn't try or bad things
   ; happen.
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: cannot select: G_STORE %6:gpr(s32), %2:gpr(p0) :: (store seq_cst 4 into %ir.addr) (in function: pending_phis)
 ; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for pending_phis
 ; FALLBACK-WITH-REPORT-OUT-LABEL: pending_phis:
 define i32 @pending_phis(i1 %tst, i32 %val, i32* %addr) {
@@ -59,59 +54,184 @@ false:
 
 }
 
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %3:_(s32) = G_LOAD %1:_(p0) :: (load 3 from `i24* undef`, align 1) (in function: odd_type_load)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for odd_type_load
+; FALLBACK-WITH-REPORT-OUT-LABEL: odd_type_load
+define i32 @odd_type_load() {
+entry:
+  %ld = load i24, i24* undef, align 1
+  %cst = zext i24 %ld to i32
+  ret i32 %cst
+}
+
   ; General legalizer inability to handle types whose size wasn't a power of 2.
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: G_STORE %1:_(s42), %0:_(p0) :: (store 6 into %ir.addr, align 8) (in function: odd_type)
 ; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for odd_type
 ; FALLBACK-WITH-REPORT-OUT-LABEL: odd_type:
 define void @odd_type(i42* %addr) {
   %val42 = load i42, i42* %addr
+  store i42 %val42, i42* %addr
   ret void
 }
 
-  ; RegBankSelect crashed when given invalid mappings, and AArch64's
-  ; implementation produce valid-but-nonsense mappings for G_SEQUENCE.
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for sequence_mapping
-; FALLBACK-WITH-REPORT-OUT-LABEL: sequence_mapping:
-define void @sequence_mapping([2 x i64] %in) {
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: G_STORE %1:_(<7 x s32>), %0:_(p0) :: (store 28 into %ir.addr, align 32) (in function: odd_vector)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for odd_vector
+; FALLBACK-WITH-REPORT-OUT-LABEL: odd_vector:
+define void @odd_vector(<7 x i32>* %addr) {
+  %vec = load <7 x i32>, <7 x i32>* %addr
+  store <7 x i32> %vec, <7 x i32>* %addr
   ret void
 }
 
-  ; Legalizer was asserting when it enountered an unexpected default action.
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for legal_default
-; FALLBACK-WITH-REPORT-LABEL: legal_default:
-define void @legal_default(i64 %in) {
-  insertvalue [2 x i64] undef, i64 %in, 0
+  ; AArch64 was asserting instead of returning an invalid mapping for unknown
+  ; sizes.
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to translate instruction: ret: '  ret i128 undef' (in function: sequence_sizes)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for sequence_sizes
+; FALLBACK-WITH-REPORT-LABEL: sequence_sizes:
+define i128 @sequence_sizes([8 x i8] %in) {
+  ret i128 undef
+}
+
+; Just to make sure we don't accidentally emit a normal load/store.
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: cannot select: %2:gpr(s64) = G_LOAD %0:gpr(p0) :: (load seq_cst 8 from %ir.addr)  (in function: atomic_ops)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for atomic_ops
+; FALLBACK-WITH-REPORT-LABEL: atomic_ops:
+define i64 @atomic_ops(i64* %addr) {
+  store atomic i64 0, i64* %addr unordered, align 8
+  %res = load atomic i64, i64* %addr seq_cst, align 8
+  ret i64 %res
+}
+
+; Make sure we don't mess up metadata arguments.
+declare void @llvm.write_register.i64(metadata, i64)
+
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to translate instruction: call: ' call void @llvm.write_register.i64(metadata !0, i64 0)' (in function: test_write_register_intrin)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for test_write_register_intrin
+; FALLBACK-WITH-REPORT-LABEL: test_write_register_intrin:
+define void @test_write_register_intrin() {
+  call void @llvm.write_register.i64(metadata !{!"sp"}, i64 0)
   ret void
 }
 
-; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for debug_insts
-; FALLBACK-WITH-REPORT-LABEL: debug_insts:
-define void @debug_insts(i32 %in) #0 !dbg !7 {
-entry:
-  %in.addr = alloca i32, align 4
-  store i32 %in, i32* %in.addr, align 4
-  call void @llvm.dbg.declare(metadata i32* %in.addr, metadata !11, metadata !12), !dbg !13
-  ret void, !dbg !14
+@_ZTIi = external global i8*
+declare i32 @__gxx_personality_v0(...)
+
+; Check that we fallback on invoke translation failures.
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to translate instruction: invoke: '  invoke void %callee(i128 0)
+; FALLBACK-WITH-REPORT-NEXT:   to label %continue unwind label %broken' (in function: invoke_weird_type)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for invoke_weird_type
+; FALLBACK-WITH-REPORT-OUT-LABEL: invoke_weird_type:
+define void @invoke_weird_type(void(i128)* %callee) personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*) {
+  invoke void %callee(i128 0)
+    to label %continue unwind label %broken
+
+broken:
+  landingpad { i8*, i32 } catch i8* bitcast(i8** @_ZTIi to i8*)
+  ret void
+
+continue:
+  ret void
 }
 
-; Function Attrs: nounwind readnone
-declare void @llvm.dbg.declare(metadata, metadata, metadata)
+; Check that we fallback on invoke translation failures.
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %0:_(s128) = G_FCONSTANT fp128 0xL00000000000000004000000000000000
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for test_quad_dump
+; FALLBACK-WITH-REPORT-OUT-LABEL: test_quad_dump:
+define fp128 @test_quad_dump() {
+  ret fp128 0xL00000000000000004000000000000000
+}
 
-!llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!3, !4, !5}
-!llvm.ident = !{!6}
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %2:_(p0) = G_EXTRACT_VECTOR_ELT %0:_(<2 x p0>), %3:_(s64) (in function: vector_of_pointers_extractelement)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for vector_of_pointers_extractelement
+; FALLBACK-WITH-REPORT-OUT-LABEL: vector_of_pointers_extractelement:
+@var = global <2 x i16*> zeroinitializer
+define void @vector_of_pointers_extractelement() {
+  br label %end
 
-!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "clang version 4.0.0 (trunk 289075) (llvm/trunk 289080)", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !2)
-!1 = !DIFile(filename: "tmp.c", directory: "/Users/tim/llvm/build")
-!2 = !{}
-!3 = !{i32 2, !"Dwarf Version", i32 4}
-!4 = !{i32 2, !"Debug Info Version", i32 3}
-!5 = !{i32 1, !"PIC Level", i32 2}
-!6 = !{!"clang version 4.0.0 (trunk 289075) (llvm/trunk 289080)"}
-!7 = distinct !DISubprogram(name: "foo", scope: !1, file: !1, line: 1, type: !8, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: false, unit: !0, variables: !2)
-!8 = !DISubroutineType(types: !9)
-!9 = !{null, !10}
-!10 = !DIBasicType(name: "int", size: 32, encoding: DW_ATE_signed)
-!11 = !DILocalVariable(name: "in", arg: 1, scope: !7, file: !1, line: 1, type: !10)
-!12 = !DIExpression()
-!13 = !DILocation(line: 1, column: 14, scope: !7)
-!14 = !DILocation(line: 2, column: 1, scope: !7)
+block:
+  %dummy = extractelement <2 x i16*> %vec, i32 0
+  store i16* %dummy, i16** undef
+  ret void
+
+end:
+  %vec = load <2 x i16*>, <2 x i16*>* undef
+  br label %block
+}
+
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %2:_(<2 x p0>) = G_INSERT_VECTOR_ELT %0:_, %3:_(p0), %5:_(s32) (in function: vector_of_pointers_insertelement)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for vector_of_pointers_insertelement
+; FALLBACK-WITH-REPORT-OUT-LABEL: vector_of_pointers_insertelement:
+define void @vector_of_pointers_insertelement() {
+  br label %end
+
+block:
+  %dummy = insertelement <2 x i16*> %vec, i16* null, i32 0
+  store <2 x i16*> %dummy, <2 x i16*>* undef
+  ret void
+
+end:
+  %vec = load <2 x i16*>, <2 x i16*>* undef
+  br label %block
+}
+
+; FALLBACK-WITH-REPORT-ERR remark: <unknown>:0:0: unable to legalize instruction: G_STORE %3, %4 :: (store 12 into `i96* undef`, align 16) (in function: nonpow2_add_narrowing)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_add_narrowing
+; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_add_narrowing:
+define void @nonpow2_add_narrowing() {
+  %a = add i128 undef, undef
+  %b = trunc i128 %a to i96
+  %dummy = add i96 %b, %b
+  store i96 %dummy, i96* undef
+  ret void
+}
+
+; FALLBACK-WITH-REPORT-ERR remark: <unknown>:0:0: unable to legalize instruction: G_STORE %3, %4 :: (store 12 into `i96* undef`, align 16) (in function: nonpow2_add_narrowing)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_or_narrowing
+; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_or_narrowing:
+define void @nonpow2_or_narrowing() {
+  %a = add i128 undef, undef
+  %b = trunc i128 %a to i96
+  %dummy = or i96 %b, %b
+  store i96 %dummy, i96* undef
+  ret void
+}
+
+; FALLBACK-WITH-REPORT-ERR remark: <unknown>:0:0: unable to legalize instruction: G_STORE %0, %1 :: (store 12 into `i96* undef`, align 16) (in function: nonpow2_load_narrowing)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_load_narrowing
+; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_load_narrowing:
+define void @nonpow2_load_narrowing() {
+  %dummy = load i96, i96* undef
+  store i96 %dummy, i96* undef
+  ret void
+}
+
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %4:_(s64) = G_EXTRACT %3:_(s96), 0 (in function: nonpow2_store_narrowing)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_store_narrowing
+; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_store_narrowing:
+define void @nonpow2_store_narrowing(i96* %c) {
+  %a = add i128 undef, undef
+  %b = trunc i128 %a to i96
+  store i96 %b, i96* %c
+  ret void
+}
+
+; Currently can't handle vector lengths that aren't an exact multiple of
+; natively supported vector lengths. Test that the fall-back works for those.
+; FALLBACK-WITH-REPORT-ERR-G_IMPLICIT_DEF-LEGALIZABLE: (FIXME: this is what is expected once we can legalize non-pow-of-2 G_IMPLICIT_DEF) remark: <unknown>:0:0: unable to legalize instruction: %1:_(<7 x s64>) = G_ADD %0, %0 (in function: nonpow2_vector_add_fewerelements
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to legalize instruction: %2:_(s64) = G_EXTRACT_VECTOR_ELT %1:_(<7 x s64>), %3:_(s64) (in function: nonpow2_vector_add_fewerelements)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for nonpow2_vector_add_fewerelements
+; FALLBACK-WITH-REPORT-OUT-LABEL: nonpow2_vector_add_fewerelements:
+define void @nonpow2_vector_add_fewerelements() {
+  %dummy = add <7 x i64> undef, undef
+  %ex = extractelement <7 x i64> %dummy, i64 0
+  store i64 %ex, i64* undef
+  ret void
+}
+
+%swift_error = type {i64, i8}
+
+; FALLBACK-WITH-REPORT-ERR: remark: <unknown>:0:0: unable to lower arguments due to swiftself: void (%swift_error**)* (in function: swiftself_param)
+; FALLBACK-WITH-REPORT-ERR: warning: Instruction selection used fallback path for swiftself_param
+define void @swiftself_param(%swift_error** swiftself %error_ptr_ref) {
+  ret void
+}

@@ -1,24 +1,42 @@
-//===-- FunctionAttrs.h - Compute function attrs --------------------------===//
+//===- FunctionAttrs.h - Compute function attributes ------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//
 /// \file
 /// Provides passes for computing function attributes based on interprocedural
 /// analyses.
+//
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_TRANSFORMS_IPO_FUNCTIONATTRS_H
 #define LLVM_TRANSFORMS_IPO_FUNCTIONATTRS_H
 
-#include "llvm/Analysis/LazyCallGraph.h"
 #include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LazyCallGraph.h"
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
+
+class AAResults;
+class Function;
+class Module;
+class Pass;
+
+/// The three kinds of memory access relevant to 'readonly' and
+/// 'readnone' attributes.
+enum MemoryAccessKind {
+  MAK_ReadNone = 0,
+  MAK_ReadOnly = 1,
+  MAK_MayWrite = 2,
+  MAK_WriteOnly = 3
+};
+
+/// Returns the memory access properties of this copy of the function.
+MemoryAccessKind computeFunctionBodyMemoryAccess(Function &F, AAResults &AAR);
 
 /// Computes function attributes in post-order over the call graph.
 ///
@@ -43,7 +61,7 @@ Pass *createPostOrderFunctionAttrsLegacyPass();
 /// This pass provides a general RPO or "top down" propagation of
 /// function attributes. For a few (rare) cases, we can deduce significantly
 /// more about function attributes by working in RPO, so this pass
-/// provides the compliment to the post-order pass above where the majority of
+/// provides the complement to the post-order pass above where the majority of
 /// deduction is performed.
 // FIXME: Currently there is no RPO CGSCC pass structure to slide into and so
 // this is a boring module pass, but eventually it should be an RPO CGSCC pass
@@ -53,6 +71,7 @@ class ReversePostOrderFunctionAttrsPass
 public:
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
-}
+
+} // end namespace llvm
 
 #endif // LLVM_TRANSFORMS_IPO_FUNCTIONATTRS_H

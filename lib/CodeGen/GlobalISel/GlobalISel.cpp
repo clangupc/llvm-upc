@@ -1,9 +1,8 @@
 //===-- llvm/CodeGen/GlobalISel/GlobalIsel.cpp --- GlobalISel ----*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -16,17 +15,10 @@
 
 using namespace llvm;
 
-#ifndef LLVM_BUILD_GLOBAL_ISEL
-
-void llvm::initializeGlobalISel(PassRegistry &Registry) {
-}
-
-#else
-
 void llvm::initializeGlobalISel(PassRegistry &Registry) {
   initializeIRTranslatorPass(Registry);
   initializeLegalizerPass(Registry);
+  initializeLocalizerPass(Registry);
   initializeRegBankSelectPass(Registry);
   initializeInstructionSelectPass(Registry);
 }
-#endif // LLVM_BUILD_GLOBAL_ISEL

@@ -1,26 +1,25 @@
 //==-- WebAssemblyTargetStreamer.cpp - WebAssembly Target Streamer Methods --=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file defines WebAssembly-specific target streamer classes.
+/// This file defines WebAssembly-specific target streamer classes.
 /// These are for implementing support for target-specific assembly directives.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssemblyTargetStreamer.h"
-#include "InstPrinter/WebAssemblyInstPrinter.h"
-#include "WebAssemblyMCTargetDesc.h"
+#include "MCTargetDesc/WebAssemblyTargetStreamer.h"
+#include "MCTargetDesc/WebAssemblyInstPrinter.h"
+#include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCSectionELF.h"
+#include "llvm/MC/MCSectionWasm.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCSymbolELF.h"
-#include "llvm/Support/ELF.h"
+#include "llvm/MC/MCSymbolWasm.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormattedStream.h"
 using namespace llvm;
@@ -28,93 +27,126 @@ using namespace llvm;
 WebAssemblyTargetStreamer::WebAssemblyTargetStreamer(MCStreamer &S)
     : MCTargetStreamer(S) {}
 
+void WebAssemblyTargetStreamer::emitValueType(wasm::ValType Type) {
+  Streamer.EmitIntValue(uint8_t(Type), 1);
+}
+
 WebAssemblyTargetAsmStreamer::WebAssemblyTargetAsmStreamer(
     MCStreamer &S, formatted_raw_ostream &OS)
     : WebAssemblyTargetStreamer(S), OS(OS) {}
 
-WebAssemblyTargetELFStreamer::WebAssemblyTargetELFStreamer(MCStreamer &S)
+WebAssemblyTargetWasmStreamer::WebAssemblyTargetWasmStreamer(MCStreamer &S)
     : WebAssemblyTargetStreamer(S) {}
 
-static void PrintTypes(formatted_raw_ostream &OS, ArrayRef<MVT> Types) {
+static void printTypes(formatted_raw_ostream &OS,
+                       ArrayRef<wasm::ValType> Types) {
   bool First = true;
-  for (MVT Type : Types) {
+  for (auto Type : Types) {
     if (First)
       First = false;
     else
       OS << ", ";
-    OS << WebAssembly::TypeToString(Type);
+    OS << WebAssembly::typeToString(Type);
   }
   OS << '\n';
 }
 
-void WebAssemblyTargetAsmStreamer::emitParam(ArrayRef<MVT> Types) {
-  OS << "\t.param  \t";
-  PrintTypes(OS, Types);
-}
-
-void WebAssemblyTargetAsmStreamer::emitResult(ArrayRef<MVT> Types) {
-  OS << "\t.result \t";
-  PrintTypes(OS, Types);
-}
-
-void WebAssemblyTargetAsmStreamer::emitLocal(ArrayRef<MVT> Types) {
+void WebAssemblyTargetAsmStreamer::emitLocal(ArrayRef<wasm::ValType> Types) {
   if (!Types.empty()) {
     OS << "\t.local  \t";
-    PrintTypes(OS, Types);
+    printTypes(OS, Types);
   }
 }
 
 void WebAssemblyTargetAsmStreamer::emitEndFunc() { OS << "\t.endfunc\n"; }
 
-void WebAssemblyTargetAsmStreamer::emitIndirectFunctionType(
-    StringRef name, SmallVectorImpl<MVT> &Params, SmallVectorImpl<MVT> &Results) {
-  OS << "\t.functype\t" << name;
-  if (Results.empty())
-    OS << ", void";
-  else {
-    assert(Results.size() == 1);
-    OS << ", " << WebAssembly::TypeToString(Results.front());
-  }
-  for (auto Ty : Params)
-    OS << ", " << WebAssembly::TypeToString(Ty);
-  OS << '\n';
+void WebAssemblyTargetAsmStreamer::emitSignature(
+    const wasm::WasmSignature *Sig) {
+  OS << "(";
+  emitParamList(Sig);
+  OS << ") -> (";
+  emitReturnList(Sig);
+  OS << ")";
 }
 
-void WebAssemblyTargetAsmStreamer::emitGlobalImport(StringRef name) {
-  OS << "\t.import_global\t" << name << '\n';
+void WebAssemblyTargetAsmStreamer::emitParamList(
+    const wasm::WasmSignature *Sig) {
+  auto &Params = Sig->Params;
+  for (auto &Ty : Params) {
+    if (&Ty != &Params[0])
+      OS << ", ";
+    OS << WebAssembly::typeToString(Ty);
+  }
+}
+
+void WebAssemblyTargetAsmStreamer::emitReturnList(
+    const wasm::WasmSignature *Sig) {
+  auto &Returns = Sig->Returns;
+  for (auto &Ty : Returns) {
+    if (&Ty != &Returns[0])
+      OS << ", ";
+    OS << WebAssembly::typeToString(Ty);
+  }
+}
+
+void WebAssemblyTargetAsmStreamer::emitFunctionType(const MCSymbolWasm *Sym) {
+  assert(Sym->isFunction());
+  OS << "\t.functype\t" << Sym->getName() << " ";
+  emitSignature(Sym->getSignature());
+  OS << "\n";
+}
+
+void WebAssemblyTargetAsmStreamer::emitGlobalType(const MCSymbolWasm *Sym) {
+  assert(Sym->isGlobal());
+  OS << "\t.globaltype\t" << Sym->getName() << ", "
+     << WebAssembly::typeToString(
+            static_cast<wasm::ValType>(Sym->getGlobalType().Type))
+     << '\n';
+}
+
+void WebAssemblyTargetAsmStreamer::emitEventType(const MCSymbolWasm *Sym) {
+  assert(Sym->isEvent());
+  OS << "\t.eventtype\t" << Sym->getName() << " ";
+  emitParamList(Sym->getSignature());
+  OS << "\n";
+}
+
+void WebAssemblyTargetAsmStreamer::emitImportModule(const MCSymbolWasm *Sym,
+                                                    StringRef ImportModule) {
+  OS << "\t.import_module\t" << Sym->getName() << ", "
+                             << ImportModule << '\n';
+}
+
+void WebAssemblyTargetAsmStreamer::emitImportName(const MCSymbolWasm *Sym,
+                                                  StringRef ImportName) {
+  OS << "\t.import_name\t" << Sym->getName() << ", "
+                           << ImportName << '\n';
 }
 
 void WebAssemblyTargetAsmStreamer::emitIndIdx(const MCExpr *Value) {
   OS << "\t.indidx  \t" << *Value << '\n';
 }
 
-void WebAssemblyTargetELFStreamer::emitParam(ArrayRef<MVT> Types) {
-  // Nothing to emit; params are declared as part of the function signature.
+void WebAssemblyTargetWasmStreamer::emitLocal(ArrayRef<wasm::ValType> Types) {
+  SmallVector<std::pair<wasm::ValType, uint32_t>, 4> Grouped;
+  for (auto Type : Types) {
+    if (Grouped.empty() || Grouped.back().first != Type)
+      Grouped.push_back(std::make_pair(Type, 1));
+    else
+      ++Grouped.back().second;
+  }
+
+  Streamer.EmitULEB128IntValue(Grouped.size());
+  for (auto Pair : Grouped) {
+    Streamer.EmitULEB128IntValue(Pair.second);
+    emitValueType(Pair.first);
+  }
 }
 
-void WebAssemblyTargetELFStreamer::emitResult(ArrayRef<MVT> Types) {
-  // Nothing to emit; results are declared as part of the function signature.
+void WebAssemblyTargetWasmStreamer::emitEndFunc() {
+  llvm_unreachable(".end_func is not needed for direct wasm output");
 }
 
-void WebAssemblyTargetELFStreamer::emitLocal(ArrayRef<MVT> Types) {
-  Streamer.EmitULEB128IntValue(Types.size());
-  for (MVT Type : Types)
-    Streamer.EmitIntValue(int64_t(WebAssembly::toValType(Type)), 1);
-}
-
-void WebAssemblyTargetELFStreamer::emitEndFunc() {
-  Streamer.EmitIntValue(WebAssembly::End, 1);
-}
-
-void WebAssemblyTargetELFStreamer::emitIndIdx(const MCExpr *Value) {
+void WebAssemblyTargetWasmStreamer::emitIndIdx(const MCExpr *Value) {
   llvm_unreachable(".indidx encoding not yet implemented");
-}
-
-void WebAssemblyTargetELFStreamer::emitIndirectFunctionType(
-    StringRef name, SmallVectorImpl<MVT> &Params, SmallVectorImpl<MVT> &Results) {
-  // Nothing to emit here. TODO: Re-design how linking works and re-evaluate
-  // whether it's necessary for .o files to declare indirect function types.
-}
-
-void WebAssemblyTargetELFStreamer::emitGlobalImport(StringRef name) {
 }

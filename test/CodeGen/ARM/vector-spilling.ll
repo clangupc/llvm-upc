@@ -1,4 +1,4 @@
-; RUN: llc < %s -march=arm -mtriple=armv7-linux-gnueabihf -arm-atomic-cfg-tidy=0 -float-abi=hard -mcpu=cortex-a9 -O3 | FileCheck %s
+; RUN: llc < %s -mtriple=armv7-linux-gnueabihf -arm-atomic-cfg-tidy=0 -float-abi=hard -mcpu=cortex-a9 -O3 | FileCheck %s
 
 target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-n32-S64"
 
@@ -22,8 +22,8 @@ entry:
   %6 = getelementptr inbounds <8 x i64>, <8 x i64>* %src, i32 3
   %7 = load <8 x i64>, <8 x i64>* %6, align 8
 
-  %8 = shufflevector <8 x i64> %1, <8 x i64> %3, <8 x i32> <i32 0, i32 8, i32 1, i32 9, i32 2, i32 10, i32 3, i32 11>
-  %9 = shufflevector <8 x i64> %1, <8 x i64> %3, <8 x i32> <i32 4, i32 12, i32 5, i32 13, i32 6, i32 14, i32 7, i32 15>
+  %8 = shufflevector <8 x i64> %1, <8 x i64> %3, <8 x i32> <i32 12, i32 4, i32 15, i32 14, i32 8, i32 13, i32 2, i32 9>
+  %9 = shufflevector <8 x i64> %1, <8 x i64> %3, <8 x i32> <i32 1, i32 0, i32 3, i32 10, i32 5, i32 11, i32 7, i32 6>
 
   tail call void(<8 x i64>, <8 x i64>, <8 x i64>, <8 x i64>, <8 x i64>, <8 x i64>) @foo(<8 x i64> %1, <8 x i64> %3, <8 x i64> %5, <8 x i64> %7, <8 x i64> %8, <8 x i64> %9)
   ret void

@@ -1,11 +1,12 @@
+#include "../include/KaleidoscopeJIT.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
@@ -13,9 +14,9 @@
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
-#include "../include/KaleidoscopeJIT.h"
 #include <algorithm>
 #include <cassert>
 #include <cctype>
@@ -622,7 +623,7 @@ Value *IfExprAST::codegen() {
   if (!CondV)
     return nullptr;
 
-  // Convert condition to a bool by comparing equal to 0.0.
+  // Convert condition to a bool by comparing non-equal to 0.0.
   CondV = Builder.CreateFCmpONE(
       CondV, ConstantFP::get(TheContext, APFloat(0.0)), "ifcond");
 
@@ -736,7 +737,7 @@ Value *ForExprAST::codegen() {
   if (!EndCond)
     return nullptr;
 
-  // Convert condition to a bool by comparing equal to 0.0.
+  // Convert condition to a bool by comparing non-equal to 0.0.
   EndCond = Builder.CreateFCmpONE(
       EndCond, ConstantFP::get(TheContext, APFloat(0.0)), "loopcond");
 
@@ -845,7 +846,8 @@ static void HandleDefinition() {
   if (auto FnAST = ParseDefinition()) {
     if (auto *FnIR = FnAST->codegen()) {
       fprintf(stderr, "Read function definition:");
-      FnIR->dump();
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
       TheJIT->addModule(std::move(TheModule));
       InitializeModuleAndPassManager();
     }
@@ -859,7 +861,8 @@ static void HandleExtern() {
   if (auto ProtoAST = ParseExtern()) {
     if (auto *FnIR = ProtoAST->codegen()) {
       fprintf(stderr, "Read extern: ");
-      FnIR->dump();
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
       FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
     }
   } else {
@@ -883,7 +886,7 @@ static void HandleTopLevelExpression() {
 
       // Get the symbol's address and cast it to the right type (takes no
       // arguments, returns a double) so we can call it as a native function.
-      double (*FP)() = (double (*)())(intptr_t)ExprSymbol.getAddress();
+      double (*FP)() = (double (*)())(intptr_t)cantFail(ExprSymbol.getAddress());
       fprintf(stderr, "Evaluated to %f\n", FP());
 
       // Delete the anonymous expression module from the JIT.
@@ -922,14 +925,20 @@ static void MainLoop() {
 // "Library" functions that can be "extern'd" from user code.
 //===----------------------------------------------------------------------===//
 
+#ifdef _WIN32
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 /// putchard - putchar that takes a double and returns 0.
-extern "C" double putchard(double X) {
+extern "C" DLLEXPORT double putchard(double X) {
   fputc((char)X, stderr);
   return 0;
 }
 
 /// printd - printf that takes a double prints it as "%f\n", returning 0.
-extern "C" double printd(double X) {
+extern "C" DLLEXPORT double printd(double X) {
   fprintf(stderr, "%f\n", X);
   return 0;
 }

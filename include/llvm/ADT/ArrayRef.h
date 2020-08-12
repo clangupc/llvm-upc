@@ -1,9 +1,8 @@
-//===--- ArrayRef.h - Array Reference Wrapper -------------------*- C++ -*-===//
+//===- ArrayRef.h - Array Reference Wrapper ---------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,12 +11,21 @@
 
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/None.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Compiler.h"
+#include <algorithm>
 #include <array>
+#include <cassert>
+#include <cstddef>
+#include <initializer_list>
+#include <iterator>
+#include <memory>
+#include <type_traits>
 #include <vector>
 
 namespace llvm {
+
   /// ArrayRef - Represent a constant reference to an array (0 or more elements
   /// consecutively in memory), i.e. a start pointer and a length.  It allows
   /// various APIs to take consecutive elements easily and conveniently.
@@ -32,28 +40,27 @@ namespace llvm {
   template<typename T>
   class LLVM_NODISCARD ArrayRef {
   public:
-    typedef const T *iterator;
-    typedef const T *const_iterator;
-    typedef size_t size_type;
-
-    typedef std::reverse_iterator<iterator> reverse_iterator;
+    using iterator = const T *;
+    using const_iterator = const T *;
+    using size_type = size_t;
+    using reverse_iterator = std::reverse_iterator<iterator>;
 
   private:
     /// The start of the array, in an external buffer.
-    const T *Data;
+    const T *Data = nullptr;
 
     /// The number of elements.
-    size_type Length;
+    size_type Length = 0;
 
   public:
     /// @name Constructors
     /// @{
 
     /// Construct an empty ArrayRef.
-    /*implicit*/ ArrayRef() : Data(nullptr), Length(0) {}
+    /*implicit*/ ArrayRef() = default;
 
     /// Construct an empty ArrayRef from None.
-    /*implicit*/ ArrayRef(NoneType) : Data(nullptr), Length(0) {}
+    /*implicit*/ ArrayRef(NoneType) {}
 
     /// Construct an ArrayRef from a single element.
     /*implicit*/ ArrayRef(const T &OneElt)
@@ -176,51 +183,51 @@ namespace llvm {
     /// slice(n) - Chop off the first N elements of the array.
     ArrayRef<T> slice(size_t N) const { return slice(N, size() - N); }
 
-    /// \brief Drop the first \p N elements of the array.
+    /// Drop the first \p N elements of the array.
     ArrayRef<T> drop_front(size_t N = 1) const {
       assert(size() >= N && "Dropping more elements than exist");
       return slice(N, size() - N);
     }
 
-    /// \brief Drop the last \p N elements of the array.
+    /// Drop the last \p N elements of the array.
     ArrayRef<T> drop_back(size_t N = 1) const {
       assert(size() >= N && "Dropping more elements than exist");
       return slice(0, size() - N);
     }
 
-    /// \brief Return a copy of *this with the first N elements satisfying the
+    /// Return a copy of *this with the first N elements satisfying the
     /// given predicate removed.
     template <class PredicateT> ArrayRef<T> drop_while(PredicateT Pred) const {
       return ArrayRef<T>(find_if_not(*this, Pred), end());
     }
 
-    /// \brief Return a copy of *this with the first N elements not satisfying
+    /// Return a copy of *this with the first N elements not satisfying
     /// the given predicate removed.
     template <class PredicateT> ArrayRef<T> drop_until(PredicateT Pred) const {
       return ArrayRef<T>(find_if(*this, Pred), end());
     }
 
-    /// \brief Return a copy of *this with only the first \p N elements.
+    /// Return a copy of *this with only the first \p N elements.
     ArrayRef<T> take_front(size_t N = 1) const {
       if (N >= size())
         return *this;
       return drop_back(size() - N);
     }
 
-    /// \brief Return a copy of *this with only the last \p N elements.
+    /// Return a copy of *this with only the last \p N elements.
     ArrayRef<T> take_back(size_t N = 1) const {
       if (N >= size())
         return *this;
       return drop_front(size() - N);
     }
 
-    /// \brief Return the first N elements of this Array that satisfy the given
+    /// Return the first N elements of this Array that satisfy the given
     /// predicate.
     template <class PredicateT> ArrayRef<T> take_while(PredicateT Pred) const {
       return ArrayRef<T>(begin(), find_if_not(*this, Pred));
     }
 
-    /// \brief Return the first N elements of this Array that don't satisfy the
+    /// Return the first N elements of this Array that don't satisfy the
     /// given predicate.
     template <class PredicateT> ArrayRef<T> take_until(PredicateT Pred) const {
       return ArrayRef<T>(begin(), find_if(*this, Pred));
@@ -282,12 +289,11 @@ namespace llvm {
   template<typename T>
   class LLVM_NODISCARD MutableArrayRef : public ArrayRef<T> {
   public:
-    typedef T *iterator;
-
-    typedef std::reverse_iterator<iterator> reverse_iterator;
+    using iterator = T *;
+    using reverse_iterator = std::reverse_iterator<iterator>;
 
     /// Construct an empty MutableArrayRef.
-    /*implicit*/ MutableArrayRef() : ArrayRef<T>() {}
+    /*implicit*/ MutableArrayRef() = default;
 
     /// Construct an empty MutableArrayRef from None.
     /*implicit*/ MutableArrayRef(NoneType) : ArrayRef<T>() {}
@@ -351,7 +357,7 @@ namespace llvm {
       return slice(N, this->size() - N);
     }
 
-    /// \brief Drop the first \p N elements of the array.
+    /// Drop the first \p N elements of the array.
     MutableArrayRef<T> drop_front(size_t N = 1) const {
       assert(this->size() >= N && "Dropping more elements than exist");
       return slice(N, this->size() - N);
@@ -362,42 +368,42 @@ namespace llvm {
       return slice(0, this->size() - N);
     }
 
-    /// \brief Return a copy of *this with the first N elements satisfying the
+    /// Return a copy of *this with the first N elements satisfying the
     /// given predicate removed.
     template <class PredicateT>
     MutableArrayRef<T> drop_while(PredicateT Pred) const {
       return MutableArrayRef<T>(find_if_not(*this, Pred), end());
     }
 
-    /// \brief Return a copy of *this with the first N elements not satisfying
+    /// Return a copy of *this with the first N elements not satisfying
     /// the given predicate removed.
     template <class PredicateT>
     MutableArrayRef<T> drop_until(PredicateT Pred) const {
       return MutableArrayRef<T>(find_if(*this, Pred), end());
     }
 
-    /// \brief Return a copy of *this with only the first \p N elements.
+    /// Return a copy of *this with only the first \p N elements.
     MutableArrayRef<T> take_front(size_t N = 1) const {
       if (N >= this->size())
         return *this;
       return drop_back(this->size() - N);
     }
 
-    /// \brief Return a copy of *this with only the last \p N elements.
+    /// Return a copy of *this with only the last \p N elements.
     MutableArrayRef<T> take_back(size_t N = 1) const {
       if (N >= this->size())
         return *this;
       return drop_front(this->size() - N);
     }
 
-    /// \brief Return the first N elements of this Array that satisfy the given
+    /// Return the first N elements of this Array that satisfy the given
     /// predicate.
     template <class PredicateT>
     MutableArrayRef<T> take_while(PredicateT Pred) const {
       return MutableArrayRef<T>(begin(), find_if_not(*this, Pred));
     }
 
-    /// \brief Return the first N elements of this Array that don't satisfy the
+    /// Return the first N elements of this Array that don't satisfy the
     /// given predicate.
     template <class PredicateT>
     MutableArrayRef<T> take_until(PredicateT Pred) const {
@@ -416,19 +422,23 @@ namespace llvm {
   /// This is a MutableArrayRef that owns its array.
   template <typename T> class OwningArrayRef : public MutableArrayRef<T> {
   public:
-    OwningArrayRef() {}
+    OwningArrayRef() = default;
     OwningArrayRef(size_t Size) : MutableArrayRef<T>(new T[Size], Size) {}
+
     OwningArrayRef(ArrayRef<T> Data)
         : MutableArrayRef<T>(new T[Data.size()], Data.size()) {
       std::copy(Data.begin(), Data.end(), this->begin());
     }
-    OwningArrayRef(OwningArrayRef &&Other) { *this = Other; }
+
+    OwningArrayRef(OwningArrayRef &&Other) { *this = std::move(Other); }
+
     OwningArrayRef &operator=(OwningArrayRef &&Other) {
       delete[] this->data();
       this->MutableArrayRef<T>::operator=(Other);
       Other.MutableArrayRef<T>::operator=(MutableArrayRef<T>());
       return *this;
     }
+
     ~OwningArrayRef() { delete[] this->data(); }
   };
 
@@ -487,6 +497,18 @@ namespace llvm {
     return ArrayRef<T>(Arr);
   }
 
+  /// Construct a MutableArrayRef from a single element.
+  template<typename T>
+  MutableArrayRef<T> makeMutableArrayRef(T &OneElt) {
+    return OneElt;
+  }
+
+  /// Construct a MutableArrayRef from a pointer and length.
+  template<typename T>
+  MutableArrayRef<T> makeMutableArrayRef(T *data, size_t length) {
+    return MutableArrayRef<T>(data, length);
+  }
+
   /// @}
   /// @name ArrayRef Comparison Operators
   /// @{
@@ -503,15 +525,10 @@ namespace llvm {
 
   /// @}
 
-  // ArrayRefs can be treated like a POD type.
-  template <typename T> struct isPodLike;
-  template <typename T> struct isPodLike<ArrayRef<T> > {
-    static const bool value = true;
-  };
-
   template <typename T> hash_code hash_value(ArrayRef<T> S) {
     return hash_combine_range(S.begin(), S.end());
   }
+
 } // end namespace llvm
 
 #endif // LLVM_ADT_ARRAYREF_H

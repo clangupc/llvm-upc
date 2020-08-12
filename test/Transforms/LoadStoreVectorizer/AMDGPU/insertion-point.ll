@@ -1,6 +1,7 @@
 ; RUN: opt -mtriple=amdgcn-amd-amdhsa -basicaa -load-store-vectorizer -S -o - %s | FileCheck %s
+; RUN: opt -mtriple=amdgcn-amd-amdhsa -aa-pipeline=basic-aa -passes='function(load-store-vectorizer)' -S -o - %s | FileCheck %s
 
-target datalayout = "e-p:32:32-p1:64:64-p2:64:64-p3:32:32-p4:64:64-p5:32:32-p24:64:64-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64"
+target datalayout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5"
 
 ; Check position of the inserted vector load/store.  Vectorized loads should be
 ; inserted at the position of the first load in the chain, and stores should be
@@ -11,7 +12,7 @@ target datalayout = "e-p:32:32-p1:64:64-p2:64:64-p3:32:32-p4:64:64-p5:32:32-p24:
 ; CHECK: load <2 x float>
 ; CHECK: %w = add i32 %y, 9
 ; CHECK: %foo = add i32 %z, %w
-define void @insert_load_point(float addrspace(1)* nocapture %a, float addrspace(1)* nocapture %b, float addrspace(1)* nocapture readonly %c, i64 %idx, i32 %x, i32 %y) #0 {
+define amdgpu_kernel void @insert_load_point(float addrspace(1)* nocapture %a, float addrspace(1)* nocapture %b, float addrspace(1)* nocapture readonly %c, i64 %idx, i32 %x, i32 %y) #0 {
 entry:
   %a.idx.x = getelementptr inbounds float, float addrspace(1)* %a, i64 %idx
   %c.idx.x = getelementptr inbounds float, float addrspace(1)* %c, i64 %idx
@@ -38,7 +39,7 @@ entry:
 ; CHECK: %w = add i32 %y, 9
 ; CHECK: store <2 x float>
 ; CHECK: %foo = add i32 %z, %w
-define void @insert_store_point(float addrspace(1)* nocapture %a, float addrspace(1)* nocapture %b, float addrspace(1)* nocapture readonly %c, i64 %idx, i32 %x, i32 %y) #0 {
+define amdgpu_kernel void @insert_store_point(float addrspace(1)* nocapture %a, float addrspace(1)* nocapture %b, float addrspace(1)* nocapture readonly %c, i64 %idx, i32 %x, i32 %y) #0 {
 entry:
   %a.idx.x = getelementptr inbounds float, float addrspace(1)* %a, i64 %idx
   %c.idx.x = getelementptr inbounds float, float addrspace(1)* %c, i64 %idx

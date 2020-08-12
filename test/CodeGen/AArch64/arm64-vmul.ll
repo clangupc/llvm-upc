@@ -83,7 +83,7 @@ define <2 x i64> @sqdmull2d(<2 x i32>* %A, <2 x i32>* %B) nounwind {
 
 define <4 x i32> @sqdmull2_4s(<8 x i16>* %A, <8 x i16>* %B) nounwind {
 ;CHECK-LABEL: sqdmull2_4s:
-;CHECK: sqdmull2.4s
+;CHECK: sqdmull.4s
   %load1 = load <8 x i16>, <8 x i16>* %A
   %load2 = load <8 x i16>, <8 x i16>* %B
   %tmp1 = shufflevector <8 x i16> %load1, <8 x i16> undef, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
@@ -94,7 +94,7 @@ define <4 x i32> @sqdmull2_4s(<8 x i16>* %A, <8 x i16>* %B) nounwind {
 
 define <2 x i64> @sqdmull2_2d(<4 x i32>* %A, <4 x i32>* %B) nounwind {
 ;CHECK-LABEL: sqdmull2_2d:
-;CHECK: sqdmull2.2d
+;CHECK: sqdmull.2d
   %load1 = load <4 x i32>, <4 x i32>* %A
   %load2 = load <4 x i32>, <4 x i32>* %B
   %tmp1 = shufflevector <4 x i32> %load1, <4 x i32> undef, <2 x i32> <i32 2, i32 3>
@@ -324,7 +324,7 @@ define <2 x i64> @sqdmlal2d(<2 x i32>* %A, <2 x i32>* %B, <2 x i64>* %C) nounwin
 
 define <4 x i32> @sqdmlal2_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) nounwind {
 ;CHECK-LABEL: sqdmlal2_4s:
-;CHECK: sqdmlal2.4s
+;CHECK: sqdmlal.4s
   %load1 = load <8 x i16>, <8 x i16>* %A
   %load2 = load <8 x i16>, <8 x i16>* %B
   %tmp3 = load <4 x i32>, <4 x i32>* %C
@@ -337,7 +337,7 @@ define <4 x i32> @sqdmlal2_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) nounw
 
 define <2 x i64> @sqdmlal2_2d(<4 x i32>* %A, <4 x i32>* %B, <2 x i64>* %C) nounwind {
 ;CHECK-LABEL: sqdmlal2_2d:
-;CHECK: sqdmlal2.2d
+;CHECK: sqdmlal.2d
   %load1 = load <4 x i32>, <4 x i32>* %A
   %load2 = load <4 x i32>, <4 x i32>* %B
   %tmp3 = load <2 x i64>, <2 x i64>* %C
@@ -372,7 +372,7 @@ define <2 x i64> @sqdmlsl2d(<2 x i32>* %A, <2 x i32>* %B, <2 x i64>* %C) nounwin
 
 define <4 x i32> @sqdmlsl2_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) nounwind {
 ;CHECK-LABEL: sqdmlsl2_4s:
-;CHECK: sqdmlsl2.4s
+;CHECK: sqdmlsl.4s
   %load1 = load <8 x i16>, <8 x i16>* %A
   %load2 = load <8 x i16>, <8 x i16>* %B
   %tmp3 = load <4 x i32>, <4 x i32>* %C
@@ -385,7 +385,7 @@ define <4 x i32> @sqdmlsl2_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) nounw
 
 define <2 x i64> @sqdmlsl2_2d(<4 x i32>* %A, <4 x i32>* %B, <2 x i64>* %C) nounwind {
 ;CHECK-LABEL: sqdmlsl2_2d:
-;CHECK: sqdmlsl2.2d
+;CHECK: sqdmlsl.2d
   %load1 = load <4 x i32>, <4 x i32>* %A
   %load2 = load <4 x i32>, <4 x i32>* %B
   %tmp3 = load <2 x i64>, <2 x i64>* %C
@@ -874,7 +874,7 @@ define <2 x i64> @sqdmull_lane_2d(<2 x i32>* %A, <2 x i32>* %B) nounwind {
 define <4 x i32> @sqdmull2_lane_4s(<8 x i16>* %A, <8 x i16>* %B) nounwind {
 ;CHECK-LABEL: sqdmull2_lane_4s:
 ;CHECK-NOT: dup
-;CHECK: sqdmull2.4s
+;CHECK: sqdmull.4s
   %load1 = load <8 x i16>, <8 x i16>* %A
   %load2 = load <8 x i16>, <8 x i16>* %B
   %tmp1 = shufflevector <8 x i16> %load1, <8 x i16> undef, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
@@ -886,7 +886,7 @@ define <4 x i32> @sqdmull2_lane_4s(<8 x i16>* %A, <8 x i16>* %B) nounwind {
 define <2 x i64> @sqdmull2_lane_2d(<4 x i32>* %A, <4 x i32>* %B) nounwind {
 ;CHECK-LABEL: sqdmull2_lane_2d:
 ;CHECK-NOT: dup
-;CHECK: sqdmull2.2d
+;CHECK: sqdmull.2d
   %load1 = load <4 x i32>, <4 x i32>* %A
   %load2 = load <4 x i32>, <4 x i32>* %B
   %tmp1 = shufflevector <4 x i32> %load1, <4 x i32> undef, <2 x i32> <i32 2, i32 3>
@@ -994,7 +994,7 @@ define <2 x i64> @sqdmlal_lane_2d(<2 x i32>* %A, <2 x i32>* %B, <2 x i64>* %C) n
 define <4 x i32> @sqdmlal2_lane_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) nounwind {
 ;CHECK-LABEL: sqdmlal2_lane_4s:
 ;CHECK-NOT: dup
-;CHECK: sqdmlal2.4s
+;CHECK: sqdmlal.4s
   %load1 = load <8 x i16>, <8 x i16>* %A
   %load2 = load <8 x i16>, <8 x i16>* %B
   %tmp3 = load <4 x i32>, <4 x i32>* %C
@@ -1008,7 +1008,7 @@ define <4 x i32> @sqdmlal2_lane_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) 
 define <2 x i64> @sqdmlal2_lane_2d(<4 x i32>* %A, <4 x i32>* %B, <2 x i64>* %C) nounwind {
 ;CHECK-LABEL: sqdmlal2_lane_2d:
 ;CHECK-NOT: dup
-;CHECK: sqdmlal2.2d
+;CHECK: sqdmlal.2d
   %load1 = load <4 x i32>, <4 x i32>* %A
   %load2 = load <4 x i32>, <4 x i32>* %B
   %tmp3 = load <2 x i64>, <2 x i64>* %C
@@ -1147,7 +1147,7 @@ define <2 x i64> @sqdmlsl_lane_2d(<2 x i32>* %A, <2 x i32>* %B, <2 x i64>* %C) n
 define <4 x i32> @sqdmlsl2_lane_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) nounwind {
 ;CHECK-LABEL: sqdmlsl2_lane_4s:
 ;CHECK-NOT: dup
-;CHECK: sqdmlsl2.4s
+;CHECK: sqdmlsl.4s
   %load1 = load <8 x i16>, <8 x i16>* %A
   %load2 = load <8 x i16>, <8 x i16>* %B
   %tmp3 = load <4 x i32>, <4 x i32>* %C
@@ -1161,7 +1161,7 @@ define <4 x i32> @sqdmlsl2_lane_4s(<8 x i16>* %A, <8 x i16>* %B, <4 x i32>* %C) 
 define <2 x i64> @sqdmlsl2_lane_2d(<4 x i32>* %A, <4 x i32>* %B, <2 x i64>* %C) nounwind {
 ;CHECK-LABEL: sqdmlsl2_lane_2d:
 ;CHECK-NOT: dup
-;CHECK: sqdmlsl2.2d
+;CHECK: sqdmlsl.2d
   %load1 = load <4 x i32>, <4 x i32>* %A
   %load2 = load <4 x i32>, <4 x i32>* %B
   %tmp3 = load <2 x i64>, <2 x i64>* %C
@@ -1201,35 +1201,35 @@ define <2 x i64> @umlsl_lane_2d(<2 x i32>* %A, <2 x i32>* %B, <2 x i64>* %C) nou
 ; Scalar FMULX
 define float @fmulxs(float %a, float %b) nounwind {
 ; CHECK-LABEL: fmulxs:
-; CHECKNEXT: fmulx s0, s0, s1
+; CHECK-NEXT: fmulx s0, s0, s1
   %fmulx.i = tail call float @llvm.aarch64.neon.fmulx.f32(float %a, float %b) nounwind
-; CHECKNEXT: ret
+; CHECK-NEXT: ret
   ret float %fmulx.i
 }
 
 define double @fmulxd(double %a, double %b) nounwind {
 ; CHECK-LABEL: fmulxd:
-; CHECKNEXT: fmulx d0, d0, d1
+; CHECK-NEXT: fmulx d0, d0, d1
   %fmulx.i = tail call double @llvm.aarch64.neon.fmulx.f64(double %a, double %b) nounwind
-; CHECKNEXT: ret
+; CHECK-NEXT: ret
   ret double %fmulx.i
 }
 
 define float @fmulxs_lane(float %a, <4 x float> %vec) nounwind {
 ; CHECK-LABEL: fmulxs_lane:
-; CHECKNEXT: fmulx.s s0, s0, v1[3]
+; CHECK-NEXT: fmulx.s s0, s0, v1[3]
   %b = extractelement <4 x float> %vec, i32 3
   %fmulx.i = tail call float @llvm.aarch64.neon.fmulx.f32(float %a, float %b) nounwind
-; CHECKNEXT: ret
+; CHECK-NEXT: ret
   ret float %fmulx.i
 }
 
 define double @fmulxd_lane(double %a, <2 x double> %vec) nounwind {
 ; CHECK-LABEL: fmulxd_lane:
-; CHECKNEXT: fmulx d0, d0, v1[1]
+; CHECK-NEXT: fmulx.d d0, d0, v1[1]
   %b = extractelement <2 x double> %vec, i32 1
   %fmulx.i = tail call double @llvm.aarch64.neon.fmulx.f64(double %a, double %b) nounwind
-; CHECKNEXT: ret
+; CHECK-NEXT: ret
   ret double %fmulx.i
 }
 
@@ -1338,6 +1338,19 @@ entry:
   ret <4 x i32> %vmull2.i
 }
 
+define <4 x i32> @foo6a(<4 x i32> %a, <8 x i16> %b, <4 x i16> %c) nounwind readnone optsize ssp {
+; CHECK-LABEL: foo6a:
+; CHECK-NEXT: smull.4s v0, v1, v2[1]
+; CHECK-NEXT: ret
+entry:
+  %0 = bitcast <8 x i16> %b to <2 x i64>
+  %shuffle.i = shufflevector <2 x i64> %0, <2 x i64> undef, <1 x i32> <i32 0>
+  %1 = bitcast <1 x i64> %shuffle.i to <4 x i16>
+  %shuffle = shufflevector <4 x i16> %c, <4 x i16> undef, <4 x i32> <i32 1, i32 1, i32 1, i32 1>
+  %vmull2.i = tail call <4 x i32> @llvm.aarch64.neon.smull.v4i32(<4 x i16> %1, <4 x i16> %shuffle) nounwind
+  ret <4 x i32> %vmull2.i
+}
+
 define <2 x i64> @foo7(<2 x i64> %a, <4 x i32> %b, <2 x i32> %c) nounwind readnone optsize ssp {
 ; CHECK-LABEL: foo7:
 ; CHECK-NEXT: smull2.2d v0, v1, v2[1]
@@ -1350,6 +1363,20 @@ entry:
   %vmull2.i = tail call <2 x i64> @llvm.aarch64.neon.smull.v2i64(<2 x i32> %1, <2 x i32> %shuffle) nounwind
   ret <2 x i64> %vmull2.i
 }
+
+define <2 x i64> @foo7a(<2 x i64> %a, <4 x i32> %b, <2 x i32> %c) nounwind readnone optsize ssp {
+; CHECK-LABEL: foo7a:
+; CHECK-NEXT: smull.2d v0, v1, v2[1]
+; CHECK-NEXT: ret
+entry:
+  %0 = bitcast <4 x i32> %b to <2 x i64>
+  %shuffle.i = shufflevector <2 x i64> %0, <2 x i64> undef, <1 x i32> <i32 0>
+  %1 = bitcast <1 x i64> %shuffle.i to <2 x i32>
+  %shuffle = shufflevector <2 x i32> %c, <2 x i32> undef, <2 x i32> <i32 1, i32 1>
+  %vmull2.i = tail call <2 x i64> @llvm.aarch64.neon.smull.v2i64(<2 x i32> %1, <2 x i32> %shuffle) nounwind
+  ret <2 x i64> %vmull2.i
+}
+
 
 define <4 x i32> @foo8(<4 x i32> %a, <8 x i16> %b, <4 x i16> %c) nounwind readnone optsize ssp {
 ; CHECK-LABEL: foo8:
@@ -1364,6 +1391,19 @@ entry:
   ret <4 x i32> %vmull2.i
 }
 
+define <4 x i32> @foo8a(<4 x i32> %a, <8 x i16> %b, <4 x i16> %c) nounwind readnone optsize ssp {
+; CHECK-LABEL: foo8a:
+; CHECK-NEXT: umull.4s v0, v1, v2[1]
+; CHECK-NEXT: ret
+entry:
+  %0 = bitcast <8 x i16> %b to <2 x i64>
+  %shuffle.i = shufflevector <2 x i64> %0, <2 x i64> undef, <1 x i32> <i32 0>
+  %1 = bitcast <1 x i64> %shuffle.i to <4 x i16>
+  %shuffle = shufflevector <4 x i16> %c, <4 x i16> undef, <4 x i32> <i32 1, i32 1, i32 1, i32 1>
+  %vmull2.i = tail call <4 x i32> @llvm.aarch64.neon.umull.v4i32(<4 x i16> %1, <4 x i16> %shuffle) nounwind
+  ret <4 x i32> %vmull2.i
+}
+
 define <2 x i64> @foo9(<2 x i64> %a, <4 x i32> %b, <2 x i32> %c) nounwind readnone optsize ssp {
 ; CHECK-LABEL: foo9:
 ; CHECK-NEXT: umull2.2d v0, v1, v2[1]
@@ -1371,6 +1411,19 @@ define <2 x i64> @foo9(<2 x i64> %a, <4 x i32> %b, <2 x i32> %c) nounwind readno
 entry:
   %0 = bitcast <4 x i32> %b to <2 x i64>
   %shuffle.i = shufflevector <2 x i64> %0, <2 x i64> undef, <1 x i32> <i32 1>
+  %1 = bitcast <1 x i64> %shuffle.i to <2 x i32>
+  %shuffle = shufflevector <2 x i32> %c, <2 x i32> undef, <2 x i32> <i32 1, i32 1>
+  %vmull2.i = tail call <2 x i64> @llvm.aarch64.neon.umull.v2i64(<2 x i32> %1, <2 x i32> %shuffle) nounwind
+  ret <2 x i64> %vmull2.i
+}
+
+define <2 x i64> @foo9a(<2 x i64> %a, <4 x i32> %b, <2 x i32> %c) nounwind readnone optsize ssp {
+; CHECK-LABEL: foo9a:
+; CHECK-NEXT: umull.2d v0, v1, v2[1]
+; CHECK-NEXT: ret
+entry:
+  %0 = bitcast <4 x i32> %b to <2 x i64>
+  %shuffle.i = shufflevector <2 x i64> %0, <2 x i64> undef, <1 x i32> <i32 0>
   %1 = bitcast <1 x i64> %shuffle.i to <2 x i32>
   %shuffle = shufflevector <2 x i32> %c, <2 x i32> undef, <2 x i32> <i32 1, i32 1>
   %vmull2.i = tail call <2 x i64> @llvm.aarch64.neon.umull.v2i64(<2 x i32> %1, <2 x i32> %shuffle) nounwind
@@ -1667,6 +1720,24 @@ entry:
   ret <2 x i64> %vmull2.i
 }
 
+define <4 x i32> @vmull_low_n_s16_test(<4 x i32> %a, <8 x i16> %b, <4 x i16> %c, i32 %d) nounwind readnone optsize ssp {
+entry:
+; CHECK: vmull_low_n_s16_test
+; CHECK-NOT: ext
+; CHECK: smull.4s
+; CHECK-NEXT: ret
+  %conv = trunc i32 %d to i16
+  %0 = bitcast <8 x i16> %b to <2 x i64>
+  %shuffle.i.i = shufflevector <2 x i64> %0, <2 x i64> undef, <1 x i32> <i32 0>
+  %1 = bitcast <1 x i64> %shuffle.i.i to <4 x i16>
+  %vecinit.i = insertelement <4 x i16> undef, i16 %conv, i32 0
+  %vecinit1.i = insertelement <4 x i16> %vecinit.i, i16 %conv, i32 1
+  %vecinit2.i = insertelement <4 x i16> %vecinit1.i, i16 %conv, i32 2
+  %vecinit3.i = insertelement <4 x i16> %vecinit2.i, i16 %conv, i32 3
+  %vmull2.i.i = tail call <4 x i32> @llvm.aarch64.neon.smull.v4i32(<4 x i16> %1, <4 x i16> %vecinit3.i) nounwind
+  ret <4 x i32> %vmull2.i.i
+}
+
 define <4 x i32> @vmull_high_n_s16_test(<4 x i32> %a, <8 x i16> %b, <4 x i16> %c, i32 %d) nounwind readnone optsize ssp {
 entry:
 ; CHECK: vmull_high_n_s16_test
@@ -1804,8 +1875,21 @@ define <2 x i64> @mlal_from_two_extracts(<2 x i64> %accum, <4 x i32> %lhs, <4 x 
   ret <2 x i64> %sum
 }
 
-define <2 x i64> @mull_from_extract_dup(<4 x i32> %lhs, i32 %rhs) {
-; CHECK-LABEL: mull_from_extract_dup:
+define <2 x i64> @mull_from_extract_dup_low(<4 x i32> %lhs, i32 %rhs) {
+; CHECK-LABEL: mull_from_extract_dup_low:
+; CHECK-NOT: ext
+; CHECK: sqdmull.2d
+  %rhsvec.tmp = insertelement <2 x i32> undef, i32 %rhs, i32 0
+  %rhsvec = insertelement <2 x i32> %rhsvec.tmp, i32 %rhs, i32 1
+
+  %lhs.high = shufflevector <4 x i32> %lhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+
+  %res = tail call <2 x i64> @llvm.aarch64.neon.sqdmull.v2i64(<2 x i32> %lhs.high, <2 x i32> %rhsvec) nounwind
+  ret <2 x i64> %res
+}
+
+define <2 x i64> @mull_from_extract_dup_high(<4 x i32> %lhs, i32 %rhs) {
+; CHECK-LABEL: mull_from_extract_dup_high:
 ; CHECK-NOT: ext
 ; CHECK: sqdmull2.2d
   %rhsvec.tmp = insertelement <2 x i32> undef, i32 %rhs, i32 0
@@ -1817,8 +1901,21 @@ define <2 x i64> @mull_from_extract_dup(<4 x i32> %lhs, i32 %rhs) {
   ret <2 x i64> %res
 }
 
-define <8 x i16> @pmull_from_extract_dup(<16 x i8> %lhs, i8 %rhs) {
-; CHECK-LABEL: pmull_from_extract_dup:
+define <8 x i16> @pmull_from_extract_dup_low(<16 x i8> %lhs, i8 %rhs) {
+; CHECK-LABEL: pmull_from_extract_dup_low:
+; CHECK-NOT: ext
+; CHECK: pmull.8h
+  %rhsvec.0 = insertelement <8 x i8> undef, i8 %rhs, i32 0
+  %rhsvec = shufflevector <8 x i8> %rhsvec.0, <8 x i8> undef, <8 x i32> <i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0>
+
+  %lhs.high = shufflevector <16 x i8> %lhs, <16 x i8> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+
+  %res = tail call <8 x i16> @llvm.aarch64.neon.pmull.v8i16(<8 x i8> %lhs.high, <8 x i8> %rhsvec) nounwind
+  ret <8 x i16> %res
+}
+
+define <8 x i16> @pmull_from_extract_dup_high(<16 x i8> %lhs, i8 %rhs) {
+; CHECK-LABEL: pmull_from_extract_dup_high:
 ; CHECK-NOT: ext
 ; CHECK: pmull2.8h
   %rhsvec.0 = insertelement <8 x i8> undef, i8 %rhs, i32 0
@@ -1830,8 +1927,20 @@ define <8 x i16> @pmull_from_extract_dup(<16 x i8> %lhs, i8 %rhs) {
   ret <8 x i16> %res
 }
 
-define <8 x i16> @pmull_from_extract_duplane(<16 x i8> %lhs, <8 x i8> %rhs) {
-; CHECK-LABEL: pmull_from_extract_duplane:
+define <8 x i16> @pmull_from_extract_duplane_low(<16 x i8> %lhs, <8 x i8> %rhs) {
+; CHECK-LABEL: pmull_from_extract_duplane_low:
+; CHECK-NOT: ext
+; CHECK: pmull.8h
+
+  %lhs.high = shufflevector <16 x i8> %lhs, <16 x i8> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %rhs.high = shufflevector <8 x i8> %rhs, <8 x i8> undef, <8 x i32> <i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0, i32 0>
+
+  %res = tail call <8 x i16> @llvm.aarch64.neon.pmull.v8i16(<8 x i8> %lhs.high, <8 x i8> %rhs.high) nounwind
+  ret <8 x i16> %res
+}
+
+define <8 x i16> @pmull_from_extract_duplane_high(<16 x i8> %lhs, <8 x i8> %rhs) {
+; CHECK-LABEL: pmull_from_extract_duplane_high:
 ; CHECK-NOT: ext
 ; CHECK: pmull2.8h
 
@@ -1842,8 +1951,20 @@ define <8 x i16> @pmull_from_extract_duplane(<16 x i8> %lhs, <8 x i8> %rhs) {
   ret <8 x i16> %res
 }
 
-define <2 x i64> @sqdmull_from_extract_duplane(<4 x i32> %lhs, <4 x i32> %rhs) {
-; CHECK-LABEL: sqdmull_from_extract_duplane:
+define <2 x i64> @sqdmull_from_extract_duplane_low(<4 x i32> %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: sqdmull_from_extract_duplane_low:
+; CHECK-NOT: ext
+; CHECK: sqdmull.2d
+
+  %lhs.high = shufflevector <4 x i32> %lhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+  %rhs.high = shufflevector <4 x i32> %rhs, <4 x i32> undef, <2 x i32> <i32 0, i32 0>
+
+  %res = tail call <2 x i64> @llvm.aarch64.neon.sqdmull.v2i64(<2 x i32> %lhs.high, <2 x i32> %rhs.high) nounwind
+  ret <2 x i64> %res
+}
+
+define <2 x i64> @sqdmull_from_extract_duplane_high(<4 x i32> %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: sqdmull_from_extract_duplane_high:
 ; CHECK-NOT: ext
 ; CHECK: sqdmull2.2d
 
@@ -1854,8 +1975,21 @@ define <2 x i64> @sqdmull_from_extract_duplane(<4 x i32> %lhs, <4 x i32> %rhs) {
   ret <2 x i64> %res
 }
 
-define <2 x i64> @sqdmlal_from_extract_duplane(<2 x i64> %accum, <4 x i32> %lhs, <4 x i32> %rhs) {
-; CHECK-LABEL: sqdmlal_from_extract_duplane:
+define <2 x i64> @sqdmlal_from_extract_duplane_low(<2 x i64> %accum, <4 x i32> %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: sqdmlal_from_extract_duplane_low:
+; CHECK-NOT: ext
+; CHECK: sqdmlal.2d
+
+  %lhs.high = shufflevector <4 x i32> %lhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+  %rhs.high = shufflevector <4 x i32> %rhs, <4 x i32> undef, <2 x i32> <i32 0, i32 0>
+
+  %res = tail call <2 x i64> @llvm.aarch64.neon.sqdmull.v2i64(<2 x i32> %lhs.high, <2 x i32> %rhs.high) nounwind
+  %sum = call <2 x i64> @llvm.aarch64.neon.sqadd.v2i64(<2 x i64> %accum, <2 x i64> %res)
+  ret <2 x i64> %sum
+}
+
+define <2 x i64> @sqdmlal_from_extract_duplane_high(<2 x i64> %accum, <4 x i32> %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: sqdmlal_from_extract_duplane_high:
 ; CHECK-NOT: ext
 ; CHECK: sqdmlal2.2d
 
@@ -1867,8 +2001,21 @@ define <2 x i64> @sqdmlal_from_extract_duplane(<2 x i64> %accum, <4 x i32> %lhs,
   ret <2 x i64> %sum
 }
 
-define <2 x i64> @umlal_from_extract_duplane(<2 x i64> %accum, <4 x i32> %lhs, <4 x i32> %rhs) {
-; CHECK-LABEL: umlal_from_extract_duplane:
+define <2 x i64> @umlal_from_extract_duplane_low(<2 x i64> %accum, <4 x i32> %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: umlal_from_extract_duplane_low:
+; CHECK-NOT: ext
+; CHECK: umlal.2d
+
+  %lhs.high = shufflevector <4 x i32> %lhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+  %rhs.high = shufflevector <4 x i32> %rhs, <4 x i32> undef, <2 x i32> <i32 0, i32 0>
+
+  %res = tail call <2 x i64> @llvm.aarch64.neon.umull.v2i64(<2 x i32> %lhs.high, <2 x i32> %rhs.high) nounwind
+  %sum = add <2 x i64> %accum, %res
+  ret <2 x i64> %sum
+}
+
+define <2 x i64> @umlal_from_extract_duplane_high(<2 x i64> %accum, <4 x i32> %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: umlal_from_extract_duplane_high:
 ; CHECK-NOT: ext
 ; CHECK: umlal2.2d
 

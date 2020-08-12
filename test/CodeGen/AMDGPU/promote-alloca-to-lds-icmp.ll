@@ -1,14 +1,17 @@
 ; RUN: opt -S -mtriple=amdgcn-unknown-amdhsa -mcpu=kaveri -amdgpu-promote-alloca < %s | FileCheck %s
+; RUN: opt -S -mtriple=amdgcn-unknown-amdhsa -mcpu=kaveri -amdgpu-promote-alloca -disable-promote-alloca-to-lds< %s | FileCheck -check-prefix=NOLDS %s
 
 ; This normally would be fixed by instcombine to be compare to the GEP
 ; indices
+
+; NOLDS-NOT: addrspace(3)
 
 ; CHECK-LABEL: @lds_promoted_alloca_icmp_same_derived_pointer(
 ; CHECK: [[ARRAYGEP:%[0-9]+]] = getelementptr inbounds [256 x [16 x i32]], [256 x [16 x i32]] addrspace(3)* @lds_promoted_alloca_icmp_same_derived_pointer.alloca, i32 0, i32 %{{[0-9]+}}
 ; CHECK: %ptr0 = getelementptr inbounds [16 x i32], [16 x i32] addrspace(3)* [[ARRAYGEP]], i32 0, i32 %a
 ; CHECK: %ptr1 = getelementptr inbounds [16 x i32], [16 x i32] addrspace(3)* [[ARRAYGEP]], i32 0, i32 %b
 ; CHECK: %cmp = icmp eq i32 addrspace(3)* %ptr0, %ptr1
-define void @lds_promoted_alloca_icmp_same_derived_pointer(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
+define amdgpu_kernel void @lds_promoted_alloca_icmp_same_derived_pointer(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
   %alloca = alloca [16 x i32], align 4
   %ptr0 = getelementptr inbounds [16 x i32], [16 x i32]* %alloca, i32 0, i32 %a
   %ptr1 = getelementptr inbounds [16 x i32], [16 x i32]* %alloca, i32 0, i32 %b
@@ -22,7 +25,7 @@ define void @lds_promoted_alloca_icmp_same_derived_pointer(i32 addrspace(1)* %ou
 ; CHECK: [[ARRAYGEP:%[0-9]+]] = getelementptr inbounds [256 x [16 x i32]], [256 x [16 x i32]] addrspace(3)* @lds_promoted_alloca_icmp_null_rhs.alloca, i32 0, i32 %{{[0-9]+}}
 ; CHECK: %ptr0 = getelementptr inbounds [16 x i32], [16 x i32] addrspace(3)* [[ARRAYGEP]], i32 0, i32 %a
 ; CHECK: %cmp = icmp eq i32 addrspace(3)* %ptr0, null
-define void @lds_promoted_alloca_icmp_null_rhs(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
+define amdgpu_kernel void @lds_promoted_alloca_icmp_null_rhs(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
   %alloca = alloca [16 x i32], align 4
   %ptr0 = getelementptr inbounds [16 x i32], [16 x i32]* %alloca, i32 0, i32 %a
   %cmp = icmp eq i32* %ptr0, null
@@ -35,7 +38,7 @@ define void @lds_promoted_alloca_icmp_null_rhs(i32 addrspace(1)* %out, i32 %a, i
 ; CHECK: [[ARRAYGEP:%[0-9]+]] = getelementptr inbounds [256 x [16 x i32]], [256 x [16 x i32]] addrspace(3)* @lds_promoted_alloca_icmp_null_lhs.alloca, i32 0, i32 %{{[0-9]+}}
 ; CHECK: %ptr0 = getelementptr inbounds [16 x i32], [16 x i32] addrspace(3)* [[ARRAYGEP]], i32 0, i32 %a
 ; CHECK: %cmp = icmp eq i32 addrspace(3)* null, %ptr0
-define void @lds_promoted_alloca_icmp_null_lhs(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
+define amdgpu_kernel void @lds_promoted_alloca_icmp_null_lhs(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
   %alloca = alloca [16 x i32], align 4
   %ptr0 = getelementptr inbounds [16 x i32], [16 x i32]* %alloca, i32 0, i32 %a
   %cmp = icmp eq i32* null, %ptr0
@@ -49,7 +52,7 @@ define void @lds_promoted_alloca_icmp_null_lhs(i32 addrspace(1)* %out, i32 %a, i
 ; CHECK: %ptr0 = getelementptr inbounds [16 x i32], [16 x i32]* %alloca, i32 0, i32 %a
 ; CHECK: %ptr1 = call i32* @get_unknown_pointer()
 ; CHECK: %cmp = icmp eq i32* %ptr0, %ptr1
-define void @lds_promoted_alloca_icmp_unknown_ptr(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
+define amdgpu_kernel void @lds_promoted_alloca_icmp_unknown_ptr(i32 addrspace(1)* %out, i32 %a, i32 %b) #0 {
   %alloca = alloca [16 x i32], align 4
   %ptr0 = getelementptr inbounds [16 x i32], [16 x i32]* %alloca, i32 0, i32 %a
   %ptr1 = call i32* @get_unknown_pointer()

@@ -1,9 +1,8 @@
 //===-- AArch64MCAsmInfo.cpp - AArch64 asm properties ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -32,14 +31,15 @@ static cl::opt<AsmWriterVariantTy> AsmWriterVariant(
                clEnumValN(Apple, "apple", "Emit Apple-style NEON assembly")));
 
 AArch64MCAsmInfoDarwin::AArch64MCAsmInfoDarwin() {
-  // We prefer NEON instructions to be printed in the short form.
-  AssemblerDialect = AsmWriterVariant == Default ? 1 : AsmWriterVariant;
+  // We prefer NEON instructions to be printed in the short, Apple-specific
+  // form when targeting Darwin.
+  AssemblerDialect = AsmWriterVariant == Default ? Apple : AsmWriterVariant;
 
   PrivateGlobalPrefix = "L";
   PrivateLabelPrefix = "L";
   SeparatorString = "%%";
   CommentString = ";";
-  PointerSize = CalleeSaveStackSlotSize = 8;
+  CodePointerSize = CalleeSaveStackSlotSize = 8;
 
   AlignmentIsInBytes = false;
   UsesELFSectionDirectiveForBSS = true;
@@ -68,10 +68,11 @@ AArch64MCAsmInfoELF::AArch64MCAsmInfoELF(const Triple &T) {
   if (T.getArch() == Triple::aarch64_be)
     IsLittleEndian = false;
 
-  // We prefer NEON instructions to be printed in the short form.
-  AssemblerDialect = AsmWriterVariant == Default ? 0 : AsmWriterVariant;
+  // We prefer NEON instructions to be printed in the generic form when
+  // targeting ELF.
+  AssemblerDialect = AsmWriterVariant == Default ? Generic : AsmWriterVariant;
 
-  PointerSize = 8;
+  CodePointerSize = 8;
 
   // ".comm align is in bytes but .align is pow-2."
   AlignmentIsInBytes = false;
@@ -97,4 +98,38 @@ AArch64MCAsmInfoELF::AArch64MCAsmInfoELF(const Triple &T) {
   UseIntegratedAssembler = true;
 
   HasIdentDirective = true;
+}
+
+AArch64MCAsmInfoMicrosoftCOFF::AArch64MCAsmInfoMicrosoftCOFF() {
+  PrivateGlobalPrefix = ".L";
+  PrivateLabelPrefix = ".L";
+
+  Data16bitsDirective = "\t.hword\t";
+  Data32bitsDirective = "\t.word\t";
+  Data64bitsDirective = "\t.xword\t";
+
+  AlignmentIsInBytes = false;
+  SupportsDebugInformation = true;
+  CodePointerSize = 8;
+
+  CommentString = ";";
+  ExceptionsType = ExceptionHandling::WinEH;
+  WinEHEncodingType = WinEH::EncodingType::Itanium;
+}
+
+AArch64MCAsmInfoGNUCOFF::AArch64MCAsmInfoGNUCOFF() {
+  PrivateGlobalPrefix = ".L";
+  PrivateLabelPrefix = ".L";
+
+  Data16bitsDirective = "\t.hword\t";
+  Data32bitsDirective = "\t.word\t";
+  Data64bitsDirective = "\t.xword\t";
+
+  AlignmentIsInBytes = false;
+  SupportsDebugInformation = true;
+  CodePointerSize = 8;
+
+  CommentString = "//";
+  ExceptionsType = ExceptionHandling::WinEH;
+  WinEHEncodingType = WinEH::EncodingType::Itanium;
 }

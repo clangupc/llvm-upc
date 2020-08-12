@@ -1,8 +1,17 @@
 add_llvm_library(LLVMObjectYAML
-  YAML.cpp
+  CodeViewYAMLDebugSections.cpp
+  CodeViewYAMLSymbols.cpp
+  CodeViewYAMLTypeHashing.cpp
+  CodeViewYAMLTypes.cpp
   COFFYAML.cpp
+  DWARFEmitter.cpp
+  DWARFVisitor.cpp
+  DWARFYAML.cpp
   ELFYAML.cpp
   MachOYAML.cpp
   ObjectYAML.cpp
-  DWARFYAML.cpp
+  MinidumpYAML.cpp
+  WasmYAML.cpp
+  XCOFFYAML.cpp
+  YAML.cpp
   )

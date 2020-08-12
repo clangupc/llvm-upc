@@ -1,5 +1,6 @@
-# RUN: llvm-mc -triple=x86_64-apple-macosx10.9 -filetype=obj -o %T/test_x86-64.o %s
-# RUN: llvm-rtdyld -triple=x86_64-apple-macosx10.9 -dummy-extern ds1=0xfffffffffffffffe -dummy-extern ds2=0xffffffffffffffff -verify -check=%s %/T/test_x86-64.o
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: llvm-mc -triple=x86_64-apple-macosx10.9 -filetype=obj -o %t/test_x86-64.o %s
+# RUN: llvm-rtdyld -triple=x86_64-apple-macosx10.9 -dummy-extern ds1=0xfffffffffffffffe -dummy-extern ds2=0xffffffffffffffff -verify -check=%s %t/test_x86-64.o
 
         .section	__TEXT,__text,regular,pure_instructions
 	.globl	foo
@@ -21,10 +22,11 @@ insn2:
 	movl	x(%rip), %eax
 
 # Test PC-rel GOT relocation.
-# Verify both the contents of the GOT entry for y, and that the movq instruction
-# references the correct GOT entry address:
-# rtdyld-check: *{8}(stub_addr(test_x86-64.o, __text, y)) = y
-# rtdyld-check: decode_operand(insn3, 4) = stub_addr(test_x86-64.o, __text, y) - next_pc(insn3)
+# Verify the alignment of the GOT entry, the contents of the GOT entry for y,
+# and that the movq instruction references the correct GOT entry address:
+# rtdyld-check: stub_addr(test_x86-64.o/__text, y)[2:0] = 0
+# rtdyld-check: *{8}(stub_addr(test_x86-64.o/__text, y)) = y
+# rtdyld-check: decode_operand(insn3, 4) = stub_addr(test_x86-64.o/__text, y) - next_pc(insn3)
 insn3:
         movq	y@GOTPCREL(%rip), %rax
 

@@ -1,9 +1,8 @@
 //=- llvm/CodeGen/ScoreboardHazardRecognizer.h - Schedule Support -*- C++ -*-=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,8 +16,8 @@
 #define LLVM_CODEGEN_SCOREBOARDHAZARDRECOGNIZER_H
 
 #include "llvm/CodeGen/ScheduleHazardRecognizer.h"
-#include "llvm/Support/DataTypes.h"
 #include <cassert>
+#include <cstddef>
 #include <cstring>
 
 namespace llvm {
@@ -38,21 +37,25 @@ class ScoreboardHazardRecognizer : public ScheduleHazardRecognizer {
   // bottom-up scheduler, then the scoreboard cycles are the inverse of the
   // scheduler's cycles.
   class Scoreboard {
-    unsigned *Data;
+    unsigned *Data = nullptr;
 
     // The maximum number of cycles monitored by the Scoreboard. This
     // value is determined based on the target itineraries to ensure
     // that all hazards can be tracked.
-    size_t Depth;
+    size_t Depth = 0;
+
     // Indices into the Scoreboard that represent the current cycle.
-    size_t Head;
+    size_t Head = 0;
+
   public:
-    Scoreboard():Data(nullptr), Depth(0), Head(0) { }
+    Scoreboard() = default;
+
     ~Scoreboard() {
       delete[] Data;
     }
 
     size_t getDepth() const { return Depth; }
+
     unsigned& operator[](size_t idx) const {
       // Depth is expected to be a power-of-2.
       assert(Depth && !(Depth & (Depth - 1)) &&
@@ -93,16 +96,16 @@ class ScoreboardHazardRecognizer : public ScheduleHazardRecognizer {
   const ScheduleDAG *DAG;
 
   /// IssueWidth - Max issue per cycle. 0=Unknown.
-  unsigned IssueWidth;
+  unsigned IssueWidth = 0;
 
   /// IssueCount - Count instructions issued in this cycle.
-  unsigned IssueCount;
+  unsigned IssueCount = 0;
 
   Scoreboard ReservedScoreboard;
   Scoreboard RequiredScoreboard;
 
 public:
-  ScoreboardHazardRecognizer(const InstrItineraryData *ItinData,
+  ScoreboardHazardRecognizer(const InstrItineraryData *II,
                              const ScheduleDAG *DAG,
                              const char *ParentDebugType = "");
 
@@ -119,6 +122,6 @@ public:
   void RecedeCycle() override;
 };
 
-}
+} // end namespace llvm
 
-#endif //!LLVM_CODEGEN_SCOREBOARDHAZARDRECOGNIZER_H
+#endif // LLVM_CODEGEN_SCOREBOARDHAZARDRECOGNIZER_H

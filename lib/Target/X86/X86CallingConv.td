@@ -1,9 +1,8 @@
 //===-- X86CallingConv.td - Calling Conventions X86 32/64 --*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +14,12 @@
 /// CCIfSubtarget - Match if the current subtarget has a feature F.
 class CCIfSubtarget<string F, CCAction A>
     : CCIf<!strconcat("static_cast<const X86Subtarget&>"
+                       "(State.getMachineFunction().getSubtarget()).", F),
+           A>;
+
+/// CCIfNotSubtarget - Match if the current subtarget doesn't has a feature F.
+class CCIfNotSubtarget<string F, CCAction A>
+    : CCIf<!strconcat("!static_cast<const X86Subtarget&>"
                        "(State.getMachineFunction().getSubtarget()).", F),
            A>;
 
@@ -73,8 +78,8 @@ def CC_#NAME : CallingConv<[
     CCIfSubtarget<"is64Bit()", CCIfByVal<CCPassByVal<8, 8>>>,
     CCIfByVal<CCPassByVal<4, 4>>,
 
-    // Promote i1/i8/i16 arguments to i32.
-    CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+    // Promote i1/i8/i16/v1i1 arguments to i32.
+    CCIfType<[i1, i8, i16, v1i1], CCPromoteToType<i32>>,
 
     // Promote v8i1/v16i1/v32i1 arguments to i32.
     CCIfType<[v8i1, v16i1, v32i1], CCPromoteToType<i32>>,
@@ -142,12 +147,13 @@ def CC_#NAME : CallingConv<[
       CCAssignToStack<32, 32>>,
 
     // 512-bit vectors get 64-byte stack slots that are 64-byte aligned.
-    CCIfType<[v16i32, v8i64, v16f32, v8f64], CCAssignToStack<64, 64>>
+    CCIfType<[v64i8, v32i16, v16i32, v8i64, v16f32, v8f64],
+      CCAssignToStack<64, 64>>
 ]>;
 
 def RetCC_#NAME : CallingConv<[
-    // Promote i1, v8i1 arguments to i8.
-    CCIfType<[i1, v8i1], CCPromoteToType<i8>>,
+    // Promote i1, v1i1, v8i1 arguments to i8.
+    CCIfType<[i1, v1i1, v8i1], CCPromoteToType<i8>>,
 
     // Promote v16i1 arguments to i16.
     CCIfType<[v16i1], CCPromoteToType<i16>>,
@@ -207,6 +213,7 @@ def RetCC_X86Common : CallingConv<[
   //
   // For code that doesn't care about the ABI, we allow returning more than two
   // integer values in registers.
+  CCIfType<[v1i1],  CCPromoteToType<i8>>,
   CCIfType<[i1],  CCPromoteToType<i8>>,
   CCIfType<[i8] , CCAssignToReg<[AL, DL, CL]>>,
   CCIfType<[i16], CCAssignToReg<[AX, DX, CX]>>,
@@ -245,8 +252,9 @@ def RetCC_X86Common : CallingConv<[
   // MM0, it doesn't support these vector types.
   CCIfType<[x86mmx], CCAssignToReg<[MM0]>>,
 
-  // Long double types are always returned in FP0 (even with SSE).
-  CCIfType<[f80], CCAssignToReg<[FP0, FP1]>>
+  // Long double types are always returned in FP0 (even with SSE),
+  // except on Win64.
+  CCIfNotSubtarget<"isTargetWin64()", CCIfType<[f80], CCAssignToReg<[FP0, FP1]>>>
 ]>;
 
 // X86-32 C return-value convention.
@@ -375,6 +383,7 @@ def RetCC_X86_64_Swift : CallingConv<[
   CCIfSwiftError<CCIfType<[i64], CCAssignToReg<[R12]>>>,
 
   // For integers, ECX, R8D can be used as extra return registers.
+  CCIfType<[v1i1],  CCPromoteToType<i8>>,
   CCIfType<[i1],  CCPromoteToType<i8>>,
   CCIfType<[i8] , CCAssignToReg<[AL, DL, CL, R8B]>>,
   CCIfType<[i16], CCAssignToReg<[AX, DX, CX, R8W]>>,
@@ -446,7 +455,7 @@ def RetCC_X86_64 : CallingConv<[
   CCIfCC<"CallingConv::Swift", CCDelegateTo<RetCC_X86_64_Swift>>,
 
   // Handle explicit CC selection
-  CCIfCC<"CallingConv::X86_64_Win64", CCDelegateTo<RetCC_X86_Win64_C>>,
+  CCIfCC<"CallingConv::Win64", CCDelegateTo<RetCC_X86_Win64_C>>,
   CCIfCC<"CallingConv::X86_64_SysV", CCDelegateTo<RetCC_X86_64_C>>,
 
   // Handle Vectorcall CC
@@ -468,6 +477,7 @@ def RetCC_X86_64 : CallingConv<[
 ]>;
 
 // This is the return-value convention used for the entire X86 backend.
+let Entry = 1 in
 def RetCC_X86 : CallingConv<[
 
   // Check if this is the Intel OpenCL built-ins calling convention
@@ -485,8 +495,8 @@ def CC_X86_64_C : CallingConv<[
   // Handles byval parameters.
   CCIfByVal<CCPassByVal<8, 8>>,
 
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Promote i1/i8/i16/v1i1 arguments to i32.
+  CCIfType<[i1, i8, i16, v1i1], CCPromoteToType<i32>>,
 
   // The 'nest' parameter, if any, is passed in R10.
   CCIfNest<CCIfSubtarget<"isTarget64BitILP32()", CCAssignToReg<[R10D]>>>,
@@ -498,7 +508,7 @@ def CC_X86_64_C : CallingConv<[
   // A SwiftError is passed in R12.
   CCIfSwiftError<CCIfType<[i64], CCAssignToReg<[R12]>>>,
 
-  // For Swift Calling Convention, pass sret in %RAX.
+  // For Swift Calling Convention, pass sret in %rax.
   CCIfCC<"CallingConv::Swift",
     CCIfSRet<CCIfType<[i64], CCAssignToReg<[RAX]>>>>,
 
@@ -533,7 +543,7 @@ def CC_X86_64_C : CallingConv<[
   // fixed arguments to vararg functions are supposed to be passed in
   // registers.  Actually modeling that would be a lot of work, though.
   CCIfNotVarArg<CCIfType<[v32i8, v16i16, v8i32, v4i64, v8f32, v4f64],
-                          CCIfSubtarget<"hasFp256()",
+                          CCIfSubtarget<"hasAVX()",
                           CCAssignToReg<[YMM0, YMM1, YMM2, YMM3,
                                          YMM4, YMM5, YMM6, YMM7]>>>>,
 
@@ -558,7 +568,7 @@ def CC_X86_64_C : CallingConv<[
            CCAssignToStack<32, 32>>,
 
   // 512-bit vectors get 64-byte stack slots that are 64-byte aligned.
-  CCIfType<[v16i32, v8i64, v16f32, v8f64],
+  CCIfType<[v64i8, v32i16, v16i32, v8i64, v16f32, v8f64],
            CCAssignToStack<64, 64>>
 ]>;
 
@@ -581,14 +591,19 @@ def CC_X86_64_HHVM_C : CallingConv<[
 
 // Calling convention used on Win64
 def CC_X86_Win64_C : CallingConv<[
-  // FIXME: Handle byval stuff.
   // FIXME: Handle varargs.
 
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Byval aggregates are passed by pointer
+  CCIfByVal<CCPassIndirect<i64>>,
+
+  // Promote i1/v1i1 arguments to i8.
+  CCIfType<[i1, v1i1], CCPromoteToType<i8>>,
 
   // The 'nest' parameter, if any, is passed in R10.
   CCIfNest<CCAssignToReg<[R10]>>,
+
+  // A SwiftError is passed in R12.
+  CCIfSwiftError<CCIfType<[i64], CCAssignToReg<[R12]>>>,
 
   // 128 bit vectors are passed by pointer
   CCIfType<[v16i8, v8i16, v4i32, v2i64, v4f32, v2f64], CCPassIndirect<i64>>,
@@ -598,12 +613,19 @@ def CC_X86_Win64_C : CallingConv<[
   CCIfType<[v32i8, v16i16, v8i32, v4i64, v8f32, v4f64], CCPassIndirect<i64>>,
 
   // 512 bit vectors are passed by pointer
-  CCIfType<[v16i32, v16f32, v8f64, v8i64], CCPassIndirect<i64>>,
+  CCIfType<[v64i8, v32i16, v16i32, v16f32, v8f64, v8i64], CCPassIndirect<i64>>,
+
+  // Long doubles are passed by pointer
+  CCIfType<[f80], CCPassIndirect<i64>>,
 
   // The first 4 MMX vector arguments are passed in GPRs.
   CCIfType<[x86mmx], CCBitConvertToType<i64>>,
 
   // The first 4 integer arguments are passed in integer registers.
+  CCIfType<[i8 ], CCAssignToRegWithShadow<[CL  , DL  , R8B , R9B ],
+                                          [XMM0, XMM1, XMM2, XMM3]>>,
+  CCIfType<[i16], CCAssignToRegWithShadow<[CX  , DX  , R8W , R9W ],
+                                          [XMM0, XMM1, XMM2, XMM3]>>,
   CCIfType<[i32], CCAssignToRegWithShadow<[ECX , EDX , R8D , R9D ],
                                           [XMM0, XMM1, XMM2, XMM3]>>,
 
@@ -623,11 +645,7 @@ def CC_X86_Win64_C : CallingConv<[
 
   // Integer/FP values get stored in stack slots that are 8 bytes in size and
   // 8-byte aligned if there are no more registers to hold them.
-  CCIfType<[i32, i64, f32, f64], CCAssignToStack<8, 8>>,
-
-  // Long doubles get stack slots whose size and alignment depends on the
-  // subtarget.
-  CCIfType<[f80], CCAssignToStack<0, 0>>
+  CCIfType<[i8, i16, i32, i64, f32, f64], CCAssignToStack<8, 8>>
 ]>;
 
 def CC_X86_Win64_VectorCall : CallingConv<[
@@ -649,7 +667,15 @@ def CC_X86_64_GHC : CallingConv<[
   // Pass in STG registers: F1, F2, F3, F4, D1, D2
   CCIfType<[f32, f64, v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
             CCIfSubtarget<"hasSSE1()",
-            CCAssignToReg<[XMM1, XMM2, XMM3, XMM4, XMM5, XMM6]>>>
+            CCAssignToReg<[XMM1, XMM2, XMM3, XMM4, XMM5, XMM6]>>>,
+  // AVX
+  CCIfType<[v32i8, v16i16, v8i32, v4i64, v8f32, v4f64],
+            CCIfSubtarget<"hasAVX()",
+            CCAssignToReg<[YMM1, YMM2, YMM3, YMM4, YMM5, YMM6]>>>,
+  // AVX-512
+  CCIfType<[v64i8, v32i16, v16i32, v8i64, v16f32, v8f64],
+            CCIfSubtarget<"hasAVX512()",
+            CCAssignToReg<[ZMM1, ZMM2, ZMM3, ZMM4, ZMM5, ZMM6]>>>
 ]>;
 
 def CC_X86_64_HiPE : CallingConv<[
@@ -718,7 +744,7 @@ def CC_X86_32_Vector_Standard : CallingConv<[
 
   // AVX 256-bit vector arguments are passed in YMM registers.
   CCIfNotVarArg<CCIfType<[v32i8, v16i16, v8i32, v4i64, v8f32, v4f64],
-                CCIfSubtarget<"hasFp256()",
+                CCIfSubtarget<"hasAVX()",
                 CCAssignToReg<[YMM0, YMM1, YMM2]>>>>,
 
   // AVX 512-bit vector arguments are passed in ZMM registers.
@@ -737,7 +763,7 @@ def CC_X86_32_Vector_Darwin : CallingConv<[
 
   // AVX 256-bit vector arguments are passed in YMM registers.
   CCIfNotVarArg<CCIfType<[v32i8, v16i16, v8i32, v4i64, v8f32, v4f64],
-                CCIfSubtarget<"hasFp256()",
+                CCIfSubtarget<"hasAVX()",
                 CCAssignToReg<[YMM0, YMM1, YMM2, YMM3]>>>>,
 
   // AVX 512-bit vector arguments are passed in ZMM registers.
@@ -796,8 +822,8 @@ def CC_X86_32_Common : CallingConv<[
 ]>;
 
 def CC_X86_32_C : CallingConv<[
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Promote i1/i8/i16/v1i1 arguments to i32.
+  CCIfType<[i1, i8, i16, v1i1], CCPromoteToType<i32>>,
 
   // The 'nest' parameter, if any, is passed in ECX.
   CCIfNest<CCAssignToReg<[ECX]>>,
@@ -816,8 +842,8 @@ def CC_X86_32_MCU : CallingConv<[
   // puts arguments in registers.
   CCIfByVal<CCPassByVal<4, 4>>,
 
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Promote i1/i8/i16/v1i1 arguments to i32.
+  CCIfType<[i1, i8, i16, v1i1], CCPromoteToType<i32>>,
 
   // If the call is not a vararg call, some arguments may be passed
   // in integer registers.
@@ -828,13 +854,15 @@ def CC_X86_32_MCU : CallingConv<[
 ]>;
 
 def CC_X86_32_FastCall : CallingConv<[
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Promote i1 to i8.
+  CCIfType<[i1], CCPromoteToType<i8>>,
 
   // The 'nest' parameter, if any, is passed in EAX.
   CCIfNest<CCAssignToReg<[EAX]>>,
 
   // The first 2 integer arguments are passed in ECX/EDX
+  CCIfInReg<CCIfType<[ i8], CCAssignToReg<[ CL,  DL]>>>,
+  CCIfInReg<CCIfType<[i16], CCAssignToReg<[ CX,  DX]>>>,
   CCIfInReg<CCIfType<[i32], CCAssignToReg<[ECX, EDX]>>>,
 
   // Otherwise, same as everything else.
@@ -858,15 +886,15 @@ def CC_X86_32_ThisCall_Common : CallingConv<[
 ]>;
 
 def CC_X86_32_ThisCall_Mingw : CallingConv<[
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Promote i1/i8/i16/v1i1 arguments to i32.
+  CCIfType<[i1, i8, i16, v1i1], CCPromoteToType<i32>>,
 
   CCDelegateTo<CC_X86_32_ThisCall_Common>
 ]>;
 
 def CC_X86_32_ThisCall_Win : CallingConv<[
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Promote i1/i8/i16/v1i1 arguments to i32.
+  CCIfType<[i1, i8, i16, v1i1], CCPromoteToType<i32>>,
 
   // Pass sret arguments indirectly through stack.
   CCIfSRet<CCAssignToStack<4, 4>>,
@@ -885,8 +913,8 @@ def CC_X86_32_FastCC : CallingConv<[
   // puts arguments in registers.
   CCIfByVal<CCPassByVal<4, 4>>,
 
-  // Promote i1/i8/i16 arguments to i32.
-  CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
+  // Promote i1/i8/i16/v1i1 arguments to i32.
+  CCIfType<[i1, i8, i16, v1i1], CCPromoteToType<i32>>,
 
   // The 'nest' parameter, if any, is passed in EAX.
   CCIfNest<CCAssignToReg<[EAX]>>,
@@ -958,14 +986,6 @@ def CC_Intel_OCL_BI : CallingConv<[
   CCDelegateTo<CC_X86_32_C>
 ]>;
 
-def CC_X86_32_Intr : CallingConv<[
-  CCAssignToStack<4, 4>
-]>;
-
-def CC_X86_64_Intr : CallingConv<[
-  CCAssignToStack<8, 8>
-]>;
-
 //===----------------------------------------------------------------------===//
 // X86 Root Argument Calling Conventions
 //===----------------------------------------------------------------------===//
@@ -974,7 +994,7 @@ def CC_X86_64_Intr : CallingConv<[
 def CC_X86_32 : CallingConv<[
   // X86_INTR calling convention is valid in MCU target and should override the
   // MCU calling convention. Thus, this should be checked before isTargetMCU().
-  CCIfCC<"CallingConv::X86_INTR", CCDelegateTo<CC_X86_32_Intr>>,
+  CCIfCC<"CallingConv::X86_INTR", CCCustom<"CC_X86_Intr">>,
   CCIfSubtarget<"isTargetMCU()", CCDelegateTo<CC_X86_32_MCU>>,
   CCIfCC<"CallingConv::X86_FastCall", CCDelegateTo<CC_X86_32_FastCall>>,
   CCIfCC<"CallingConv::X86_VectorCall", CCDelegateTo<CC_X86_Win32_VectorCall>>,
@@ -994,7 +1014,7 @@ def CC_X86_64 : CallingConv<[
   CCIfCC<"CallingConv::HiPE", CCDelegateTo<CC_X86_64_HiPE>>,
   CCIfCC<"CallingConv::WebKit_JS", CCDelegateTo<CC_X86_64_WebKit_JS>>,
   CCIfCC<"CallingConv::AnyReg", CCDelegateTo<CC_X86_64_AnyReg>>,
-  CCIfCC<"CallingConv::X86_64_Win64", CCDelegateTo<CC_X86_Win64_C>>,
+  CCIfCC<"CallingConv::Win64", CCDelegateTo<CC_X86_Win64_C>>,
   CCIfCC<"CallingConv::X86_64_SysV", CCDelegateTo<CC_X86_64_C>>,
   CCIfCC<"CallingConv::X86_VectorCall", CCDelegateTo<CC_X86_Win64_VectorCall>>,
   CCIfCC<"CallingConv::HHVM", CCDelegateTo<CC_X86_64_HHVM>>,
@@ -1002,7 +1022,7 @@ def CC_X86_64 : CallingConv<[
   CCIfCC<"CallingConv::X86_RegCall",
     CCIfSubtarget<"isTargetWin64()", CCDelegateTo<CC_X86_Win64_RegCall>>>,
   CCIfCC<"CallingConv::X86_RegCall", CCDelegateTo<CC_X86_SysV64_RegCall>>,
-  CCIfCC<"CallingConv::X86_INTR", CCDelegateTo<CC_X86_64_Intr>>,
+  CCIfCC<"CallingConv::X86_INTR", CCCustom<"CC_X86_Intr">>,
 
   // Mingw64 and native Win64 use Win64 CC
   CCIfSubtarget<"isTargetWin64()", CCDelegateTo<CC_X86_Win64_C>>,
@@ -1012,6 +1032,7 @@ def CC_X86_64 : CallingConv<[
 ]>;
 
 // This is the argument convention used for the entire X86 backend.
+let Entry = 1 in
 def CC_X86 : CallingConv<[
   CCIfCC<"CallingConv::Intel_OCL_BI", CCDelegateTo<CC_Intel_OCL_BI>>,
   CCIfSubtarget<"is64Bit()", CCDelegateTo<CC_X86_64>>,
@@ -1036,6 +1057,8 @@ def CSR_Win64_NoSSE : CalleeSavedRegs<(add RBX, RBP, RDI, RSI, R12, R13, R14, R1
 
 def CSR_Win64 : CalleeSavedRegs<(add CSR_Win64_NoSSE,
                                      (sequence "XMM%u", 6, 15))>;
+
+def CSR_Win64_SwiftError : CalleeSavedRegs<(sub CSR_Win64, R12)>;
 
 // The function used by Darwin to obtain the address of a thread-local variable
 // uses rdi to pass a single parameter and rax for the return value. All other
@@ -1074,6 +1097,8 @@ def CSR_32_AllRegs_AVX512 : CalleeSavedRegs<(add CSR_32_AllRegs,
                                                  (sequence "K%u", 0, 7))>;
 
 def CSR_64_AllRegs     : CalleeSavedRegs<(add CSR_64_MostRegs, RAX)>;
+def CSR_64_AllRegs_NoSSE : CalleeSavedRegs<(add RAX, RBX, RCX, RDX, RSI, RDI, R8, R9,
+                                                R10, R11, R12, R13, R14, R15, RBP)>;
 def CSR_64_AllRegs_AVX : CalleeSavedRegs<(sub (add CSR_64_MostRegs, RAX,
                                                    (sequence "YMM%u", 0, 15)),
                                               (sequence "XMM%u", 0, 15))>;

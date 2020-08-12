@@ -1,13 +1,14 @@
-//===- EnumTables.cpp - Enum to string conversion tables --------*- C++ -*-===//
+//===- EnumTables.cpp - Enum to string conversion tables ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/CodeView/EnumTables.h"
+#include "llvm/Support/ScopedPrinter.h"
+#include <type_traits>
 
 using namespace llvm;
 using namespace codeview;
@@ -20,66 +21,37 @@ using namespace codeview;
 
 static const EnumEntry<SymbolKind> SymbolTypeNames[] = {
 #define CV_SYMBOL(enum, val) {#enum, enum},
-#include "llvm/DebugInfo/CodeView/CVSymbolTypes.def"
+#include "llvm/DebugInfo/CodeView/CodeViewSymbols.def"
 #undef CV_SYMBOL
 };
 
 static const EnumEntry<TypeLeafKind> TypeLeafNames[] = {
 #define CV_TYPE(name, val) {#name, name},
-#include "llvm/DebugInfo/CodeView/TypeRecords.def"
+#include "llvm/DebugInfo/CodeView/CodeViewTypes.def"
 #undef CV_TYPE
 };
 
-static const EnumEntry<uint16_t> RegisterNames[] = {
-    CV_ENUM_CLASS_ENT(RegisterId, Unknown),
-    CV_ENUM_CLASS_ENT(RegisterId, VFrame),
-    CV_ENUM_CLASS_ENT(RegisterId, AL),
-    CV_ENUM_CLASS_ENT(RegisterId, CL),
-    CV_ENUM_CLASS_ENT(RegisterId, DL),
-    CV_ENUM_CLASS_ENT(RegisterId, BL),
-    CV_ENUM_CLASS_ENT(RegisterId, AH),
-    CV_ENUM_CLASS_ENT(RegisterId, CH),
-    CV_ENUM_CLASS_ENT(RegisterId, DH),
-    CV_ENUM_CLASS_ENT(RegisterId, BH),
-    CV_ENUM_CLASS_ENT(RegisterId, AX),
-    CV_ENUM_CLASS_ENT(RegisterId, CX),
-    CV_ENUM_CLASS_ENT(RegisterId, DX),
-    CV_ENUM_CLASS_ENT(RegisterId, BX),
-    CV_ENUM_CLASS_ENT(RegisterId, SP),
-    CV_ENUM_CLASS_ENT(RegisterId, BP),
-    CV_ENUM_CLASS_ENT(RegisterId, SI),
-    CV_ENUM_CLASS_ENT(RegisterId, DI),
-    CV_ENUM_CLASS_ENT(RegisterId, EAX),
-    CV_ENUM_CLASS_ENT(RegisterId, ECX),
-    CV_ENUM_CLASS_ENT(RegisterId, EDX),
-    CV_ENUM_CLASS_ENT(RegisterId, EBX),
-    CV_ENUM_CLASS_ENT(RegisterId, ESP),
-    CV_ENUM_CLASS_ENT(RegisterId, EBP),
-    CV_ENUM_CLASS_ENT(RegisterId, ESI),
-    CV_ENUM_CLASS_ENT(RegisterId, EDI),
-    CV_ENUM_CLASS_ENT(RegisterId, ES),
-    CV_ENUM_CLASS_ENT(RegisterId, CS),
-    CV_ENUM_CLASS_ENT(RegisterId, SS),
-    CV_ENUM_CLASS_ENT(RegisterId, DS),
-    CV_ENUM_CLASS_ENT(RegisterId, FS),
-    CV_ENUM_CLASS_ENT(RegisterId, GS),
-    CV_ENUM_CLASS_ENT(RegisterId, IP),
-    CV_ENUM_CLASS_ENT(RegisterId, RAX),
-    CV_ENUM_CLASS_ENT(RegisterId, RBX),
-    CV_ENUM_CLASS_ENT(RegisterId, RCX),
-    CV_ENUM_CLASS_ENT(RegisterId, RDX),
-    CV_ENUM_CLASS_ENT(RegisterId, RSI),
-    CV_ENUM_CLASS_ENT(RegisterId, RDI),
-    CV_ENUM_CLASS_ENT(RegisterId, RBP),
-    CV_ENUM_CLASS_ENT(RegisterId, RSP),
-    CV_ENUM_CLASS_ENT(RegisterId, R8),
-    CV_ENUM_CLASS_ENT(RegisterId, R9),
-    CV_ENUM_CLASS_ENT(RegisterId, R10),
-    CV_ENUM_CLASS_ENT(RegisterId, R11),
-    CV_ENUM_CLASS_ENT(RegisterId, R12),
-    CV_ENUM_CLASS_ENT(RegisterId, R13),
-    CV_ENUM_CLASS_ENT(RegisterId, R14),
-    CV_ENUM_CLASS_ENT(RegisterId, R15),
+static const EnumEntry<uint16_t> RegisterNames_X86[] = {
+#define CV_REGISTERS_X86
+#define CV_REGISTER(name, val) CV_ENUM_CLASS_ENT(RegisterId, name),
+#include "llvm/DebugInfo/CodeView/CodeViewRegisters.def"
+#undef CV_REGISTER
+#undef CV_REGISTERS_X86
+};
+
+static const EnumEntry<uint16_t> RegisterNames_ARM64[] = {
+#define CV_REGISTERS_ARM64
+#define CV_REGISTER(name, val) CV_ENUM_CLASS_ENT(RegisterId, name),
+#include "llvm/DebugInfo/CodeView/CodeViewRegisters.def"
+#undef CV_REGISTER
+#undef CV_REGISTERS_ARM64
+};
+
+static const EnumEntry<uint32_t> PublicSymFlagNames[] = {
+    CV_ENUM_CLASS_ENT(PublicSymFlags, Code),
+    CV_ENUM_CLASS_ENT(PublicSymFlags, Function),
+    CV_ENUM_CLASS_ENT(PublicSymFlags, Managed),
+    CV_ENUM_CLASS_ENT(PublicSymFlags, MSIL),
 };
 
 static const EnumEntry<uint8_t> ProcSymFlagNames[] = {
@@ -123,7 +95,8 @@ static const EnumEntry<codeview::SourceLanguage> SourceLanguages[] = {
     CV_ENUM_ENT(SourceLanguage, CSharp),  CV_ENUM_ENT(SourceLanguage, VB),
     CV_ENUM_ENT(SourceLanguage, ILAsm),   CV_ENUM_ENT(SourceLanguage, Java),
     CV_ENUM_ENT(SourceLanguage, JScript), CV_ENUM_ENT(SourceLanguage, MSIL),
-    CV_ENUM_ENT(SourceLanguage, HLSL),
+    CV_ENUM_ENT(SourceLanguage, HLSL),    CV_ENUM_ENT(SourceLanguage, D),
+    CV_ENUM_ENT(SourceLanguage, Swift),
 };
 
 static const EnumEntry<uint32_t> CompileSym2FlagNames[] = {
@@ -208,6 +181,7 @@ static const EnumEntry<unsigned> CPUTypeNames[] = {
     CV_ENUM_CLASS_ENT(CPUType, ARM_XMAC),
     CV_ENUM_CLASS_ENT(CPUType, ARM_WMMX),
     CV_ENUM_CLASS_ENT(CPUType, ARM7),
+    CV_ENUM_CLASS_ENT(CPUType, ARM64),
     CV_ENUM_CLASS_ENT(CPUType, Omni),
     CV_ENUM_CLASS_ENT(CPUType, Ia64),
     CV_ENUM_CLASS_ENT(CPUType, Ia64_2),
@@ -237,6 +211,8 @@ static const EnumEntry<uint32_t> FrameProcSymFlagNames[] = {
     CV_ENUM_CLASS_ENT(FrameProcedureOptions, Inlined),
     CV_ENUM_CLASS_ENT(FrameProcedureOptions, StrictSecurityChecks),
     CV_ENUM_CLASS_ENT(FrameProcedureOptions, SafeBuffers),
+    CV_ENUM_CLASS_ENT(FrameProcedureOptions, EncodedLocalBasePointerMask),
+    CV_ENUM_CLASS_ENT(FrameProcedureOptions, EncodedParamBasePointerMask),
     CV_ENUM_CLASS_ENT(FrameProcedureOptions, ProfileGuidedOptimization),
     CV_ENUM_CLASS_ENT(FrameProcedureOptions, ValidProfileCounts),
     CV_ENUM_CLASS_ENT(FrameProcedureOptions, OptimizedForSpeed),
@@ -245,20 +221,20 @@ static const EnumEntry<uint32_t> FrameProcSymFlagNames[] = {
 };
 
 static const EnumEntry<uint32_t> ModuleSubstreamKindNames[] = {
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, None),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, Symbols),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, Lines),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, StringTable),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, FileChecksums),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, FrameData),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, InlineeLines),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, CrossScopeImports),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, CrossScopeExports),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, ILLines),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, FuncMDTokenMap),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, TypeMDTokenMap),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, MergedAssemblyInput),
-    CV_ENUM_CLASS_ENT(ModuleSubstreamKind, CoffSymbolRVA),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, None),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, Symbols),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, Lines),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, StringTable),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, FileChecksums),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, FrameData),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, InlineeLines),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, CrossScopeImports),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, CrossScopeExports),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, ILLines),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, FuncMDTokenMap),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, TypeMDTokenMap),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, MergedAssemblyInput),
+    CV_ENUM_CLASS_ENT(DebugSubsectionKind, CoffSymbolRVA),
 };
 
 static const EnumEntry<uint16_t> ExportSymFlagNames[] = {
@@ -326,6 +302,7 @@ static const EnumEntry<COFF::SectionCharacteristics>
 
 namespace llvm {
 namespace codeview {
+
 ArrayRef<EnumEntry<SymbolKind>> getSymbolTypeNames() {
   return makeArrayRef(SymbolTypeNames);
 }
@@ -334,52 +311,73 @@ ArrayRef<EnumEntry<TypeLeafKind>> getTypeLeafNames() {
   return makeArrayRef(TypeLeafNames);
 }
 
-ArrayRef<EnumEntry<uint16_t>> getRegisterNames() {
-  return makeArrayRef(RegisterNames);
+ArrayRef<EnumEntry<uint16_t>> getRegisterNames(CPUType Cpu) {
+  if (Cpu == CPUType::ARM64) {
+    return makeArrayRef(RegisterNames_ARM64);
+  }
+  return makeArrayRef(RegisterNames_X86);
+}
+
+ArrayRef<EnumEntry<uint32_t>> getPublicSymFlagNames() {
+  return makeArrayRef(PublicSymFlagNames);
 }
 
 ArrayRef<EnumEntry<uint8_t>> getProcSymFlagNames() {
   return makeArrayRef(ProcSymFlagNames);
 }
+
 ArrayRef<EnumEntry<uint16_t>> getLocalFlagNames() {
   return makeArrayRef(LocalFlags);
 }
+
 ArrayRef<EnumEntry<uint8_t>> getFrameCookieKindNames() {
   return makeArrayRef(FrameCookieKinds);
 }
+
 ArrayRef<EnumEntry<SourceLanguage>> getSourceLanguageNames() {
   return makeArrayRef(SourceLanguages);
 }
+
 ArrayRef<EnumEntry<uint32_t>> getCompileSym2FlagNames() {
   return makeArrayRef(CompileSym2FlagNames);
 }
+
 ArrayRef<EnumEntry<uint32_t>> getCompileSym3FlagNames() {
   return makeArrayRef(CompileSym3FlagNames);
 }
+
 ArrayRef<EnumEntry<uint32_t>> getFileChecksumNames() {
   return makeArrayRef(FileChecksumNames);
 }
+
 ArrayRef<EnumEntry<unsigned>> getCPUTypeNames() {
   return makeArrayRef(CPUTypeNames);
 }
+
 ArrayRef<EnumEntry<uint32_t>> getFrameProcSymFlagNames() {
   return makeArrayRef(FrameProcSymFlagNames);
 }
+
 ArrayRef<EnumEntry<uint16_t>> getExportSymFlagNames() {
   return makeArrayRef(ExportSymFlagNames);
 }
+
 ArrayRef<EnumEntry<uint32_t>> getModuleSubstreamKindNames() {
   return makeArrayRef(ModuleSubstreamKindNames);
 }
+
 ArrayRef<EnumEntry<uint8_t>> getThunkOrdinalNames() {
   return makeArrayRef(ThunkOrdinalNames);
 }
+
 ArrayRef<EnumEntry<uint16_t>> getTrampolineNames() {
   return makeArrayRef(TrampolineNames);
 }
+
 ArrayRef<EnumEntry<COFF::SectionCharacteristics>>
 getImageSectionCharacteristicNames() {
   return makeArrayRef(ImageSectionCharacteristicNames);
 }
-}
-}
+
+} // end namespace codeview
+} // end namespace llvm

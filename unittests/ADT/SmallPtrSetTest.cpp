@@ -1,9 +1,8 @@
 //===- llvm/unittest/ADT/SmallPtrSetTest.cpp ------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,8 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "gtest/gtest.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/PointerIntPair.h"
+#include "llvm/Support/PointerLikeTypeTraits.h"
+#include "gtest/gtest.h"
 
 using namespace llvm;
 
@@ -26,7 +27,7 @@ TEST(SmallPtrSetTest, Assignment) {
   (s2 = s1).insert(&buf[2]);
 
   // Self assign as well.
-  (s2 = s2).insert(&buf[3]);
+  (s2 = static_cast<SmallPtrSet<int *, 4> &>(s2)).insert(&buf[3]);
 
   s1 = s2;
   EXPECT_EQ(4U, s1.size());
@@ -54,7 +55,7 @@ TEST(SmallPtrSetTest, GrowthTest) {
 
   SmallPtrSet<int *, 4> s;
   typedef SmallPtrSet<int *, 4>::iterator iter;
-  
+
   s.insert(&buf[0]);
   s.insert(&buf[1]);
   s.insert(&buf[2]);
@@ -278,4 +279,53 @@ TEST(SmallPtrSetTest, EraseTest) {
   // Test when set grows big.
   SmallPtrSet<int *, 2> A;
   checkEraseAndIterators(A);
+}
+
+// Verify that dereferencing and iteration work.
+TEST(SmallPtrSetTest, dereferenceAndIterate) {
+  int Ints[] = {0, 1, 2, 3, 4, 5, 6, 7};
+  SmallPtrSet<const int *, 4> S;
+  for (int &I : Ints) {
+    EXPECT_EQ(&I, *S.insert(&I).first);
+    EXPECT_EQ(&I, *S.find(&I));
+  }
+
+  // Iterate from each and count how many times each element is found.
+  int Found[sizeof(Ints)/sizeof(int)] = {0};
+  for (int &I : Ints)
+    for (auto F = S.find(&I), E = S.end(); F != E; ++F)
+      ++Found[*F - Ints];
+
+  // Sort.  We should hit the first element just once and the final element N
+  // times.
+  llvm::sort(std::begin(Found), std::end(Found));
+  for (auto F = std::begin(Found), E = std::end(Found); F != E; ++F)
+    EXPECT_EQ(F - Found + 1, *F);
+}
+
+// Verify that const pointers work for count and find even when the underlying
+// SmallPtrSet is not for a const pointer type.
+TEST(SmallPtrSetTest, ConstTest) {
+  SmallPtrSet<int *, 8> IntSet;
+  int A;
+  int *B = &A;
+  const int *C = &A;
+  IntSet.insert(B);
+  EXPECT_EQ(IntSet.count(B), 1u);
+  EXPECT_EQ(IntSet.count(C), 1u);
+  EXPECT_NE(IntSet.find(B), IntSet.end());
+  EXPECT_NE(IntSet.find(C), IntSet.end());
+}
+
+// Verify that we automatically get the const version of PointerLikeTypeTraits
+// filled in for us, even for a non-pointer type
+using TestPair = PointerIntPair<int *, 1>;
+
+TEST(SmallPtrSetTest, ConstNonPtrTest) {
+  SmallPtrSet<TestPair, 8> IntSet;
+  int A[1];
+  TestPair Pair(&A[0], 1);
+  IntSet.insert(Pair);
+  EXPECT_EQ(IntSet.count(Pair), 1u);
+  EXPECT_NE(IntSet.find(Pair), IntSet.end());
 }

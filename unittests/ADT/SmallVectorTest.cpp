@@ -1,9 +1,8 @@
 //===- llvm/unittest/ADT/SmallVectorTest.cpp ------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Compiler.h"
 #include "gtest/gtest.h"
 #include <list>
@@ -208,6 +207,22 @@ typedef ::testing::Types<SmallVector<Constructable, 0>,
                          SmallVector<Constructable, 5>
                          > SmallVectorTestTypes;
 TYPED_TEST_CASE(SmallVectorTest, SmallVectorTestTypes);
+
+// Constructor test.
+TYPED_TEST(SmallVectorTest, ConstructorNonIterTest) {
+  SCOPED_TRACE("ConstructorTest");
+  this->theVector = SmallVector<Constructable, 2>(2, 2);
+  this->assertValuesInOrder(this->theVector, 2u, 2, 2);
+}
+
+// Constructor test.
+TYPED_TEST(SmallVectorTest, ConstructorIterTest) {
+  SCOPED_TRACE("ConstructorTest");
+  int arr[] = {1, 2, 3};
+  this->theVector =
+      SmallVector<Constructable, 4>(std::begin(arr), std::end(arr));
+  this->assertValuesInOrder(this->theVector, 3u, 1, 2, 3);
+}
 
 // New vector test.
 TYPED_TEST(SmallVectorTest, EmptyVectorTest) {
@@ -415,6 +430,33 @@ TYPED_TEST(SmallVectorTest, AppendRepeatedTest) {
   this->assertValuesInOrder(this->theVector, 3u, 1, 77, 77);
 }
 
+// Append test
+TYPED_TEST(SmallVectorTest, AppendNonIterTest) {
+  SCOPED_TRACE("AppendRepeatedTest");
+
+  this->theVector.push_back(Constructable(1));
+  this->theVector.append(2, 7);
+  this->assertValuesInOrder(this->theVector, 3u, 1, 7, 7);
+}
+
+struct output_iterator {
+  typedef std::output_iterator_tag iterator_category;
+  typedef int value_type;
+  typedef int difference_type;
+  typedef value_type *pointer;
+  typedef value_type &reference;
+  operator int() { return 2; }
+  operator Constructable() { return 7; }
+};
+
+TYPED_TEST(SmallVectorTest, AppendRepeatedNonForwardIterator) {
+  SCOPED_TRACE("AppendRepeatedTest");
+
+  this->theVector.push_back(Constructable(1));
+  this->theVector.append(output_iterator(), output_iterator());
+  this->assertValuesInOrder(this->theVector, 3u, 1, 7, 7);
+}
+
 // Assign test
 TYPED_TEST(SmallVectorTest, AssignTest) {
   SCOPED_TRACE("AssignTest");
@@ -422,6 +464,25 @@ TYPED_TEST(SmallVectorTest, AssignTest) {
   this->theVector.push_back(Constructable(1));
   this->theVector.assign(2, Constructable(77));
   this->assertValuesInOrder(this->theVector, 2u, 77, 77);
+}
+
+// Assign test
+TYPED_TEST(SmallVectorTest, AssignRangeTest) {
+  SCOPED_TRACE("AssignTest");
+
+  this->theVector.push_back(Constructable(1));
+  int arr[] = {1, 2, 3};
+  this->theVector.assign(std::begin(arr), std::end(arr));
+  this->assertValuesInOrder(this->theVector, 3u, 1, 2, 3);
+}
+
+// Assign test
+TYPED_TEST(SmallVectorTest, AssignNonIterTest) {
+  SCOPED_TRACE("AssignTest");
+
+  this->theVector.push_back(Constructable(1));
+  this->theVector.assign(2, 7);
+  this->assertValuesInOrder(this->theVector, 2u, 7, 7);
 }
 
 // Move-assign test
@@ -522,6 +583,15 @@ TYPED_TEST(SmallVectorTest, InsertRepeatedTest) {
   this->assertValuesInOrder(this->theVector, 6u, 1, 16, 16, 2, 3, 4);
 }
 
+TYPED_TEST(SmallVectorTest, InsertRepeatedNonIterTest) {
+  SCOPED_TRACE("InsertRepeatedTest");
+
+  this->makeSequence(this->theVector, 1, 4);
+  Constructable::reset();
+  auto I = this->theVector.insert(this->theVector.begin() + 1, 2, 7);
+  EXPECT_EQ(this->theVector.begin() + 1, I);
+  this->assertValuesInOrder(this->theVector, 6u, 1, 7, 7, 2, 3, 4);
+}
 
 TYPED_TEST(SmallVectorTest, InsertRepeatedAtEndTest) {
   SCOPED_TRACE("InsertRepeatedTest");
@@ -838,63 +908,69 @@ TEST(SmallVectorTest, EmplaceBack) {
   EmplaceableArg<3> A3(true);
   {
     SmallVector<Emplaceable, 3> V;
-    V.emplace_back();
+    Emplaceable &back = V.emplace_back();
+    EXPECT_TRUE(&back == &V.back());
     EXPECT_TRUE(V.size() == 1);
-    EXPECT_TRUE(V.back().State == ES_Emplaced);
-    EXPECT_TRUE(V.back().A0.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A1.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A2.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A3.State == EAS_Defaulted);
+    EXPECT_TRUE(back.State == ES_Emplaced);
+    EXPECT_TRUE(back.A0.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A1.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A2.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A3.State == EAS_Defaulted);
   }
   {
     SmallVector<Emplaceable, 3> V;
-    V.emplace_back(std::move(A0));
+    Emplaceable &back = V.emplace_back(std::move(A0));
+    EXPECT_TRUE(&back == &V.back());
     EXPECT_TRUE(V.size() == 1);
-    EXPECT_TRUE(V.back().State == ES_Emplaced);
-    EXPECT_TRUE(V.back().A0.State == EAS_RValue);
-    EXPECT_TRUE(V.back().A1.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A2.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A3.State == EAS_Defaulted);
+    EXPECT_TRUE(back.State == ES_Emplaced);
+    EXPECT_TRUE(back.A0.State == EAS_RValue);
+    EXPECT_TRUE(back.A1.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A2.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A3.State == EAS_Defaulted);
   }
   {
     SmallVector<Emplaceable, 3> V;
-    V.emplace_back(A0);
+    Emplaceable &back = V.emplace_back(A0);
+    EXPECT_TRUE(&back == &V.back());
     EXPECT_TRUE(V.size() == 1);
-    EXPECT_TRUE(V.back().State == ES_Emplaced);
-    EXPECT_TRUE(V.back().A0.State == EAS_LValue);
-    EXPECT_TRUE(V.back().A1.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A2.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A3.State == EAS_Defaulted);
+    EXPECT_TRUE(back.State == ES_Emplaced);
+    EXPECT_TRUE(back.A0.State == EAS_LValue);
+    EXPECT_TRUE(back.A1.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A2.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A3.State == EAS_Defaulted);
   }
   {
     SmallVector<Emplaceable, 3> V;
-    V.emplace_back(A0, A1);
+    Emplaceable &back = V.emplace_back(A0, A1);
+    EXPECT_TRUE(&back == &V.back());
     EXPECT_TRUE(V.size() == 1);
-    EXPECT_TRUE(V.back().State == ES_Emplaced);
-    EXPECT_TRUE(V.back().A0.State == EAS_LValue);
-    EXPECT_TRUE(V.back().A1.State == EAS_LValue);
-    EXPECT_TRUE(V.back().A2.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A3.State == EAS_Defaulted);
+    EXPECT_TRUE(back.State == ES_Emplaced);
+    EXPECT_TRUE(back.A0.State == EAS_LValue);
+    EXPECT_TRUE(back.A1.State == EAS_LValue);
+    EXPECT_TRUE(back.A2.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A3.State == EAS_Defaulted);
   }
   {
     SmallVector<Emplaceable, 3> V;
-    V.emplace_back(std::move(A0), std::move(A1));
+    Emplaceable &back = V.emplace_back(std::move(A0), std::move(A1));
+    EXPECT_TRUE(&back == &V.back());
     EXPECT_TRUE(V.size() == 1);
-    EXPECT_TRUE(V.back().State == ES_Emplaced);
-    EXPECT_TRUE(V.back().A0.State == EAS_RValue);
-    EXPECT_TRUE(V.back().A1.State == EAS_RValue);
-    EXPECT_TRUE(V.back().A2.State == EAS_Defaulted);
-    EXPECT_TRUE(V.back().A3.State == EAS_Defaulted);
+    EXPECT_TRUE(back.State == ES_Emplaced);
+    EXPECT_TRUE(back.A0.State == EAS_RValue);
+    EXPECT_TRUE(back.A1.State == EAS_RValue);
+    EXPECT_TRUE(back.A2.State == EAS_Defaulted);
+    EXPECT_TRUE(back.A3.State == EAS_Defaulted);
   }
   {
     SmallVector<Emplaceable, 3> V;
-    V.emplace_back(std::move(A0), A1, std::move(A2), A3);
+    Emplaceable &back = V.emplace_back(std::move(A0), A1, std::move(A2), A3);
+    EXPECT_TRUE(&back == &V.back());
     EXPECT_TRUE(V.size() == 1);
-    EXPECT_TRUE(V.back().State == ES_Emplaced);
-    EXPECT_TRUE(V.back().A0.State == EAS_RValue);
-    EXPECT_TRUE(V.back().A1.State == EAS_LValue);
-    EXPECT_TRUE(V.back().A2.State == EAS_RValue);
-    EXPECT_TRUE(V.back().A3.State == EAS_LValue);
+    EXPECT_TRUE(back.State == ES_Emplaced);
+    EXPECT_TRUE(back.A0.State == EAS_RValue);
+    EXPECT_TRUE(back.A1.State == EAS_LValue);
+    EXPECT_TRUE(back.A2.State == EAS_RValue);
+    EXPECT_TRUE(back.A3.State == EAS_LValue);
   }
   {
     SmallVector<int, 1> V;

@@ -21,6 +21,9 @@
 #OS X specific files.
 .DS_store
 
+# Nested build directory
+/build
+
 #==============================================================================#
 # Explicit files to ignore (only matches one).
 #==============================================================================#
@@ -38,6 +41,12 @@ cscope.out
 autoconf/aclocal.m4
 autoconf/autom4te.cache
 /compile_commands.json
+# Visual Studio built-in CMake configuration
+/CMakeSettings.json
+# CLion project configuration
+/.idea
+# Qt Creator project configuration
+/CMakeLists.txt.user
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
@@ -62,8 +71,11 @@ tools/polly
 tools/avrlit
 # Sphinx build tree, if building in-source dir.
 docs/_build
-# VSCode config files.
+# VS2017 and VSCode config files.
 .vscode
+.vs
+# clangd index
+.clangd
 
 #==============================================================================#
 # Files created in tree by the Go bindings.

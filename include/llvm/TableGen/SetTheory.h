@@ -1,9 +1,8 @@
 //===- SetTheory.h - Generate ordered sets from DAG expressions -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -64,8 +63,8 @@ class Record;
 
 class SetTheory {
 public:
-  typedef std::vector<Record*> RecVec;
-  typedef SmallSetVector<Record*, 16> RecSet;
+  using RecVec = std::vector<Record *>;
+  using RecSet = SmallSetVector<Record *, 16>;
 
   /// Operator - A callback representing a DAG operator.
   class Operator {
@@ -95,7 +94,7 @@ public:
 private:
   // Map set defs to their fully expanded contents. This serves as a memoization
   // cache and it makes it possible to return const references on queries.
-  typedef std::map<Record*, RecVec> ExpandMap;
+  using ExpandMap = std::map<Record *, RecVec>;
   ExpandMap Expansions;
 
   // Known DAG operators by name.

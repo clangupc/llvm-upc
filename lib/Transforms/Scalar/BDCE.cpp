@@ -1,9 +1,8 @@
 //===---- BDCE.cpp - Bit-tracking dead code elimination -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,15 +14,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Scalar/BDCE.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/DemandedBits.h"
 #include "llvm/Analysis/GlobalsModRef.h"
-#include "llvm/IR/CFG.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/Operator.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
@@ -35,6 +33,58 @@ using namespace llvm;
 STATISTIC(NumRemoved, "Number of instructions removed (unused)");
 STATISTIC(NumSimplified, "Number of instructions trivialized (dead bits)");
 
+/// If an instruction is trivialized (dead), then the chain of users of that
+/// instruction may need to be cleared of assumptions that can no longer be
+/// guaranteed correct.
+static void clearAssumptionsOfUsers(Instruction *I, DemandedBits &DB) {
+  assert(I->getType()->isIntOrIntVectorTy() &&
+         "Trivializing a non-integer value?");
+
+  // Initialize the worklist with eligible direct users.
+  SmallPtrSet<Instruction *, 16> Visited;
+  SmallVector<Instruction *, 16> WorkList;
+  for (User *JU : I->users()) {
+    // If all bits of a user are demanded, then we know that nothing below that
+    // in the def-use chain needs to be changed.
+    auto *J = dyn_cast<Instruction>(JU);
+    if (J && J->getType()->isIntOrIntVectorTy() &&
+        !DB.getDemandedBits(J).isAllOnesValue()) {
+      Visited.insert(J);
+      WorkList.push_back(J);
+    }
+
+    // Note that we need to check for non-int types above before asking for
+    // demanded bits. Normally, the only way to reach an instruction with an
+    // non-int type is via an instruction that has side effects (or otherwise
+    // will demand its input bits). However, if we have a readnone function
+    // that returns an unsized type (e.g., void), we must avoid asking for the
+    // demanded bits of the function call's return value. A void-returning
+    // readnone function is always dead (and so we can stop walking the use/def
+    // chain here), but the check is necessary to avoid asserting.
+  }
+
+  // DFS through subsequent users while tracking visits to avoid cycles.
+  while (!WorkList.empty()) {
+    Instruction *J = WorkList.pop_back_val();
+
+    // NSW, NUW, and exact are based on operands that might have changed.
+    J->dropPoisonGeneratingFlags();
+
+    // We do not have to worry about llvm.assume or range metadata:
+    // 1. llvm.assume demands its operand, so trivializing can't change it.
+    // 2. range metadata only applies to memory accesses which demand all bits.
+
+    for (User *KU : J->users()) {
+      // If all bits of a user are demanded, then we know that nothing below
+      // that in the def-use chain needs to be changed.
+      auto *K = dyn_cast<Instruction>(KU);
+      if (K && Visited.insert(K).second && K->getType()->isIntOrIntVectorTy() &&
+          !DB.getDemandedBits(K).isAllOnesValue())
+        WorkList.push_back(K);
+    }
+  }
+}
+
 static bool bitTrackingDCE(Function &F, DemandedBits &DB) {
   SmallVector<Instruction*, 128> Worklist;
   bool Changed = false;
@@ -45,26 +95,41 @@ static bool bitTrackingDCE(Function &F, DemandedBits &DB) {
     if (I.mayHaveSideEffects() && I.use_empty())
       continue;
 
-    if (I.getType()->isIntegerTy() &&
-        !DB.getDemandedBits(&I).getBoolValue()) {
-      // For live instructions that have all dead bits, first make them dead by
-      // replacing all uses with something else. Then, if they don't need to
-      // remain live (because they have side effects, etc.) we can remove them.
-      DEBUG(dbgs() << "BDCE: Trivializing: " << I << " (all bits dead)\n");
+    // Remove instructions that are dead, either because they were not reached
+    // during analysis or have no demanded bits.
+    if (DB.isInstructionDead(&I) ||
+        (I.getType()->isIntOrIntVectorTy() &&
+         DB.getDemandedBits(&I).isNullValue() &&
+         wouldInstructionBeTriviallyDead(&I))) {
+      salvageDebugInfo(I);
+      Worklist.push_back(&I);
+      I.dropAllReferences();
+      Changed = true;
+      continue;
+    }
+
+    for (Use &U : I.operands()) {
+      // DemandedBits only detects dead integer uses.
+      if (!U->getType()->isIntOrIntVectorTy())
+        continue;
+
+      if (!isa<Instruction>(U) && !isa<Argument>(U))
+        continue;
+
+      if (!DB.isUseDead(&U))
+        continue;
+
+      LLVM_DEBUG(dbgs() << "BDCE: Trivializing: " << U << " (all bits dead)\n");
+
+      clearAssumptionsOfUsers(&I, DB);
+
       // FIXME: In theory we could substitute undef here instead of zero.
       // This should be reconsidered once we settle on the semantics of
       // undef, poison, etc.
-      Value *Zero = ConstantInt::get(I.getType(), 0);
+      U.set(ConstantInt::get(U->getType(), 0));
       ++NumSimplified;
-      I.replaceNonMetadataUsesWith(Zero);
       Changed = true;
     }
-    if (!DB.isInstructionDead(&I))
-      continue;
-
-    Worklist.push_back(&I);
-    I.dropAllReferences();
-    Changed = true;
   }
 
   for (Instruction *&I : Worklist) {
@@ -80,8 +145,8 @@ PreservedAnalyses BDCEPass::run(Function &F, FunctionAnalysisManager &AM) {
   if (!bitTrackingDCE(F, DB))
     return PreservedAnalyses::all();
 
-  // FIXME: This should also 'preserve the CFG'.
-  auto PA = PreservedAnalyses();
+  PreservedAnalyses PA;
+  PA.preserveSet<CFGAnalyses>();
   PA.preserve<GlobalsAA>();
   return PA;
 }

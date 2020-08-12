@@ -1,9 +1,8 @@
-//===-- FunctionLoweringInfo.h - Lower functions from LLVM IR to CodeGen --===//
+//===- FunctionLoweringInfo.h - Lower functions from LLVM IR ---*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,37 +13,38 @@
 
 #ifndef LLVM_CODEGEN_FUNCTIONLOWERINGINFO_H
 #define LLVM_CODEGEN_FUNCTIONLOWERINGINFO_H
-
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/IR/InlineAsm.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/KnownBits.h"
+#include <cassert>
+#include <utility>
 #include <vector>
 
 namespace llvm {
 
-class AllocaInst;
+class Argument;
 class BasicBlock;
 class BranchProbabilityInfo;
 class Function;
-class GlobalVariable;
 class Instruction;
-class MachineInstr;
-class MachineBasicBlock;
 class MachineFunction;
-class MachineModuleInfo;
+class MachineInstr;
 class MachineRegisterInfo;
-class SelectionDAG;
 class MVT;
+class SelectionDAG;
 class TargetLowering;
-class Value;
 
 //===--------------------------------------------------------------------===//
 /// FunctionLoweringInfo - This contains information that is global to a
@@ -57,6 +57,7 @@ public:
   const TargetLowering *TLI;
   MachineRegisterInfo *RegInfo;
   BranchProbabilityInfo *BPI;
+  const LegacyDivergenceAnalysis *DA;
   /// CanLowerReturn - true iff the function's return value can be lowered to
   /// registers.
   bool CanLowerReturn;
@@ -71,41 +72,21 @@ public:
   /// MBBMap - A mapping from LLVM basic blocks to their machine code entry.
   DenseMap<const BasicBlock*, MachineBasicBlock *> MBBMap;
 
-  /// A map from swifterror value in a basic block to the virtual register it is
-  /// currently represented by.
-  llvm::DenseMap<std::pair<const MachineBasicBlock *, const Value *>, unsigned>
-      SwiftErrorVRegDefMap;
-
-  /// A list of upward exposed vreg uses that need to be satisfied by either a
-  /// copy def or a phi node at the beginning of the basic block representing
-  /// the predecessor(s) swifterror value.
-  llvm::DenseMap<std::pair<const MachineBasicBlock *, const Value *>, unsigned>
-      SwiftErrorVRegUpwardsUse;
-
-  /// The swifterror argument of the current function.
-  const Value *SwiftErrorArg;
-
-  typedef SmallVector<const Value*, 1> SwiftErrorValues;
-  /// A function can only have a single swifterror argument. And if it does
-  /// have a swifterror argument, it must be the first entry in
-  /// SwiftErrorVals.
-  SwiftErrorValues SwiftErrorVals;
-
-
-  /// Get or create the swifterror value virtual register in
-  /// SwiftErrorVRegDefMap for this basic block.
-  unsigned getOrCreateSwiftErrorVReg(const MachineBasicBlock *,
-                                     const Value *);
-
-  /// Set the swifterror virtual register in the SwiftErrorVRegDefMap for this
-  /// basic block.
-  void setCurrentSwiftErrorVReg(const MachineBasicBlock *MBB, const Value *,
-                                unsigned);
-
   /// ValueMap - Since we emit code for the function a basic block at a time,
   /// we must remember which virtual registers hold the values for
   /// cross-basic-block values.
   DenseMap<const Value *, unsigned> ValueMap;
+
+  /// VirtReg2Value map is needed by the Divergence Analysis driven
+  /// instruction selection. It is reverted ValueMap. It is computed
+  /// in lazy style - on demand. It is used to get the Value corresponding
+  /// to the live in virtual register and is called from the
+  /// TargetLowerinInfo::isSDNodeSourceOfDivergence.
+  DenseMap<unsigned, const Value*> VirtReg2Value;
+
+  /// This method is called from TargetLowerinInfo::isSDNodeSourceOfDivergence
+  /// to get the Value corresponding to the live-in virtual register.
+  const Value * getValueFromVirtualReg(unsigned Vreg);
 
   /// Track virtual registers created for exception pointers.
   DenseMap<const Value *, unsigned> CatchPadExceptionPointers;
@@ -117,7 +98,7 @@ public:
   /// slot), and we track that here.
 
   struct StatepointSpillMap {
-    typedef DenseMap<const Value *, Optional<int>> SlotMapTy;
+    using SlotMapTy = DenseMap<const Value *, Optional<int>>;
 
     /// Maps uniqued llvm IR values to the slots they were spilled in.  If a
     /// value is mapped to None it means we visited the value but didn't spill
@@ -153,8 +134,14 @@ public:
   /// function arguments that are inserted after scheduling is completed.
   SmallVector<MachineInstr*, 8> ArgDbgValues;
 
+  /// Bitvector with a bit set if corresponding argument is described in
+  /// ArgDbgValues. Using arg numbers according to Argument numbering.
+  BitVector DescribedArgs;
+
   /// RegFixups - Registers which need to be replaced after isel is done.
   DenseMap<unsigned, unsigned> RegFixups;
+
+  DenseSet<unsigned> RegsWithFixups;
 
   /// StatepointStackSlots - A list of temporary stack slots (frame indices)
   /// used to spill values at a statepoint.  We store them here to enable
@@ -171,9 +158,9 @@ public:
   struct LiveOutInfo {
     unsigned NumSignBits : 31;
     unsigned IsValid : 1;
-    APInt KnownOne, KnownZero;
-    LiveOutInfo() : NumSignBits(0), IsValid(true), KnownOne(1, 0),
-                    KnownZero(1, 0) {}
+    KnownBits Known = 1;
+
+    LiveOutInfo() : NumSignBits(0), IsValid(true) {}
   };
 
   /// Record the preferred extend type (ISD::SIGN_EXTEND or ISD::ZERO_EXTEND)
@@ -212,9 +199,11 @@ public:
     return ValueMap.count(V);
   }
 
-  unsigned CreateReg(MVT VT);
+  unsigned CreateReg(MVT VT, bool isDivergent = false);
 
-  unsigned CreateRegs(Type *Ty);
+  unsigned CreateRegs(const Value *V);
+
+  unsigned CreateRegs(Type *Ty, bool isDivergent = false);
 
   unsigned InitializeRegForValue(const Value *V) {
     // Tokens never live in vregs.
@@ -222,7 +211,8 @@ public:
       return 0;
     unsigned &R = ValueMap[V];
     assert(R == 0 && "Already initialized this value register!");
-    return R = CreateRegs(V->getType());
+    assert(VirtReg2Value.empty());
+    return R = CreateRegs(V);
   }
 
   /// GetLiveOutRegInfo - Gets LiveOutInfo for a register, returning NULL if the
@@ -247,16 +237,16 @@ public:
 
   /// AddLiveOutRegInfo - Adds LiveOutInfo for a register.
   void AddLiveOutRegInfo(unsigned Reg, unsigned NumSignBits,
-                         const APInt &KnownZero, const APInt &KnownOne) {
+                         const KnownBits &Known) {
     // Only install this information if it tells us something.
-    if (NumSignBits == 1 && KnownZero == 0 && KnownOne == 0)
+    if (NumSignBits == 1 && Known.isUnknown())
       return;
 
     LiveOutRegInfo.grow(Reg);
     LiveOutInfo &LOI = LiveOutRegInfo[Reg];
     LOI.NumSignBits = NumSignBits;
-    LOI.KnownOne = KnownOne;
-    LOI.KnownZero = KnownZero;
+    LOI.Known.One = Known.One;
+    LOI.Known.Zero = Known.Zero;
   }
 
   /// ComputePHILiveOutRegInfo - Compute LiveOutInfo for a PHI's destination
@@ -298,4 +288,4 @@ private:
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_CODEGEN_FUNCTIONLOWERINGINFO_H

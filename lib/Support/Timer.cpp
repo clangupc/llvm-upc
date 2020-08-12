@@ -1,9 +1,8 @@
 //===-- Timer.cpp - Interval Timing Support -------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,8 +19,11 @@
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/Process.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Signposts.h"
 #include "llvm/Support/YAMLTraits.h"
+#include "llvm/Support/raw_ostream.h"
+#include <limits>
+
 using namespace llvm;
 
 // This ugly hack is brought to you courtesy of constructor/destructor ordering
@@ -37,6 +39,9 @@ static std::string &getLibSupportInfoOutputFilename() {
 }
 
 static ManagedStatic<sys::SmartMutex<true> > TimerLock;
+
+/// Allows llvm::Timer to emit signposts when supported.
+static ManagedStatic<SignpostEmitter> Signposts;
 
 namespace {
   static cl::opt<bool>
@@ -72,23 +77,15 @@ std::unique_ptr<raw_fd_ostream> llvm::CreateInfoOutputFile() {
   return llvm::make_unique<raw_fd_ostream>(2, false); // stderr.
 }
 
-
-static TimerGroup *DefaultTimerGroup = nullptr;
-static TimerGroup *getDefaultTimerGroup() {
-  TimerGroup *tmp = DefaultTimerGroup;
-  sys::MemoryFence();
-  if (tmp) return tmp;
-
-  sys::SmartScopedLock<true> Lock(*TimerLock);
-  tmp = DefaultTimerGroup;
-  if (!tmp) {
-    tmp = new TimerGroup("misc", "Miscellaneous Ungrouped Timers");
-    sys::MemoryFence();
-    DefaultTimerGroup = tmp;
+namespace {
+struct CreateDefaultTimerGroup {
+  static void *call() {
+    return new TimerGroup("misc", "Miscellaneous Ungrouped Timers");
   }
-
-  return tmp;
-}
+};
+} // namespace
+static ManagedStatic<TimerGroup, CreateDefaultTimerGroup> DefaultTimerGroup;
+static TimerGroup *getDefaultTimerGroup() { return &*DefaultTimerGroup; }
 
 //===----------------------------------------------------------------------===//
 // Timer Implementation
@@ -140,6 +137,7 @@ TimeRecord TimeRecord::getCurrentTime(bool Start) {
 void Timer::startTimer() {
   assert(!Running && "Cannot start a running timer");
   Running = Triggered = true;
+  Signposts->startTimerInterval(this);
   StartTime = TimeRecord::getCurrentTime(true);
 }
 
@@ -148,6 +146,7 @@ void Timer::stopTimer() {
   Running = false;
   Time += TimeRecord::getCurrentTime(false);
   Time -= StartTime;
+  Signposts->endTimerInterval(this);
 }
 
 void Timer::clear() {
@@ -242,6 +241,15 @@ TimerGroup::TimerGroup(StringRef Name, StringRef Description)
   TimerGroupList = this;
 }
 
+TimerGroup::TimerGroup(StringRef Name, StringRef Description,
+                       const StringMap<TimeRecord> &Records)
+    : TimerGroup(Name, Description) {
+  TimersToPrint.reserve(Records.size());
+  for (const auto &P : Records)
+    TimersToPrint.emplace_back(P.getValue(), P.getKey(), P.getKey());
+  assert(TimersToPrint.size() == Records.size() && "Size mismatch");
+}
+
 TimerGroup::~TimerGroup() {
   // If the timer group is destroyed before the timers it owns, accumulate and
   // print the timing data.
@@ -292,7 +300,7 @@ void TimerGroup::addTimer(Timer &T) {
 
 void TimerGroup::PrintQueuedTimers(raw_ostream &OS) {
   // Sort the timers in descending order by amount of time taken.
-  std::sort(TimersToPrint.begin(), TimersToPrint.end());
+  llvm::sort(TimersToPrint);
 
   TimeRecord Total;
   for (const PrintRecord &Record : TimersToPrint)
@@ -309,7 +317,7 @@ void TimerGroup::PrintQueuedTimers(raw_ostream &OS) {
   // If this is not an collection of ungrouped times, print the total time.
   // Ungrouped timers don't really make sense to add up.  We still print the
   // TOTAL line to make the percentages make sense.
-  if (this != DefaultTimerGroup)
+  if (this != getDefaultTimerGroup())
     OS << format("  Total Execution Time: %5.4f seconds (%5.4f wall clock)\n",
                  Total.getProcessTime(), Total.getWallTime());
   OS << '\n';
@@ -339,26 +347,40 @@ void TimerGroup::PrintQueuedTimers(raw_ostream &OS) {
   TimersToPrint.clear();
 }
 
-void TimerGroup::prepareToPrintList() {
-  // See if any of our timers were started, if so add them to TimersToPrint and
-  // reset them.
+void TimerGroup::prepareToPrintList(bool ResetTime) {
+  // See if any of our timers were started, if so add them to TimersToPrint.
   for (Timer *T = FirstTimer; T; T = T->Next) {
     if (!T->hasTriggered()) continue;
+    bool WasRunning = T->isRunning();
+    if (WasRunning)
+      T->stopTimer();
+
     TimersToPrint.emplace_back(T->Time, T->Name, T->Description);
 
-    // Clear out the time.
-    T->clear();
+    if (ResetTime)
+      T->clear();
+
+    if (WasRunning)
+      T->startTimer();
   }
 }
 
-void TimerGroup::print(raw_ostream &OS) {
-  sys::SmartScopedLock<true> L(*TimerLock);
-
-  prepareToPrintList();
+void TimerGroup::print(raw_ostream &OS, bool ResetAfterPrint) {
+  {
+    // After preparing the timers we can free the lock
+    sys::SmartScopedLock<true> L(*TimerLock);
+    prepareToPrintList(ResetAfterPrint);
+  }
 
   // If any timers were started, print the group.
   if (!TimersToPrint.empty())
     PrintQueuedTimers(OS);
+}
+
+void TimerGroup::clear() {
+  sys::SmartScopedLock<true> L(*TimerLock);
+  for (Timer *T = FirstTimer; T; T = T->Next)
+    T->clear();
 }
 
 void TimerGroup::printAll(raw_ostream &OS) {
@@ -368,15 +390,27 @@ void TimerGroup::printAll(raw_ostream &OS) {
     TG->print(OS);
 }
 
+void TimerGroup::clearAll() {
+  sys::SmartScopedLock<true> L(*TimerLock);
+  for (TimerGroup *TG = TimerGroupList; TG; TG = TG->Next)
+    TG->clear();
+}
+
 void TimerGroup::printJSONValue(raw_ostream &OS, const PrintRecord &R,
                                 const char *suffix, double Value) {
-  assert(!yaml::needsQuotes(Name) && "TimerGroup name needs no quotes");
-  assert(!yaml::needsQuotes(R.Name) && "Timer name needs no quotes");
-  OS << "\t\"time." << Name << '.' << R.Name << suffix << "\": " << Value;
+  assert(yaml::needsQuotes(Name) == yaml::QuotingType::None &&
+         "TimerGroup name should not need quotes");
+  assert(yaml::needsQuotes(R.Name) == yaml::QuotingType::None &&
+         "Timer name should not need quotes");
+  constexpr auto max_digits10 = std::numeric_limits<double>::max_digits10;
+  OS << "\t\"time." << Name << '.' << R.Name << suffix
+     << "\": " << format("%.*e", max_digits10 - 1, Value);
 }
 
 const char *TimerGroup::printJSONValues(raw_ostream &OS, const char *delim) {
-  prepareToPrintList();
+  sys::SmartScopedLock<true> L(*TimerLock);
+
+  prepareToPrintList(false);
   for (const PrintRecord &R : TimersToPrint) {
     OS << delim;
     delim = ",\n";
@@ -387,6 +421,10 @@ const char *TimerGroup::printJSONValues(raw_ostream &OS, const char *delim) {
     printJSONValue(OS, R, ".user", T.getUserTime());
     OS << delim;
     printJSONValue(OS, R, ".sys", T.getSystemTime());
+    if (T.getMemUsed()) {
+      OS << delim;
+      printJSONValue(OS, R, ".mem", T.getMemUsed());
+    }
   }
   TimersToPrint.clear();
   return delim;

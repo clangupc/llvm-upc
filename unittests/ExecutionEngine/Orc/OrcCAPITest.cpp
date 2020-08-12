@@ -1,18 +1,18 @@
 //===--------------- OrcCAPITest.cpp - Unit tests Orc C API ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "OrcTestCommon.h"
-#include "gtest/gtest.h"
+#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/OrcBindings.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/TargetMachine.h"
+#include "gtest/gtest.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,8 +26,15 @@ class OrcCAPIExecutionTest : public testing::Test, public OrcExecutionTest {
 protected:
   std::unique_ptr<Module> createTestModule(const Triple &TT) {
     ModuleBuilder MB(Context, TT.str(), "");
-    Function *TestFunc = MB.createFunctionDecl<int()>("testFunc");
-    Function *Main = MB.createFunctionDecl<int(int, char*[])>("main");
+    Type *IntTy = Type::getScalarTy<int>(Context);
+    Function *TestFunc =
+        MB.createFunctionDecl(FunctionType::get(IntTy, {}, false), "testFunc");
+    Function *Main = MB.createFunctionDecl(
+        FunctionType::get(
+            IntTy,
+            {IntTy, Type::getInt8PtrTy(Context)->getPointerTo()},
+            false),
+        "main");
 
     Main->getBasicBlockList().push_back(BasicBlock::Create(Context));
     IRBuilder<> B(&Main->back());
@@ -35,6 +42,13 @@ protected:
     B.CreateRet(Result);
 
     return MB.takeModule();
+  }
+
+  std::unique_ptr<MemoryBuffer> createTestObject() {
+    orc::SimpleCompiler IRCompiler(*TM);
+    auto M = createTestModule(TM->getTargetTriple());
+    M->setDataLayout(TM->createDataLayout());
+    return IRCompiler(*M);
   }
 
   typedef int (*MainFnTy)();
@@ -65,10 +79,11 @@ protected:
     CompileContext *CCtx = static_cast<CompileContext*>(Ctx);
     auto *ET = CCtx->APIExecTest;
     CCtx->M = ET->createTestModule(ET->TM->getTargetTriple());
-    CCtx->H = LLVMOrcAddEagerlyCompiledIR(JITStack, wrap(CCtx->M.get()),
-                                          myResolver, nullptr);
+    LLVMOrcAddEagerlyCompiledIR(JITStack, &CCtx->H, wrap(CCtx->M.release()),
+                                myResolver, nullptr);
     CCtx->Compiled = true;
-    LLVMOrcTargetAddress MainAddr = LLVMOrcGetSymbolAddress(JITStack, "main");
+    LLVMOrcTargetAddress MainAddr;
+    LLVMOrcGetSymbolAddress(JITStack, &MainAddr, "main");
     LLVMOrcSetIndirectStubPointer(JITStack, "foo", MainAddr);
     return MainAddr;
   }
@@ -77,7 +92,7 @@ protected:
 char *OrcCAPIExecutionTest::testFuncName = nullptr;
 
 TEST_F(OrcCAPIExecutionTest, TestEagerIRCompilation) {
-  if (!TM)
+  if (!SupportsJIT)
     return;
 
   LLVMOrcJITStackRef JIT =
@@ -87,12 +102,28 @@ TEST_F(OrcCAPIExecutionTest, TestEagerIRCompilation) {
 
   LLVMOrcGetMangledSymbol(JIT, &testFuncName, "testFunc");
 
-  LLVMOrcModuleHandle H =
-    LLVMOrcAddEagerlyCompiledIR(JIT, wrap(M.get()), myResolver, nullptr);
-  MainFnTy MainFn = (MainFnTy)LLVMOrcGetSymbolAddress(JIT, "main");
-  int Result = MainFn();
-  EXPECT_EQ(Result, 42)
-    << "Eagerly JIT'd code did not return expected result";
+  LLVMOrcModuleHandle H;
+  LLVMOrcAddEagerlyCompiledIR(JIT, &H, wrap(M.release()), myResolver, nullptr);
+
+  // get symbol address searching the entire stack
+  {
+    LLVMOrcTargetAddress MainAddr;
+    LLVMOrcGetSymbolAddress(JIT, &MainAddr, "main");
+    MainFnTy MainFn = (MainFnTy)MainAddr;
+    int Result = MainFn();
+    EXPECT_EQ(Result, 42)
+      << "Eagerly JIT'd code did not return expected result";
+  }
+
+  // and then just searching a single handle
+  {
+    LLVMOrcTargetAddress MainAddr;
+    LLVMOrcGetSymbolAddressIn(JIT, &MainAddr, H, "main");
+    MainFnTy MainFn = (MainFnTy)MainAddr;
+    int Result = MainFn();
+    EXPECT_EQ(Result, 42)
+      << "Eagerly JIT'd code did not return expected result";
+  }
 
   LLVMOrcRemoveModule(JIT, H);
 
@@ -101,7 +132,7 @@ TEST_F(OrcCAPIExecutionTest, TestEagerIRCompilation) {
 }
 
 TEST_F(OrcCAPIExecutionTest, TestLazyIRCompilation) {
-  if (!TM)
+  if (!SupportsIndirection)
     return;
 
   LLVMOrcJITStackRef JIT =
@@ -111,9 +142,36 @@ TEST_F(OrcCAPIExecutionTest, TestLazyIRCompilation) {
 
   LLVMOrcGetMangledSymbol(JIT, &testFuncName, "testFunc");
 
-  LLVMOrcModuleHandle H =
-    LLVMOrcAddLazilyCompiledIR(JIT, wrap(M.get()), myResolver, nullptr);
-  MainFnTy MainFn = (MainFnTy)LLVMOrcGetSymbolAddress(JIT, "main");
+  LLVMOrcModuleHandle H;
+  LLVMOrcAddLazilyCompiledIR(JIT, &H, wrap(M.release()), myResolver, nullptr);
+  LLVMOrcTargetAddress MainAddr;
+  LLVMOrcGetSymbolAddress(JIT, &MainAddr, "main");
+  MainFnTy MainFn = (MainFnTy)MainAddr;
+  int Result = MainFn();
+  EXPECT_EQ(Result, 42)
+    << "Lazily JIT'd code did not return expected result";
+
+  LLVMOrcRemoveModule(JIT, H);
+
+  LLVMOrcDisposeMangledSymbol(testFuncName);
+  LLVMOrcDisposeInstance(JIT);
+}
+
+TEST_F(OrcCAPIExecutionTest, TestAddObjectFile) {
+  if (!SupportsJIT)
+    return;
+
+  auto ObjBuffer = createTestObject();
+
+  LLVMOrcJITStackRef JIT =
+    LLVMOrcCreateInstance(wrap(TM.get()));
+  LLVMOrcGetMangledSymbol(JIT, &testFuncName, "testFunc");
+
+  LLVMOrcModuleHandle H;
+  LLVMOrcAddObjectFile(JIT, &H, wrap(ObjBuffer.release()), myResolver, nullptr);
+  LLVMOrcTargetAddress MainAddr;
+  LLVMOrcGetSymbolAddress(JIT, &MainAddr, "main");
+  MainFnTy MainFn = (MainFnTy)MainAddr;
   int Result = MainFn();
   EXPECT_EQ(Result, 42)
     << "Lazily JIT'd code did not return expected result";
@@ -125,7 +183,7 @@ TEST_F(OrcCAPIExecutionTest, TestLazyIRCompilation) {
 }
 
 TEST_F(OrcCAPIExecutionTest, TestDirectCallbacksAPI) {
-  if (!TM)
+  if (!SupportsIndirection)
     return;
 
   LLVMOrcJITStackRef JIT =
@@ -135,11 +193,12 @@ TEST_F(OrcCAPIExecutionTest, TestDirectCallbacksAPI) {
 
   CompileContext C;
   C.APIExecTest = this;
-  LLVMOrcCreateIndirectStub(JIT, "foo",
-                            LLVMOrcCreateLazyCompileCallback(JIT,
-                                                             myCompileCallback,
-                                                             &C));
-  MainFnTy FooFn = (MainFnTy)LLVMOrcGetSymbolAddress(JIT, "foo");
+  LLVMOrcTargetAddress CCAddr;
+  LLVMOrcCreateLazyCompileCallback(JIT, &CCAddr, myCompileCallback, &C);
+  LLVMOrcCreateIndirectStub(JIT, "foo", CCAddr);
+  LLVMOrcTargetAddress MainAddr;
+  LLVMOrcGetSymbolAddress(JIT, &MainAddr, "foo");
+  MainFnTy FooFn = (MainFnTy)MainAddr;
   int Result = FooFn();
   EXPECT_TRUE(C.Compiled)
     << "Function wasn't lazily compiled";

@@ -1,9 +1,8 @@
-//===-- LambdaResolverMM - Redirect symbol lookup via a functor -*- C++ -*-===//
+//===- LambdaResolverMM - Redirect symbol lookup via a functor --*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,17 +15,25 @@
 #define LLVM_EXECUTIONENGINE_ORC_LAMBDARESOLVER_H
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ExecutionEngine/RuntimeDyld.h"
+#include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/OrcV1Deprecation.h"
 #include <memory>
 
 namespace llvm {
 namespace orc {
 
 template <typename DylibLookupFtorT, typename ExternalLookupFtorT>
-class LambdaResolver : public JITSymbolResolver {
+class LambdaResolver : public LegacyJITSymbolResolver {
 public:
+  LLVM_ATTRIBUTE_DEPRECATED(
+      LambdaResolver(DylibLookupFtorT DylibLookupFtor,
+                     ExternalLookupFtorT ExternalLookupFtor),
+      "ORCv1 utilities (including resolvers) are deprecated and will be "
+      "removed "
+      "in the next release. Please use ORCv2 (see docs/ORCv2.rst)");
 
-  LambdaResolver(DylibLookupFtorT DylibLookupFtor,
+  LambdaResolver(ORCv1DeprecationAcknowledgement,
+                 DylibLookupFtorT DylibLookupFtor,
                  ExternalLookupFtorT ExternalLookupFtor)
       : DylibLookupFtor(DylibLookupFtor),
         ExternalLookupFtor(ExternalLookupFtor) {}
@@ -44,17 +51,34 @@ private:
   ExternalLookupFtorT ExternalLookupFtor;
 };
 
+template <typename DylibLookupFtorT, typename ExternalLookupFtorT>
+LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>::LambdaResolver(
+    DylibLookupFtorT DylibLookupFtor, ExternalLookupFtorT ExternalLookupFtor)
+    : DylibLookupFtor(DylibLookupFtor), ExternalLookupFtor(ExternalLookupFtor) {
+}
+
 template <typename DylibLookupFtorT,
           typename ExternalLookupFtorT>
-std::unique_ptr<LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>>
+std::shared_ptr<LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>>
 createLambdaResolver(DylibLookupFtorT DylibLookupFtor,
                      ExternalLookupFtorT ExternalLookupFtor) {
-  typedef LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT> LR;
+  using LR = LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>;
   return make_unique<LR>(std::move(DylibLookupFtor),
                          std::move(ExternalLookupFtor));
 }
 
-} // End namespace orc.
-} // End namespace llvm.
+template <typename DylibLookupFtorT, typename ExternalLookupFtorT>
+std::shared_ptr<LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>>
+createLambdaResolver(ORCv1DeprecationAcknowledgement,
+                     DylibLookupFtorT DylibLookupFtor,
+                     ExternalLookupFtorT ExternalLookupFtor) {
+  using LR = LambdaResolver<DylibLookupFtorT, ExternalLookupFtorT>;
+  return make_unique<LR>(AcknowledgeORCv1Deprecation,
+                         std::move(DylibLookupFtor),
+                         std::move(ExternalLookupFtor));
+}
+
+} // end namespace orc
+} // end namespace llvm
 
 #endif // LLVM_EXECUTIONENGINE_ORC_LAMBDARESOLVER_H

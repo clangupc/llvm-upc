@@ -1,5 +1,5 @@
-; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=cortex-a9 | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-CORTEX
-; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=swift     | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-SWIFT
+; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=cortex-a9 -simplifycfg-sink-common=false | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-CORTEX
+; RUN: llc < %s -mtriple=thumbv7-apple-darwin -mcpu=swift     -simplifycfg-sink-common=false | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-SWIFT
 ; Avoid some 's' 16-bit instruction which partially update CPSR (and add false
 ; dependency) when it isn't dependent on last CPSR defining instruction.
 ; rdar://8928208
@@ -60,7 +60,7 @@ entry:
 
 while.body:
 ; CHECK: while.body
-; CHECK: mul r{{[0-9]+}}
+; CHECK: muls r{{[0-9]+}}
 ; CHECK: muls
   %ptr1.addr.09 = phi i32* [ %add.ptr, %while.body ], [ %ptr1, %entry ]
   %ptr2.addr.08 = phi i32* [ %incdec.ptr, %while.body ], [ %ptr2, %entry ]

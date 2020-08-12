@@ -1,5 +1,5 @@
-// RUN: llvm-mc -triple amdgcn--amdhsa -mcpu=kaveri -show-encoding %s | FileCheck %s --check-prefix=ASM
-// RUN: llvm-mc -filetype=obj -triple amdgcn--amdhsa -mcpu=kaveri -show-encoding %s | llvm-readobj -symbols -s -sd | FileCheck %s --check-prefix=ELF
+// RUN: llvm-mc -triple amdgcn--amdhsa -mcpu=kaveri -mattr=-code-object-v3 -show-encoding %s | FileCheck %s --check-prefix=ASM
+// RUN: llvm-mc -filetype=obj -triple amdgcn--amdhsa -mcpu=kaveri -mattr=-code-object-v3 -show-encoding %s | llvm-readobj --symbols -S --sd | FileCheck %s --check-prefix=ELF
 
 // ELF: Section {
 // ELF: Name: .text
@@ -37,25 +37,23 @@
 .hsa_code_object_isa 7,0,0,"AMD","AMDGPU"
 // ASM: .hsa_code_object_isa 7,0,0,"AMD","AMDGPU"
 
-.amdgpu_runtime_metadata
-    {
-        amd.MDVersion: [ 2, 0 ]
-        amd.Kernels: [
-            { amd.KernelName: amd_kernel_code_t_test_all },
-            { amd.KernelName: amd_kernel_code_t_minimal }
-        ]
-    }
-.end_amdgpu_runtime_metadata
+.amd_amdgpu_hsa_metadata
+  Version: [ 3, 0 ]
+  Kernels:
+    - Name:       amd_kernel_code_t_test_all
+      SymbolName: amd_kernel_code_t_test_all@kd
+    - Name:       amd_kernel_code_t_minimal
+      SymbolName: amd_kernel_code_t_minimal@kd
+.end_amd_amdgpu_hsa_metadata
 
-// ASM: .amdgpu_runtime_metadata
-// ASM:     {
-// ASM:         amd.MDVersion: [ 2, 0 ]
-// ASM:         amd.Kernels: [
-// ASM:             { amd.KernelName: amd_kernel_code_t_test_all },
-// ASM:             { amd.KernelName: amd_kernel_code_t_minimal }
-// ASM:         ]
-// ASM:     }
-// ASM: .end_amdgpu_runtime_metadata
+// ASM: .amd_amdgpu_hsa_metadata
+// ASM:    Version: [ 3, 0 ]
+// ASM:    Kernels:
+// ASM:      - Name:       amd_kernel_code_t_test_all
+// ASM:        SymbolName: 'amd_kernel_code_t_test_all@kd'
+// ASM:      - Name:       amd_kernel_code_t_minimal
+// ASM:        SymbolName: 'amd_kernel_code_t_minimal@kd'
+// ASM: .end_amd_amdgpu_hsa_metadata
 
 .amdgpu_hsa_kernel amd_kernel_code_t_test_all
 .amdgpu_hsa_kernel amd_kernel_code_t_minimal
@@ -122,7 +120,7 @@ amd_kernel_code_t_test_all:
     kernarg_segment_alignment = 5
     group_segment_alignment = 5
     private_segment_alignment = 5
-    wavefront_size = 5
+    wavefront_size = 6
     call_convention = 1
     runtime_loader_kernel_symbol = 1
 .end_amd_kernel_code_t
@@ -137,7 +135,6 @@ amd_kernel_code_t_test_all:
 // ASM: amd_machine_version_stepping = 5
 // ASM: kernel_code_entry_byte_offset = 512
 // ASM: kernel_code_prefetch_byte_size = 1
-// ASM: max_scratch_backing_memory_byte_size = 1
 // ASM: granulated_workitem_vgpr_count = 1
 // ASM: granulated_wavefront_sgpr_count = 1
 // ASM: priority = 1
@@ -188,7 +185,7 @@ amd_kernel_code_t_test_all:
 // ASM: kernarg_segment_alignment = 5
 // ASM: group_segment_alignment = 5
 // ASM: private_segment_alignment = 5
-// ASM: wavefront_size = 5
+// ASM: wavefront_size = 6
 // ASM: call_convention = 1
 // ASM: runtime_loader_kernel_symbol = 1
 // ASM: .end_amd_kernel_code_t
@@ -214,14 +211,13 @@ amd_kernel_code_t_minimal:
 // ASM-LABEL: {{^}}amd_kernel_code_t_minimal:
 // ASM: .amd_kernel_code_t
 // ASM:	amd_code_version_major = 1
-// ASM:	amd_code_version_minor = 0
+// ASM:	amd_code_version_minor = 2
 // ASM:	amd_machine_kind = 1
 // ASM:	amd_machine_version_major = 7
 // ASM:	amd_machine_version_minor = 0
 // ASM:	amd_machine_version_stepping = 0
 // ASM:	kernel_code_entry_byte_offset = 256
 // ASM:	kernel_code_prefetch_byte_size = 0
-// ASM:	max_scratch_backing_memory_byte_size = 0
 // ASM: granulated_workitem_vgpr_count = 1
 // ASM: granulated_wavefront_sgpr_count = 1
 // ASM: priority = 0
@@ -273,6 +269,6 @@ amd_kernel_code_t_minimal:
 // ASM:	group_segment_alignment = 4
 // ASM:	private_segment_alignment = 4
 // ASM:	wavefront_size = 6
-// ASM:	call_convention = 0
+// ASM:	call_convention = -1
 // ASM:	runtime_loader_kernel_symbol = 0
 // ASM: .end_amd_kernel_code_t

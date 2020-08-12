@@ -1,9 +1,8 @@
 //===-- InstCount.cpp - Collects the count of all instructions ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Analysis/Passes.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/Passes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstVisitor.h"
 #include "llvm/Pass.h"
@@ -26,13 +25,11 @@ using namespace llvm;
 STATISTIC(TotalInsts , "Number of instructions (of all types)");
 STATISTIC(TotalBlocks, "Number of basic blocks");
 STATISTIC(TotalFuncs , "Number of non-external functions");
-STATISTIC(TotalMemInst, "Number of memory instructions");
 
 #define HANDLE_INST(N, OPCODE, CLASS) \
   STATISTIC(Num ## OPCODE ## Inst, "Number of " #OPCODE " insts");
 
 #include "llvm/IR/Instruction.def"
-
 
 namespace {
   class InstCount : public FunctionPass, public InstVisitor<InstCount> {
@@ -76,13 +73,6 @@ FunctionPass *llvm::createInstCountPass() { return new InstCount(); }
 // function.
 //
 bool InstCount::runOnFunction(Function &F) {
-  unsigned StartMemInsts =
-    NumGetElementPtrInst + NumLoadInst + NumStoreInst + NumCallInst +
-    NumInvokeInst + NumAllocaInst;
   visit(F);
-  unsigned EndMemInsts =
-    NumGetElementPtrInst + NumLoadInst + NumStoreInst + NumCallInst +
-    NumInvokeInst + NumAllocaInst;
-  TotalMemInst += EndMemInsts-StartMemInsts;
   return false;
 }

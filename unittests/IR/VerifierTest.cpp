@@ -1,24 +1,22 @@
 //===- llvm/unittest/IR/VerifierTest.cpp - Verifier unit tests --*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/IR/Verifier.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/GlobalVariable.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Verifier.h"
 #include "gtest/gtest.h"
 
 namespace llvm {
@@ -28,7 +26,7 @@ TEST(VerifierTest, Branch_i1) {
   LLVMContext C;
   Module M("M", C);
   FunctionType *FTy = FunctionType::get(Type::getVoidTy(C), /*isVarArg=*/false);
-  Function *F = cast<Function>(M.getOrInsertFunction("foo", FTy));
+  Function *F = Function::Create(FTy, Function::ExternalLinkage, "foo", M);
   BasicBlock *Entry = BasicBlock::Create(C, "entry", F);
   BasicBlock *Exit = BasicBlock::Create(C, "exit", F);
   ReturnInst::Create(C, Exit);
@@ -51,10 +49,10 @@ TEST(VerifierTest, InvalidRetAttribute) {
   LLVMContext C;
   Module M("M", C);
   FunctionType *FTy = FunctionType::get(Type::getInt32Ty(C), /*isVarArg=*/false);
-  Function *F = cast<Function>(M.getOrInsertFunction("foo", FTy));
-  AttributeSet AS = F->getAttributes();
-  F->setAttributes(AS.addAttribute(C, AttributeSet::ReturnIndex,
-                                   Attribute::UWTable));
+  Function *F = Function::Create(FTy, Function::ExternalLinkage, "foo", M);
+  AttributeList AS = F->getAttributes();
+  F->setAttributes(
+      AS.addAttribute(C, AttributeList::ReturnIndex, Attribute::UWTable));
 
   std::string Error;
   raw_string_ostream ErrorOS(Error);
@@ -69,9 +67,9 @@ TEST(VerifierTest, CrossModuleRef) {
   Module M2("M2", C);
   Module M3("M3", C);
   FunctionType *FTy = FunctionType::get(Type::getInt32Ty(C), /*isVarArg=*/false);
-  Function *F1 = cast<Function>(M1.getOrInsertFunction("foo1", FTy));
-  Function *F2 = cast<Function>(M2.getOrInsertFunction("foo2", FTy));
-  Function *F3 = cast<Function>(M3.getOrInsertFunction("foo3", FTy));
+  Function *F1 = Function::Create(FTy, Function::ExternalLinkage, "foo1", M1);
+  Function *F2 = Function::Create(FTy, Function::ExternalLinkage, "foo2", M2);
+  Function *F3 = Function::Create(FTy, Function::ExternalLinkage, "foo3", M3);
 
   BasicBlock *Entry1 = BasicBlock::Create(C, "entry", F1);
   BasicBlock *Entry3 = BasicBlock::Create(C, "entry", F3);
@@ -149,7 +147,7 @@ TEST(VerifierTest, InvalidFunctionLinkage) {
                                           "have external or weak linkage!"));
 }
 
-TEST(VerifierTest, StripInvalidDebugInfo) {
+TEST(VerifierTest, DetectInvalidDebugInfo) {
   {
     LLVMContext C;
     Module M("M", C);
@@ -164,13 +162,6 @@ TEST(VerifierTest, StripInvalidDebugInfo) {
     NamedMDNode *NMD = M.getOrInsertNamedMetadata("llvm.dbg.cu");
     NMD->addOperand(File);
     EXPECT_TRUE(verifyModule(M));
-
-    ModulePassManager MPM(true);
-    MPM.addPass(VerifierPass(false));
-    ModuleAnalysisManager MAM(true);
-    MAM.registerPass([&] { return VerifierAnalysis(); });
-    MPM.run(M, MAM);
-    EXPECT_FALSE(verifyModule(M));
   }
   {
     LLVMContext C;
@@ -182,48 +173,21 @@ TEST(VerifierTest, StripInvalidDebugInfo) {
     new GlobalVariable(M, Type::getInt8Ty(C), false,
                        GlobalValue::ExternalLinkage, nullptr, "g");
 
-    auto *F = cast<Function>(M.getOrInsertFunction(
-        "f", FunctionType::get(Type::getVoidTy(C), false)));
+    auto *F = Function::Create(FunctionType::get(Type::getVoidTy(C), false),
+                               Function::ExternalLinkage, "f", M);
     IRBuilder<> Builder(BasicBlock::Create(C, "", F));
     Builder.CreateUnreachable();
-    F->setSubprogram(DIB.createFunction(CU, "f", "f",
-                                        DIB.createFile("broken.c", "/"), 1,
-                                        nullptr, true, true, 1));
+    F->setSubprogram(DIB.createFunction(
+        CU, "f", "f", DIB.createFile("broken.c", "/"), 1, nullptr, 1,
+        DINode::FlagZero,
+        DISubprogram::SPFlagLocalToUnit | DISubprogram::SPFlagDefinition));
     DIB.finalize();
     EXPECT_FALSE(verifyModule(M));
 
     // Now break it by not listing the CU at all.
     M.eraseNamedMetadata(M.getOrInsertNamedMetadata("llvm.dbg.cu"));
     EXPECT_TRUE(verifyModule(M));
-
-    ModulePassManager MPM(true);
-    MPM.addPass(VerifierPass(false));
-    ModuleAnalysisManager MAM(true);
-    MAM.registerPass([&] { return VerifierAnalysis(); });
-    MPM.run(M, MAM);
-    EXPECT_FALSE(verifyModule(M));
   }
-}
-
-TEST(VerifierTest, StripInvalidDebugInfoLegacy) {
-  LLVMContext C;
-  Module M("M", C);
-  DIBuilder DIB(M);
-  DIB.createCompileUnit(dwarf::DW_LANG_C89, DIB.createFile("broken.c", "/"),
-                        "unittest", false, "", 0);
-  DIB.finalize();
-  EXPECT_FALSE(verifyModule(M));
-
-  // Now break it.
-  auto *File = DIB.createFile("not-a-CU.f", ".");
-  NamedMDNode *NMD = M.getOrInsertNamedMetadata("llvm.dbg.cu");
-  NMD->addOperand(File);
-  EXPECT_TRUE(verifyModule(M));
-
-  legacy::PassManager Passes;
-  Passes.add(createVerifierPass(false));
-  Passes.run(M);
-  EXPECT_FALSE(verifyModule(M));
 }
 
 } // end anonymous namespace

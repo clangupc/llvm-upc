@@ -1,4 +1,5 @@
-; RUN: llc < %s -filetype=obj | llvm-readobj - -codeview | FileCheck %s
+; RUN: llc < %s -filetype=obj | llvm-readobj - --codeview | FileCheck %s
+; RUN: llc < %s | llvm-mc -filetype=obj --triple=i686-windows | llvm-readobj - --codeview | FileCheck %s
 
 ; C++ source to regenerate:
 ; struct S {
@@ -43,7 +44,7 @@ target triple = "i686-pc-windows-msvc18.0.0"
 !llvm.module.flags = !{!15, !16}
 !llvm.ident = !{!17}
 
-!0 = !DIGlobalVariableExpression(var: !1)
+!0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression())
 !1 = !DIGlobalVariable(name: "s", scope: !2, file: !6, line: 5, type: !7, isLocal: false, isDefinition: true)
 !2 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, producer: "clang version 3.9.0 (trunk 274261) (llvm/trunk 274262)", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !4, globals: !5)
 !3 = !DIFile(filename: "-", directory: "/usr/local/google/home/majnemer/llvm/src")

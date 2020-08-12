@@ -1,4 +1,4 @@
-# RUN: llvm-mc -filetype=obj -triple i686-pc-win32 < %s | llvm-readobj -codeview - | FileCheck %s
+# RUN: llvm-mc -filetype=obj -triple i686-pc-win32 < %s | llvm-readobj --codeview - | FileCheck %s
 	.text
 	.def	 @feat.00;
 	.scl	3;
@@ -14,7 +14,7 @@
 	.p2align	4, 0x90
 _f:                                     # @f
 Lfunc_begin0:
-# BB#0:                                 # %entry
+# %bb.0:                                # %entry
 	.cv_file	1 "cv-empty-linetable.s"
 	.cv_func_id 1
 	.cv_loc	1 1 3 15 is_stmt 0

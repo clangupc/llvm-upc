@@ -1,5 +1,5 @@
 ; RUN: llc -verify-machineinstrs -mtriple=aarch64-apple-ios -o - %s | FileCheck --check-prefix=CHECK --check-prefix=OPT %s
-; RUN: llc -O0 -verify-machineinstrs -mtriple=aarch64-apple-ios -o - %s | FileCheck %s
+; RUN: llc -O0 -fast-isel -verify-machineinstrs -mtriple=aarch64-apple-ios -o - %s | FileCheck %s
 ; RUN: llc -verify-machineinstrs -mtriple=aarch64-unknown-linux-gnu -o - %s | FileCheck --check-prefix=CHECK --check-prefix=OPT %s
 
 ; Parameter with swiftself should be allocated to x20.
@@ -46,9 +46,10 @@ define void @swiftself_passthrough(i8* swiftself %addr0) {
 }
 
 ; We can use a tail call if the callee swiftself is the same as the caller one.
+; This should also work with fast-isel.
 ; CHECK-LABEL: swiftself_tail:
-; OPT: b {{_?}}swiftself_param
-; OPT-NOT: ret
+; CHECK: b {{_?}}swiftself_param
+; CHECK-NOT: ret
 define i8* @swiftself_tail(i8* swiftself %addr0) {
   call void asm sideeffect "", "~{x20}"()
   %res = tail call i8* @swiftself_param(i8* swiftself %addr0)

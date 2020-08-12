@@ -1,9 +1,8 @@
-//===-- RuntimeDyld.h - Run-time dynamic linker for MC-JIT ------*- C++ -*-===//
+//===- RuntimeDyld.h - Run-time dynamic linker for MC-JIT -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -32,7 +31,9 @@
 namespace llvm {
 
 namespace object {
-  template <typename T> class OwningBinary;
+
+template <typename T> class OwningBinary;
+
 } // end namespace object
 
 /// Base class for errors originating in RuntimeDyld, e.g. missing relocation
@@ -52,23 +53,24 @@ private:
 };
 
 class RuntimeDyldImpl;
-class RuntimeDyldCheckerImpl;
 
 class RuntimeDyld {
-  friend class RuntimeDyldCheckerImpl;
-
 protected:
   // Change the address associated with a section when resolving relocations.
   // Any relocations already associated with the symbol will be re-resolved.
   void reassignSectionAddress(unsigned SectionID, uint64_t Addr);
 
 public:
-  /// \brief Information about the loaded object.
+  using NotifyStubEmittedFunction = std::function<void(
+      StringRef FileName, StringRef SectionName, StringRef SymbolName,
+      unsigned SectionID, uint32_t StubOffset)>;
+
+  /// Information about the loaded object.
   class LoadedObjectInfo : public llvm::LoadedObjectInfo {
     friend class RuntimeDyldImpl;
 
   public:
-    typedef std::map<object::SectionRef, unsigned> ObjSectionToIDMap;
+    using ObjSectionToIDMap = std::map<object::SectionRef, unsigned>;
 
     LoadedObjectInfo(RuntimeDyldImpl &RTDyld, ObjSectionToIDMap ObjSecToIDMap)
         : RTDyld(RTDyld), ObjSecToIDMap(std::move(ObjSecToIDMap)) {}
@@ -86,22 +88,7 @@ public:
     ObjSectionToIDMap ObjSecToIDMap;
   };
 
-  template <typename Derived> struct LoadedObjectInfoHelper : LoadedObjectInfo {
-  protected:
-    LoadedObjectInfoHelper(const LoadedObjectInfoHelper &) = default;
-    LoadedObjectInfoHelper() = default;
-
-  public:
-    LoadedObjectInfoHelper(RuntimeDyldImpl &RTDyld,
-                           LoadedObjectInfo::ObjSectionToIDMap ObjSecToIDMap)
-        : LoadedObjectInfo(RTDyld, std::move(ObjSecToIDMap)) {}
-
-    std::unique_ptr<llvm::LoadedObjectInfo> clone() const override {
-      return llvm::make_unique<Derived>(static_cast<const Derived &>(*this));
-    }
-  };
-
-  /// \brief Memory Management.
+  /// Memory Management.
   class MemoryManager {
     friend class RuntimeDyld;
 
@@ -150,8 +137,7 @@ public:
     /// be the case for local execution) these two values will be the same.
     virtual void registerEHFrames(uint8_t *Addr, uint64_t LoadAddr,
                                   size_t Size) = 0;
-    virtual void deregisterEHFrames(uint8_t *addr, uint64_t LoadAddr,
-                                    size_t Size) = 0;
+    virtual void deregisterEHFrames() = 0;
 
     /// This method is called when object loading is complete and section page
     /// permissions can be applied.  It is up to the memory manager implementation
@@ -184,10 +170,10 @@ public:
     bool FinalizationLocked = false;
   };
 
-  /// \brief Construct a RuntimeDyld instance.
+  /// Construct a RuntimeDyld instance.
   RuntimeDyld(MemoryManager &MemMgr, JITSymbolResolver &Resolver);
   RuntimeDyld(const RuntimeDyld &) = delete;
-  void operator=(const RuntimeDyld &) = delete;
+  RuntimeDyld &operator=(const RuntimeDyld &) = delete;
   ~RuntimeDyld();
 
   /// Add the referenced object file to the list of objects to be loaded and
@@ -199,9 +185,19 @@ public:
   /// and resolve relocatons based on where they put it).
   void *getSymbolLocalAddress(StringRef Name) const;
 
+  /// Get the section ID for the section containing the given symbol.
+  unsigned getSymbolSectionID(StringRef Name) const;
+
   /// Get the target address and flags for the named symbol.
   /// This address is the one used for relocation.
   JITEvaluatedSymbol getSymbol(StringRef Name) const;
+
+  /// Returns a copy of the symbol table. This can be used by on-finalized
+  /// callbacks to extract the symbol table before throwing away the
+  /// RuntimeDyld instance. Because the map keys (StringRefs) are backed by
+  /// strings inside the RuntimeDyld instance, the map should be processed
+  /// before the RuntimeDyld instance is discarded.
+  std::map<StringRef, JITEvaluatedSymbol> getSymbolTable() const;
 
   /// Resolve the relocations for all symbols we currently know about.
   void resolveRelocations();
@@ -211,6 +207,19 @@ public:
   /// to the address in the target process as the running code will see it.
   /// This is the address which will be used for relocation resolution.
   void mapSectionAddress(const void *LocalAddress, uint64_t TargetAddress);
+
+  /// Returns the section's working memory.
+  StringRef getSectionContent(unsigned SectionID) const;
+
+  /// If the section was loaded, return the section's load address,
+  /// otherwise return None.
+  uint64_t getSectionLoadAddress(unsigned SectionID) const;
+
+  /// Set the NotifyStubEmitted callback. This is used for debugging
+  /// purposes. A callback is made for each stub that is generated.
+  void setNotifyStubEmitted(NotifyStubEmittedFunction NotifyStubEmitted) {
+    this->NotifyStubEmitted = std::move(NotifyStubEmitted);
+  }
 
   /// Register any EH frame sections that have been loaded but not previously
   /// registered with the memory manager.  Note, RuntimeDyld is responsible
@@ -257,14 +266,39 @@ public:
   void finalizeWithMemoryManagerLocking();
 
 private:
+  friend void
+  jitLinkForORC(object::ObjectFile &Obj,
+                std::unique_ptr<MemoryBuffer> UnderlyingBuffer,
+                RuntimeDyld::MemoryManager &MemMgr, JITSymbolResolver &Resolver,
+                bool ProcessAllSections,
+                std::function<Error(std::unique_ptr<LoadedObjectInfo>,
+                                    std::map<StringRef, JITEvaluatedSymbol>)>
+                    OnLoaded,
+                std::function<void(Error)> OnEmitted);
+
   // RuntimeDyldImpl is the actual class. RuntimeDyld is just the public
   // interface.
   std::unique_ptr<RuntimeDyldImpl> Dyld;
   MemoryManager &MemMgr;
   JITSymbolResolver &Resolver;
   bool ProcessAllSections;
-  RuntimeDyldCheckerImpl *Checker;
+  NotifyStubEmittedFunction NotifyStubEmitted;
 };
+
+// Asynchronous JIT link for ORC.
+//
+// Warning: This API is experimental and probably should not be used by anyone
+// but ORC's RTDyldObjectLinkingLayer2. Internally it constructs a RuntimeDyld
+// instance and uses continuation passing to perform the fix-up and finalize
+// steps asynchronously.
+void jitLinkForORC(object::ObjectFile &Obj,
+                   std::unique_ptr<MemoryBuffer> UnderlyingBuffer,
+                   RuntimeDyld::MemoryManager &MemMgr,
+                   JITSymbolResolver &Resolver, bool ProcessAllSections,
+                   std::function<Error(std::unique_ptr<LoadedObjectInfo>,
+                                       std::map<StringRef, JITEvaluatedSymbol>)>
+                       OnLoaded,
+                   std::function<void(Error)> OnEmitted);
 
 } // end namespace llvm
 

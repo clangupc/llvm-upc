@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=arm64-apple-ios7.0 -disable-post-ra -disable-fp-elim | FileCheck %s
+; RUN: llc < %s -mtriple=arm64-apple-ios7.0 -disable-post-ra -frame-pointer=all | FileCheck %s
 ; RUN: llc < %s -mtriple=arm64-linux-gnu -disable-post-ra | FileCheck %s --check-prefix=CHECK-LINUX
 
 ; CHECK-LABEL: main:
@@ -6,8 +6,8 @@
 ; CHECK-NEXT:	stp	x29, x30, [sp, #16]
 ; CHECK-NEXT:	add	x29, sp, #16
 ; CHECK-NEXT:	stur	wzr, [x29, #-4]
-; CHECK:	adrp	x0, L_.str@PAGE
-; CHECK:	add	x0, x0, L_.str@PAGEOFF
+; CHECK:	adrp	x0, l_.str@PAGE
+; CHECK:	add	x0, x0, l_.str@PAGEOFF
 ; CHECK-NEXT:	bl	_puts
 ; CHECK-NEXT:	ldp	x29, x30, [sp, #16]
 ; CHECK-NEXT:	add	sp, sp, #32

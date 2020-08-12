@@ -318,7 +318,7 @@ define <2 x i64> @uaddw2d(<2 x i64>* %A, <2 x i32>* %B) nounwind {
 
 define <8 x i16> @uaddw2_8h(<8 x i16>* %A, <16 x i8>* %B) nounwind {
 ;CHECK-LABEL: uaddw2_8h:
-;CHECK: uaddw2.8h
+;CHECK: uaddw.8h
         %tmp1 = load <8 x i16>, <8 x i16>* %A
 
         %tmp2 = load <16 x i8>, <16 x i8>* %B
@@ -331,7 +331,7 @@ define <8 x i16> @uaddw2_8h(<8 x i16>* %A, <16 x i8>* %B) nounwind {
 
 define <4 x i32> @uaddw2_4s(<4 x i32>* %A, <8 x i16>* %B) nounwind {
 ;CHECK-LABEL: uaddw2_4s:
-;CHECK: uaddw2.4s
+;CHECK: uaddw.4s
         %tmp1 = load <4 x i32>, <4 x i32>* %A
 
         %tmp2 = load <8 x i16>, <8 x i16>* %B
@@ -344,7 +344,7 @@ define <4 x i32> @uaddw2_4s(<4 x i32>* %A, <8 x i16>* %B) nounwind {
 
 define <2 x i64> @uaddw2_2d(<2 x i64>* %A, <4 x i32>* %B) nounwind {
 ;CHECK-LABEL: uaddw2_2d:
-;CHECK: uaddw2.2d
+;CHECK: uaddw.2d
         %tmp1 = load <2 x i64>, <2 x i64>* %A
 
         %tmp2 = load <4 x i32>, <4 x i32>* %B
@@ -387,7 +387,7 @@ define <2 x i64> @saddw2d(<2 x i64>* %A, <2 x i32>* %B) nounwind {
 
 define <8 x i16> @saddw2_8h(<8 x i16>* %A, <16 x i8>* %B) nounwind {
 ;CHECK-LABEL: saddw2_8h:
-;CHECK: saddw2.8h
+;CHECK: saddw.8h
         %tmp1 = load <8 x i16>, <8 x i16>* %A
 
         %tmp2 = load <16 x i8>, <16 x i8>* %B
@@ -400,7 +400,7 @@ define <8 x i16> @saddw2_8h(<8 x i16>* %A, <16 x i8>* %B) nounwind {
 
 define <4 x i32> @saddw2_4s(<4 x i32>* %A, <8 x i16>* %B) nounwind {
 ;CHECK-LABEL: saddw2_4s:
-;CHECK: saddw2.4s
+;CHECK: saddw.4s
         %tmp1 = load <4 x i32>, <4 x i32>* %A
 
         %tmp2 = load <8 x i16>, <8 x i16>* %B
@@ -413,7 +413,7 @@ define <4 x i32> @saddw2_4s(<4 x i32>* %A, <8 x i16>* %B) nounwind {
 
 define <2 x i64> @saddw2_2d(<2 x i64>* %A, <4 x i32>* %B) nounwind {
 ;CHECK-LABEL: saddw2_2d:
-;CHECK: saddw2.2d
+;CHECK: saddw.2d
         %tmp1 = load <2 x i64>, <2 x i64>* %A
 
         %tmp2 = load <4 x i32>, <4 x i32>* %B
@@ -712,7 +712,7 @@ define <2 x float> @faddp_2s(<2 x float>* %A, <2 x float>* %B) nounwind {
 ;CHECK: faddp.2s
         %tmp1 = load <2 x float>, <2 x float>* %A
         %tmp2 = load <2 x float>, <2 x float>* %B
-        %tmp3 = call <2 x float> @llvm.aarch64.neon.addp.v2f32(<2 x float> %tmp1, <2 x float> %tmp2)
+        %tmp3 = call <2 x float> @llvm.aarch64.neon.faddp.v2f32(<2 x float> %tmp1, <2 x float> %tmp2)
         ret <2 x float> %tmp3
 }
 
@@ -721,7 +721,7 @@ define <4 x float> @faddp_4s(<4 x float>* %A, <4 x float>* %B) nounwind {
 ;CHECK: faddp.4s
         %tmp1 = load <4 x float>, <4 x float>* %A
         %tmp2 = load <4 x float>, <4 x float>* %B
-        %tmp3 = call <4 x float> @llvm.aarch64.neon.addp.v4f32(<4 x float> %tmp1, <4 x float> %tmp2)
+        %tmp3 = call <4 x float> @llvm.aarch64.neon.faddp.v4f32(<4 x float> %tmp1, <4 x float> %tmp2)
         ret <4 x float> %tmp3
 }
 
@@ -730,13 +730,29 @@ define <2 x double> @faddp_2d(<2 x double>* %A, <2 x double>* %B) nounwind {
 ;CHECK: faddp.2d
         %tmp1 = load <2 x double>, <2 x double>* %A
         %tmp2 = load <2 x double>, <2 x double>* %B
-        %tmp3 = call <2 x double> @llvm.aarch64.neon.addp.v2f64(<2 x double> %tmp1, <2 x double> %tmp2)
+        %tmp3 = call <2 x double> @llvm.aarch64.neon.faddp.v2f64(<2 x double> %tmp1, <2 x double> %tmp2)
         ret <2 x double> %tmp3
 }
 
-declare <2 x float> @llvm.aarch64.neon.addp.v2f32(<2 x float>, <2 x float>) nounwind readnone
-declare <4 x float> @llvm.aarch64.neon.addp.v4f32(<4 x float>, <4 x float>) nounwind readnone
-declare <2 x double> @llvm.aarch64.neon.addp.v2f64(<2 x double>, <2 x double>) nounwind readnone
+declare <2 x float> @llvm.aarch64.neon.faddp.v2f32(<2 x float>, <2 x float>) nounwind readnone
+declare <4 x float> @llvm.aarch64.neon.faddp.v4f32(<4 x float>, <4 x float>) nounwind readnone
+declare <2 x double> @llvm.aarch64.neon.faddp.v2f64(<2 x double>, <2 x double>) nounwind readnone
+
+define <2 x i64> @uaddl_duprhs(<4 x i32> %lhs, i32 %rhs) {
+; CHECK-LABEL: uaddl_duprhs
+; CHECK-NOT: ext.16b
+; CHECK: uaddl.2d
+  %rhsvec.tmp = insertelement <2 x i32> undef, i32 %rhs, i32 0
+  %rhsvec = insertelement <2 x i32> %rhsvec.tmp, i32 %rhs, i32 1
+
+  %lhs.high = shufflevector <4 x i32> %lhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+
+  %lhs.ext = zext <2 x i32> %lhs.high to <2 x i64>
+  %rhs.ext = zext <2 x i32> %rhsvec to <2 x i64>
+
+  %res = add <2 x i64> %lhs.ext, %rhs.ext
+  ret <2 x i64> %res
+}
 
 define <2 x i64> @uaddl2_duprhs(<4 x i32> %lhs, i32 %rhs) {
 ; CHECK-LABEL: uaddl2_duprhs
@@ -749,6 +765,22 @@ define <2 x i64> @uaddl2_duprhs(<4 x i32> %lhs, i32 %rhs) {
 
   %lhs.ext = zext <2 x i32> %lhs.high to <2 x i64>
   %rhs.ext = zext <2 x i32> %rhsvec to <2 x i64>
+
+  %res = add <2 x i64> %lhs.ext, %rhs.ext
+  ret <2 x i64> %res
+}
+
+define <2 x i64> @saddl_duplhs(i32 %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: saddl_duplhs
+; CHECK-NOT: ext.16b
+; CHECK: saddl.2d
+  %lhsvec.tmp = insertelement <2 x i32> undef, i32 %lhs, i32 0
+  %lhsvec = insertelement <2 x i32> %lhsvec.tmp, i32 %lhs, i32 1
+
+  %rhs.high = shufflevector <4 x i32> %rhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+
+  %lhs.ext = sext <2 x i32> %lhsvec to <2 x i64>
+  %rhs.ext = sext <2 x i32> %rhs.high to <2 x i64>
 
   %res = add <2 x i64> %lhs.ext, %rhs.ext
   ret <2 x i64> %res
@@ -770,6 +802,22 @@ define <2 x i64> @saddl2_duplhs(i32 %lhs, <4 x i32> %rhs) {
   ret <2 x i64> %res
 }
 
+define <2 x i64> @usubl_duprhs(<4 x i32> %lhs, i32 %rhs) {
+; CHECK-LABEL: usubl_duprhs
+; CHECK-NOT: ext.16b
+; CHECK: usubl.2d
+  %rhsvec.tmp = insertelement <2 x i32> undef, i32 %rhs, i32 0
+  %rhsvec = insertelement <2 x i32> %rhsvec.tmp, i32 %rhs, i32 1
+
+  %lhs.high = shufflevector <4 x i32> %lhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+
+  %lhs.ext = zext <2 x i32> %lhs.high to <2 x i64>
+  %rhs.ext = zext <2 x i32> %rhsvec to <2 x i64>
+
+  %res = sub <2 x i64> %lhs.ext, %rhs.ext
+  ret <2 x i64> %res
+}
+
 define <2 x i64> @usubl2_duprhs(<4 x i32> %lhs, i32 %rhs) {
 ; CHECK-LABEL: usubl2_duprhs
 ; CHECK-NOT: ext.16b
@@ -786,8 +834,24 @@ define <2 x i64> @usubl2_duprhs(<4 x i32> %lhs, i32 %rhs) {
   ret <2 x i64> %res
 }
 
+define <2 x i64> @ssubl_duplhs(i32 %lhs, <4 x i32> %rhs) {
+; CHECK-LABEL: ssubl_duplhs:
+; CHECK-NOT: ext.16b
+; CHECK: ssubl.2d
+  %lhsvec.tmp = insertelement <2 x i32> undef, i32 %lhs, i32 0
+  %lhsvec = insertelement <2 x i32> %lhsvec.tmp, i32 %lhs, i32 1
+
+  %rhs.high = shufflevector <4 x i32> %rhs, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+
+  %lhs.ext = sext <2 x i32> %lhsvec to <2 x i64>
+  %rhs.ext = sext <2 x i32> %rhs.high to <2 x i64>
+
+  %res = sub <2 x i64> %lhs.ext, %rhs.ext
+  ret <2 x i64> %res
+}
+
 define <2 x i64> @ssubl2_duplhs(i32 %lhs, <4 x i32> %rhs) {
-; CHECK-LABEL: ssubl2_duplhs
+; CHECK-LABEL: ssubl2_duplhs:
 ; CHECK-NOT: ext.16b
 ; CHECK: ssubl2.2d
   %lhsvec.tmp = insertelement <2 x i32> undef, i32 %lhs, i32 0

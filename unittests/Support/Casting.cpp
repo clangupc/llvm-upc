@@ -1,9 +1,8 @@
 //===---------- llvm/unittest/Support/Casting.cpp - Casting tests ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -40,11 +39,23 @@ struct foo {
     }*/
 };
 
+struct base {
+  virtual ~base() {}
+};
+
+struct derived : public base {
+  static bool classof(const base *B) { return true; }
+};
+
 template <> struct isa_impl<foo, bar> {
   static inline bool doit(const bar &Val) {
     dbgs() << "Classof: " << &Val << "\n";
     return true;
   }
+};
+
+template <typename T> struct isa_impl<foo, T> {
+  static inline bool doit(const T &Val) { return false; }
 };
 
 foo *bar::baz() {
@@ -107,6 +118,12 @@ TEST(CastingTest, isa) {
   EXPECT_TRUE(isa<foo>(B4));
 }
 
+TEST(CastingTest, isa_and_nonnull) {
+  EXPECT_TRUE(isa_and_nonnull<foo>(B2));
+  EXPECT_TRUE(isa_and_nonnull<foo>(B4));
+  EXPECT_FALSE(isa_and_nonnull<foo>(fub()));
+}
+
 TEST(CastingTest, cast) {
   foo &F1 = cast<foo>(B1);
   EXPECT_NE(&F1, null_foo);
@@ -123,6 +140,13 @@ TEST(CastingTest, cast) {
   // EXPECT_EQ(F7, null_foo);
   foo *F8 = B1.baz();
   EXPECT_NE(F8, null_foo);
+
+  std::unique_ptr<const bar> BP(B2);
+  auto FP = cast<foo>(std::move(BP));
+  static_assert(std::is_same<std::unique_ptr<const foo>, decltype(FP)>::value,
+                "Incorrect deduced return type!");
+  EXPECT_NE(FP.get(), null_foo);
+  FP.release();
 }
 
 TEST(CastingTest, cast_or_null) {
@@ -136,6 +160,10 @@ TEST(CastingTest, cast_or_null) {
   EXPECT_EQ(F14, null_foo);
   foo *F15 = B1.caz();
   EXPECT_NE(F15, null_foo);
+
+  std::unique_ptr<const bar> BP(fub());
+  auto FP = cast_or_null<foo>(std::move(BP));
+  EXPECT_EQ(FP.get(), null_foo);
 }
 
 TEST(CastingTest, dyn_cast) {
@@ -163,6 +191,58 @@ TEST(CastingTest, dyn_cast_or_null) {
   EXPECT_EQ(F4, null_foo);
   foo *F5 = B1.naz();
   EXPECT_NE(F5, null_foo);
+}
+
+std::unique_ptr<derived> newd() { return llvm::make_unique<derived>(); }
+std::unique_ptr<base> newb() { return llvm::make_unique<derived>(); }
+
+TEST(CastingTest, unique_dyn_cast) {
+  derived *OrigD = nullptr;
+  auto D = llvm::make_unique<derived>();
+  OrigD = D.get();
+
+  // Converting from D to itself is valid, it should return a new unique_ptr
+  // and the old one should become nullptr.
+  auto NewD = unique_dyn_cast<derived>(D);
+  ASSERT_EQ(OrigD, NewD.get());
+  ASSERT_EQ(nullptr, D);
+
+  // Converting from D to B is valid, B should have a value and D should be
+  // nullptr.
+  auto B = unique_dyn_cast<base>(NewD);
+  ASSERT_EQ(OrigD, B.get());
+  ASSERT_EQ(nullptr, NewD);
+
+  // Converting from B to itself is valid, it should return a new unique_ptr
+  // and the old one should become nullptr.
+  auto NewB = unique_dyn_cast<base>(B);
+  ASSERT_EQ(OrigD, NewB.get());
+  ASSERT_EQ(nullptr, B);
+
+  // Converting from B to D is valid, D should have a value and B should be
+  // nullptr;
+  D = unique_dyn_cast<derived>(NewB);
+  ASSERT_EQ(OrigD, D.get());
+  ASSERT_EQ(nullptr, NewB);
+
+  // Converting between unrelated types should fail.  The original value should
+  // remain unchanged and it should return nullptr.
+  auto F = unique_dyn_cast<foo>(D);
+  ASSERT_EQ(nullptr, F);
+  ASSERT_EQ(OrigD, D.get());
+
+  // All of the above should also hold for temporaries.
+  auto D2 = unique_dyn_cast<derived>(newd());
+  EXPECT_NE(nullptr, D2);
+
+  auto B2 = unique_dyn_cast<derived>(newb());
+  EXPECT_NE(nullptr, B2);
+
+  auto B3 = unique_dyn_cast<base>(newb());
+  EXPECT_NE(nullptr, B3);
+
+  auto F2 = unique_dyn_cast<foo>(newb());
+  EXPECT_EQ(nullptr, F2);
 }
 
 // These lines are errors...

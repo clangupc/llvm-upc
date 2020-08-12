@@ -1,9 +1,8 @@
 //===- MCSectionCOFF.h - COFF Machine Code Sections -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,8 +15,11 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCSection.h"
+#include "llvm/MC/SectionKind.h"
+#include <cassert>
 
 namespace llvm {
+
 class MCSymbol;
 
 /// This represents a section on Windows
@@ -60,8 +62,6 @@ private:
   }
 
 public:
-  ~MCSectionCOFF();
-
   /// Decides whether a '.section' directive should be printed before the
   /// section name
   bool ShouldOmitSectionDirective(StringRef Name, const MCAsmInfo &MAI) const;
@@ -73,7 +73,8 @@ public:
 
   void setSelection(int Selection) const;
 
-  void PrintSwitchToSection(const MCAsmInfo &MAI, raw_ostream &OS,
+  void PrintSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
+                            raw_ostream &OS,
                             const MCExpr *Subsection) const override;
   bool UseCodeAlign() const override;
   bool isVirtualSection() const override;
@@ -93,4 +94,4 @@ public:
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_MC_MCSECTIONCOFF_H

@@ -1,9 +1,8 @@
-//===-- llvm/SymbolTableListTraits.h - Traits for iplist --------*- C++ -*-===//
+//===- llvm/SymbolTableListTraits.h - Traits for iplist ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -26,8 +25,19 @@
 #define LLVM_IR_SYMBOLTABLELISTTRAITS_H
 
 #include "llvm/ADT/ilist.h"
+#include "llvm/ADT/simple_ilist.h"
+#include <cstddef>
 
 namespace llvm {
+
+class Argument;
+class BasicBlock;
+class Function;
+class GlobalAlias;
+class GlobalIFunc;
+class GlobalVariable;
+class Instruction;
+class Module;
 class ValueSymbolTable;
 
 /// Template metafunction to get the parent type for a symbol table list.
@@ -35,16 +45,9 @@ class ValueSymbolTable;
 /// Implementations create a typedef called \c type so that we only need a
 /// single template parameter for the list and traits.
 template <typename NodeTy> struct SymbolTableListParentType {};
-class Argument;
-class BasicBlock;
-class Function;
-class Instruction;
-class GlobalVariable;
-class GlobalAlias;
-class GlobalIFunc;
-class Module;
+
 #define DEFINE_SYMBOL_TABLE_PARENT_TYPE(NODE, PARENT)                          \
-  template <> struct SymbolTableListParentType<NODE> { typedef PARENT type; };
+  template <> struct SymbolTableListParentType<NODE> { using type = PARENT; };
 DEFINE_SYMBOL_TABLE_PARENT_TYPE(Instruction, BasicBlock)
 DEFINE_SYMBOL_TABLE_PARENT_TYPE(BasicBlock, Function)
 DEFINE_SYMBOL_TABLE_PARENT_TYPE(Argument, Function)
@@ -61,13 +64,13 @@ template <typename NodeTy> class SymbolTableList;
 //
 template <typename ValueSubClass>
 class SymbolTableListTraits : public ilist_alloc_traits<ValueSubClass> {
-  typedef SymbolTableList<ValueSubClass> ListTy;
-  typedef typename simple_ilist<ValueSubClass>::iterator iterator;
-  typedef
-      typename SymbolTableListParentType<ValueSubClass>::type ItemParentClass;
+  using ListTy = SymbolTableList<ValueSubClass>;
+  using iterator = typename simple_ilist<ValueSubClass>::iterator;
+  using ItemParentClass =
+      typename SymbolTableListParentType<ValueSubClass>::type;
 
 public:
-  SymbolTableListTraits() {}
+  SymbolTableListTraits() = default;
 
 private:
   /// getListOwner - Return the object that owns this list.  If this is a list
@@ -109,6 +112,6 @@ template <class T>
 class SymbolTableList
     : public iplist_impl<simple_ilist<T>, SymbolTableListTraits<T>> {};
 
-} // End llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_IR_SYMBOLTABLELISTTRAITS_H

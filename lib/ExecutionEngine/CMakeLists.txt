@@ -14,7 +14,12 @@ add_llvm_library(LLVMExecutionEngine
   intrinsics_gen
   )
 
+if(BUILD_SHARED_LIBS)
+  target_link_libraries(LLVMExecutionEngine PUBLIC LLVMRuntimeDyld)
+endif()
+
 add_subdirectory(Interpreter)
+add_subdirectory(JITLink)
 add_subdirectory(MCJIT)
 add_subdirectory(Orc)
 add_subdirectory(RuntimeDyld)
@@ -26,3 +31,7 @@ endif( LLVM_USE_OPROFILE )
 if( LLVM_USE_INTEL_JITEVENTS )
   add_subdirectory(IntelJITEvents)
 endif( LLVM_USE_INTEL_JITEVENTS )
+
+if( LLVM_USE_PERF )
+  add_subdirectory(PerfJITEvents)
+endif( LLVM_USE_PERF )

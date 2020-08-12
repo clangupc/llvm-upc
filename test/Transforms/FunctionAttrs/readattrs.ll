@@ -4,6 +4,8 @@
 
 declare void @test1_1(i8* %x1_1, i8* readonly %y1_1, ...)
 
+; NOTE: readonly for %y1_2 would be OK here but not for the similar situation in test13.
+;
 ; CHECK: define void @test1_2(i8* %x1_2, i8* readonly %y1_2, i8* %z1_2)
 define void @test1_2(i8* %x1_2, i8* %y1_2, i8* %z1_2) {
   call void (i8*, i8*, ...) @test1_1(i8* %x1_2, i8* %y1_2, i8* %z1_2)
@@ -68,22 +70,22 @@ entry:
 }
 
 ; CHECK: declare void @llvm.masked.scatter
-declare void @llvm.masked.scatter.v4i32(<4 x i32>%val, <4 x i32*>, i32, <4 x i1>)
+declare void @llvm.masked.scatter.v4i32.v4p0i32(<4 x i32>%val, <4 x i32*>, i32, <4 x i1>)
 
 ; CHECK-NOT: readnone
 ; CHECK-NOT: readonly
 ; CHECK: define void @test9
 define void @test9(<4 x i32*> %ptrs, <4 x i32>%val) {
-  call void @llvm.masked.scatter.v4i32(<4 x i32>%val, <4 x i32*> %ptrs, i32 4, <4 x i1><i1 true, i1 false, i1 true, i1 false>)
+  call void @llvm.masked.scatter.v4i32.v4p0i32(<4 x i32>%val, <4 x i32*> %ptrs, i32 4, <4 x i1><i1 true, i1 false, i1 true, i1 false>)
   ret void
 }
 
 ; CHECK: declare <4 x i32> @llvm.masked.gather
-declare <4 x i32> @llvm.masked.gather.v4i32(<4 x i32*>, i32, <4 x i1>, <4 x i32>)
+declare <4 x i32> @llvm.masked.gather.v4i32.v4p0i32(<4 x i32*>, i32, <4 x i1>, <4 x i32>)
 ; CHECK: readonly
 ; CHECK: define <4 x i32> @test10
 define <4 x i32> @test10(<4 x i32*> %ptrs) {
-  %res = call <4 x i32> @llvm.masked.gather.v4i32(<4 x i32*> %ptrs, i32 4, <4 x i1><i1 true, i1 false, i1 true, i1 false>, <4 x i32>undef)
+  %res = call <4 x i32> @llvm.masked.gather.v4i32.v4p0i32(<4 x i32*> %ptrs, i32 4, <4 x i1><i1 true, i1 false, i1 true, i1 false>, <4 x i32>undef)
   ret <4 x i32> %res
 }
 
@@ -111,4 +113,32 @@ define <4 x i32> @test12_2(<4 x i32*> %ptrs) {
 define i32 @volatile_load(i32* %p) {
   %load = load volatile i32, i32* %p
   ret i32 %load
+}
+
+declare void @escape_readonly_ptr(i8** %addr, i8* readnone %ptr)
+declare void @escape_readnone_ptr(i8** %addr, i8* readonly %ptr)
+
+; The argument pointer %escaped_then_written cannot be marked readnone/only even
+; though the only direct use, in @escape_readnone_ptr/@escape_readonly_ptr,
+; is marked as readnone/only. However, the functions can write the pointer into
+; %addr, causing the store to write to %escaped_then_written.
+;
+; FIXME: This test currently exposes a bug!
+;
+; BUG: define void @unsound_readnone(i8* %ignored, i8* readnone %escaped_then_written)
+; BUG: define void @unsound_readonly(i8* %ignored, i8* readonly %escaped_then_written)
+define void @unsound_readnone(i8* %ignored, i8* %escaped_then_written) {
+  %addr = alloca i8*
+  call void @escape_readnone_ptr(i8** %addr, i8* %escaped_then_written)
+  %addr.ld = load i8*, i8** %addr
+  store i8 0, i8* %addr.ld
+  ret void
+}
+
+define void @unsound_readonly(i8* %ignored, i8* %escaped_then_written) {
+  %addr = alloca i8*
+  call void @escape_readonly_ptr(i8** %addr, i8* %escaped_then_written)
+  %addr.ld = load i8*, i8** %addr
+  store i8 0, i8* %addr.ld
+  ret void
 }

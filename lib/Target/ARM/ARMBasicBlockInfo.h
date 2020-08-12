@@ -1,9 +1,8 @@
 //===-- ARMBasicBlockInfo.h - Basic Block Information -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,11 +13,15 @@
 #ifndef LLVM_LIB_TARGET_ARM_ARMBASICBLOCKINFO_H
 #define LLVM_LIB_TARGET_ARM_ARMBASICBLOCKINFO_H
 
-#include "ARM.h"
+#include "ARMBaseInstrInfo.h"
 #include "ARMMachineFunctionInfo.h"
-using namespace llvm;
+#include "llvm/Support/MathExtras.h"
+#include <algorithm>
+#include <cstdint>
 
 namespace llvm {
+
+using BBInfoVector = SmallVectorImpl<BasicBlockInfo>;
 
 /// UnknownPadding - Return the worst case padding that could result from
 /// unknown offset bits.  This does not include alignment padding caused by
@@ -44,31 +47,30 @@ struct BasicBlockInfo {
   ///
   /// Because worst case padding is used, the computed offset of an aligned
   /// block may not actually be aligned.
-  unsigned Offset;
+  unsigned Offset = 0;
 
   /// Size - Size of the basic block in bytes.  If the block contains
   /// inline assembly, this is a worst case estimate.
   ///
   /// The size does not include any alignment padding whether from the
   /// beginning of the block, or from an aligned jump table at the end.
-  unsigned Size;
+  unsigned Size = 0;
 
   /// KnownBits - The number of low bits in Offset that are known to be
   /// exact.  The remaining bits of Offset are an upper bound.
-  uint8_t KnownBits;
+  uint8_t KnownBits = 0;
 
   /// Unalign - When non-zero, the block contains instructions (inline asm)
   /// of unknown size.  The real size may be smaller than Size bytes by a
   /// multiple of 1 << Unalign.
-  uint8_t Unalign;
+  uint8_t Unalign = 0;
 
   /// PostAlign - When non-zero, the block terminator contains a .align
   /// directive, so the end of the block is aligned to 1 << PostAlign
   /// bytes.
-  uint8_t PostAlign;
+  uint8_t PostAlign = 0;
 
-  BasicBlockInfo() : Offset(0), Size(0), KnownBits(0), Unalign(0),
-    PostAlign(0) {}
+  BasicBlockInfo() = default;
 
   /// Compute the number of known offset bits internally to this block.
   /// This number should be used to predict worst case padding when
@@ -105,6 +107,54 @@ struct BasicBlockInfo {
   }
 };
 
+class ARMBasicBlockUtils {
+
+private:
+  MachineFunction &MF;
+  bool isThumb = false;
+  const ARMBaseInstrInfo *TII = nullptr;
+  SmallVector<BasicBlockInfo, 8> BBInfo;
+
+public:
+  ARMBasicBlockUtils(MachineFunction &MF) : MF(MF) {
+    TII =
+      static_cast<const ARMBaseInstrInfo*>(MF.getSubtarget().getInstrInfo());
+    isThumb = MF.getInfo<ARMFunctionInfo>()->isThumbFunction();
+  }
+
+  void computeAllBlockSizes() {
+    BBInfo.resize(MF.getNumBlockIDs());
+    for (MachineBasicBlock &MBB : MF)
+      computeBlockSize(&MBB);
+  }
+
+  void computeBlockSize(MachineBasicBlock *MBB);
+
+  unsigned getOffsetOf(MachineInstr *MI) const;
+
+  unsigned getOffsetOf(MachineBasicBlock *MBB) const {
+    return BBInfo[MBB->getNumber()].Offset;
+  }
+
+  void adjustBBOffsetsAfter(MachineBasicBlock *MBB);
+
+  void adjustBBSize(MachineBasicBlock *MBB, int Size) {
+    BBInfo[MBB->getNumber()].Size += Size;
+  }
+
+  bool isBBInRange(MachineInstr *MI, MachineBasicBlock *DestBB,
+                   unsigned MaxDisp) const;
+
+  void insert(unsigned BBNum, BasicBlockInfo BBI) {
+    BBInfo.insert(BBInfo.begin() + BBNum, BBI);
+  }
+
+  void clear() { BBInfo.clear(); }
+
+  BBInfoVector &getBBInfo() { return BBInfo; }
+
+};
+
 } // end namespace llvm
 
-#endif
+#endif // LLVM_LIB_TARGET_ARM_ARMBASICBLOCKINFO_H

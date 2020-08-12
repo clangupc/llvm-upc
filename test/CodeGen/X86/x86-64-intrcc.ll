@@ -3,7 +3,8 @@
 
 %struct.interrupt_frame = type { i64, i64, i64, i64, i64 }
 
-@llvm.used = appending global [4 x i8*] [i8* bitcast (void (%struct.interrupt_frame*)* @test_isr_no_ecode to i8*), i8* bitcast (void (%struct.interrupt_frame*, i64)* @test_isr_ecode to i8*), i8* bitcast (void (%struct.interrupt_frame*, i64)* @test_isr_clobbers to i8*), i8* bitcast (void (%struct.interrupt_frame*)* @test_isr_x87 to i8*)], section "llvm.metadata"
+@sink_address = global i64* null
+@sink_i32 = global i64 0
 
 ; Spills rax, putting original esp at +8.
 ; No stack adjustment if declared with no error code
@@ -30,22 +31,24 @@ define x86_intrcc void @test_isr_no_ecode(%struct.interrupt_frame* %frame) {
 define x86_intrcc void @test_isr_ecode(%struct.interrupt_frame* %frame, i64 %ecode) {
   ; CHECK-LABEL: test_isr_ecode
   ; CHECK: pushq %rax
+  ; CHECK: pushq %rax
   ; CHECK: pushq %rcx
-  ; CHECK: movq 16(%rsp), %rax
-  ; CHECK: movq 40(%rsp), %rcx
+  ; CHECK: movq 24(%rsp), %rax
+  ; CHECK: movq 48(%rsp), %rcx
   ; CHECK: popq %rcx
   ; CHECK: popq %rax
-  ; CHECK: addq $8, %rsp
+  ; CHECK: addq $16, %rsp
   ; CHECK: iretq
   ; CHECK0-LABEL: test_isr_ecode
   ; CHECK0: pushq %rax
+  ; CHECK0: pushq %rax
   ; CHECK0: pushq %rcx
-  ; CHECK0: movq 16(%rsp), %rax
-  ; CHECK0: leaq 24(%rsp), %rcx
+  ; CHECK0: movq 24(%rsp), %rax
+  ; CHECK0: leaq 32(%rsp), %rcx
   ; CHECK0: movq 16(%rcx), %rcx
   ; CHECK0: popq %rcx
   ; CHECK0: popq %rax
-  ; CHECK0: addq $8, %rsp
+  ; CHECK0: addq $16, %rsp
   ; CHECK0: iretq
   %pflags = getelementptr inbounds %struct.interrupt_frame, %struct.interrupt_frame* %frame, i32 0, i32 2
   %flags = load i64, i64* %pflags, align 4
@@ -57,31 +60,33 @@ define x86_intrcc void @test_isr_ecode(%struct.interrupt_frame* %frame, i64 %eco
 define x86_intrcc void @test_isr_clobbers(%struct.interrupt_frame* %frame, i64 %ecode) {
   call void asm sideeffect "", "~{rax},~{rbx},~{rbp},~{r11},~{xmm0}"()
   ; CHECK-LABEL: test_isr_clobbers
-  ; CHECK-SSE-NEXT: pushq %rax
-  ; CHECK-SSE-NEXT; pushq %r11
-  ; CHECK-SSE-NEXT: pushq %rbp
-  ; CHECK-SSE-NEXT: pushq %rbx
-  ; CHECK-SSE-NEXT: movaps %xmm0
-  ; CHECK-SSE-NEXT: movaps %xmm0
-  ; CHECK-SSE-NEXT: popq %rbx
-  ; CHECK-SSE-NEXT: popq %rbp
-  ; CHECK-SSE-NEXT: popq %r11
-  ; CHECK-SSE-NEXT: popq %rax
-  ; CHECK-SSE-NEXT: addq $8, %rsp
-  ; CHECK-SSE-NEXT: iretq
+
+  ; CHECK: pushq %rax
+  ; CHECK: pushq %rbp
+  ; CHECK: pushq %r11
+  ; CHECK: pushq %rbx
+  ; CHECK: movaps %xmm0
+  ; CHECK: movaps {{.*}}, %xmm0
+  ; CHECK: popq %rbx
+  ; CHECK: popq %r11
+  ; CHECK: popq %rbp
+  ; CHECK: popq %rax
+  ; CHECK: addq $16, %rsp
+  ; CHECK: iretq
   ; CHECK0-LABEL: test_isr_clobbers
-  ; CHECK0-SSE-NEXT: pushq %rax
-  ; CHECK0-SSE-NEXT; pushq %r11
-  ; CHECK0-SSE-NEXT: pushq %rbp
-  ; CHECK0-SSE-NEXT: pushq %rbx
-  ; CHECK0-SSE-NEXT: movaps %xmm0
-  ; CHECK0-SSE-NEXT: movaps %xmm0
-  ; CHECK0-SSE-NEXT: popq %rbx
-  ; CHECK0-SSE-NEXT: popq %rbp
-  ; CHECK0-SSE-NEXT: popq %r11
-  ; CHECK0-SSE-NEXT: popq %rax
-  ; CHECK0-SSE-NEXT: addq $8, %rsp
-  ; CHECK0-SSE-NEXT: iretq
+
+  ; CHECK0: pushq %rax
+  ; CHECK0: pushq %rbp
+  ; CHECK0: pushq %r11
+  ; CHECK0: pushq %rbx
+  ; CHECK0: movaps %xmm0
+  ; CHECK0: movaps {{.*}}, %xmm0
+  ; CHECK0: popq %rbx
+  ; CHECK0: popq %r11
+  ; CHECK0: popq %rbp
+  ; CHECK0: popq %rax
+  ; CHECK0: addq $16, %rsp
+  ; CHECK0: iretq
   ret void
 }
 
@@ -101,3 +106,75 @@ entry:
   store x86_fp80 %add, x86_fp80* @f80, align 4
   ret void
 }
+
+; Use a frame pointer to check the offsets. No return address, arguments start
+; at RBP+4.
+define dso_local x86_intrcc void @test_fp_1(%struct.interrupt_frame* %p) #0 {
+  ; CHECK-LABEL: test_fp_1:
+  ; CHECK: # %bb.0: # %entry
+  ; CHECK-NEXT: pushq %rbp
+  ; CHECK-NEXT: movq %rsp, %rbp
+  ; CHECK: cld
+  ; CHECK-DAG: leaq 8(%rbp), %[[R1:[^ ]*]]
+  ; CHECK-DAG: leaq 40(%rbp), %[[R2:[^ ]*]]
+  ; CHECK: movq %[[R1]], sink_address
+  ; CHECK: movq %[[R2]], sink_address
+  ; CHECK: popq %rbp
+  ; CHECK: iretq
+entry:
+  %arrayidx = getelementptr inbounds %struct.interrupt_frame, %struct.interrupt_frame* %p, i64 0, i32 0
+  %arrayidx2 = getelementptr inbounds %struct.interrupt_frame, %struct.interrupt_frame* %p, i64 0, i32 4
+  store volatile i64* %arrayidx, i64** @sink_address
+  store volatile i64* %arrayidx2, i64** @sink_address
+  ret void
+}
+
+; The error code is between RBP and the interrupt_frame.
+define dso_local x86_intrcc void @test_fp_2(%struct.interrupt_frame* %p, i64 %err) #0 {
+  ; CHECK-LABEL: test_fp_2:
+  ; CHECK: # %bb.0: # %entry
+  ; This RAX push is just to align the stack.
+  ; CHECK-NEXT: pushq %rax
+  ; CHECK-NEXT: pushq %rbp
+  ; CHECK-NEXT: movq %rsp, %rbp
+  ; CHECK: cld
+  ; CHECK-DAG: movq 16(%rbp), %[[R3:[^ ]*]]
+  ; CHECK-DAG: leaq 24(%rbp), %[[R1:[^ ]*]]
+  ; CHECK-DAG: leaq 56(%rbp), %[[R2:[^ ]*]]
+  ; CHECK: movq %[[R1]], sink_address(%rip)
+  ; CHECK: movq %[[R2]], sink_address(%rip)
+  ; CHECK: movq %[[R3]], sink_i32(%rip)
+  ; CHECK: popq %rbp
+  ; Pop off both the error code and the 8 byte alignment adjustment from the
+  ; prologue.
+  ; CHECK: addq $16, %rsp
+  ; CHECK: iretq
+entry:
+  %arrayidx = getelementptr inbounds %struct.interrupt_frame, %struct.interrupt_frame* %p, i64 0, i32 0
+  %arrayidx2 = getelementptr inbounds %struct.interrupt_frame, %struct.interrupt_frame* %p, i64 0, i32 4
+  store volatile i64* %arrayidx, i64** @sink_address
+  store volatile i64* %arrayidx2, i64** @sink_address
+  store volatile i64 %err, i64* @sink_i32
+  ret void
+}
+
+; Test argument copy elision when copied to a local alloca.
+define x86_intrcc void @test_copy_elide(%struct.interrupt_frame* %frame, i64 %err) #0 {
+  ; CHECK-LABEL: test_copy_elide:
+  ; CHECK: # %bb.0: # %entry
+  ; This RAX push is just to align the stack.
+  ; CHECK-NEXT: pushq %rax
+  ; CHECK-NEXT: pushq %rbp
+  ; CHECK-NEXT: movq %rsp, %rbp
+  ; CHECK: cld
+  ; CHECK: leaq 16(%rbp), %[[R1:[^ ]*]]
+  ; CHECK: movq %[[R1]], sink_address(%rip)
+entry:
+  %err.addr = alloca i64, align 4
+  store i64 %err, i64* %err.addr, align 4
+  store volatile i64* %err.addr, i64** @sink_address
+  ret void
+}
+
+
+attributes #0 = { nounwind "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" }

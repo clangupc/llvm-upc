@@ -1,50 +1,57 @@
 //===-- llvm/CodeGen/MachineModuleInfo.cpp ----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/MachineModuleInfo.h"
-#include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TinyPtrVector.h"
-#include "llvm/Analysis/EHPersonalities.h"
-#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineFunctionInitializer.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/IR/Constants.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
-#include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/IR/Value.h"
+#include "llvm/IR/ValueHandle.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/Support/Dwarf.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
+#include <algorithm>
+#include <cassert>
+#include <memory>
+#include <utility>
+#include <vector>
+
 using namespace llvm;
 using namespace llvm::dwarf;
 
 // Handle the Pass registration stuff necessary to use DataLayout's.
-INITIALIZE_TM_PASS(MachineModuleInfo, "machinemoduleinfo",
-                   "Machine Module Information", false, false)
+INITIALIZE_PASS(MachineModuleInfo, "machinemoduleinfo",
+                "Machine Module Information", false, false)
 char MachineModuleInfo::ID = 0;
 
 // Out of line virtual method.
-MachineModuleInfoImpl::~MachineModuleInfoImpl() {}
+MachineModuleInfoImpl::~MachineModuleInfoImpl() = default;
 
 namespace llvm {
+
 class MMIAddrLabelMapCallbackPtr final : CallbackVH {
-  MMIAddrLabelMap *Map;
+  MMIAddrLabelMap *Map = nullptr;
+
 public:
-  MMIAddrLabelMapCallbackPtr() : Map(nullptr) {}
-  MMIAddrLabelMapCallbackPtr(Value *V) : CallbackVH(V), Map(nullptr) {}
+  MMIAddrLabelMapCallbackPtr() = default;
+  MMIAddrLabelMapCallbackPtr(Value *V) : CallbackVH(V) {}
 
   void setPtr(BasicBlock *BB) {
     ValueHandleBase::operator=(BB);
@@ -75,11 +82,12 @@ class MMIAddrLabelMap {
   /// This is a per-function list of symbols whose corresponding BasicBlock got
   /// deleted.  These symbols need to be emitted at some point in the file, so
   /// AsmPrinter emits them after the function body.
-  DenseMap<AssertingVH<Function>, std::vector<MCSymbol*> >
+  DenseMap<AssertingVH<Function>, std::vector<MCSymbol*>>
     DeletedAddrLabelsNeedingEmission;
-public:
 
+public:
   MMIAddrLabelMap(MCContext &context) : Context(context) {}
+
   ~MMIAddrLabelMap() {
     assert(DeletedAddrLabelsNeedingEmission.empty() &&
            "Some labels for deleted blocks never got emitted");
@@ -93,7 +101,8 @@ public:
   void UpdateForDeletedBlock(BasicBlock *BB);
   void UpdateForRAUWBlock(BasicBlock *Old, BasicBlock *New);
 };
-}
+
+} // end namespace llvm
 
 ArrayRef<MCSymbol *> MMIAddrLabelMap::getAddrLabelSymbolToEmit(BasicBlock *BB) {
   assert(BB->hasAddressTaken() &&
@@ -112,14 +121,14 @@ ArrayRef<MCSymbol *> MMIAddrLabelMap::getAddrLabelSymbolToEmit(BasicBlock *BB) {
   BBCallbacks.back().setMap(this);
   Entry.Index = BBCallbacks.size() - 1;
   Entry.Fn = BB->getParent();
-  Entry.Symbols.push_back(Context.createTempSymbol());
+  Entry.Symbols.push_back(Context.createTempSymbol(!BB->hasAddressTaken()));
   return Entry.Symbols;
 }
 
 /// If we have any deleted symbols for F, return them.
 void MMIAddrLabelMap::
 takeDeletedSymbolsForFunction(Function *F, std::vector<MCSymbol*> &Result) {
-  DenseMap<AssertingVH<Function>, std::vector<MCSymbol*> >::iterator I =
+  DenseMap<AssertingVH<Function>, std::vector<MCSymbol*>>::iterator I =
     DeletedAddrLabelsNeedingEmission.find(F);
 
   // If there are no entries for the function, just return.
@@ -129,7 +138,6 @@ takeDeletedSymbolsForFunction(Function *F, std::vector<MCSymbol*> &Result) {
   std::swap(Result, I->second);
   DeletedAddrLabelsNeedingEmission.erase(I);
 }
-
 
 void MMIAddrLabelMap::UpdateForDeletedBlock(BasicBlock *BB) {
   // If the block got deleted, there is no need for the symbol.  If the symbol
@@ -177,7 +185,6 @@ void MMIAddrLabelMap::UpdateForRAUWBlock(BasicBlock *Old, BasicBlock *New) {
                           OldEntry.Symbols.end());
 }
 
-
 void MMIAddrLabelMapCallbackPtr::deleted() {
   Map->UpdateForDeletedBlock(cast<BasicBlock>(getValPtr()));
 }
@@ -186,32 +193,27 @@ void MMIAddrLabelMapCallbackPtr::allUsesReplacedWith(Value *V2) {
   Map->UpdateForRAUWBlock(cast<BasicBlock>(getValPtr()), cast<BasicBlock>(V2));
 }
 
-
-//===----------------------------------------------------------------------===//
-
-MachineModuleInfo::MachineModuleInfo(const TargetMachine *TM)
+MachineModuleInfo::MachineModuleInfo(const LLVMTargetMachine *TM)
   : ImmutablePass(ID), TM(*TM),
     Context(TM->getMCAsmInfo(), TM->getMCRegisterInfo(),
             TM->getObjFileLowering(), nullptr, false) {
   initializeMachineModuleInfoPass(*PassRegistry::getPassRegistry());
 }
 
-MachineModuleInfo::~MachineModuleInfo() {
-}
+MachineModuleInfo::~MachineModuleInfo() = default;
 
 bool MachineModuleInfo::doInitialization(Module &M) {
-
   ObjFileMMI = nullptr;
   CurCallSite = 0;
-  DbgInfoAvailable = UsesVAFloatArgument = UsesMorestackAddr = false;
+  UsesMSVCFloatingPoint = UsesMorestackAddr = false;
+  HasSplitStack = HasNosplitStack = false;
   AddrLabelSymbols = nullptr;
   TheModule = &M;
-
+  DbgInfoAvailable = !llvm::empty(M.debug_compile_units());
   return false;
 }
 
 bool MachineModuleInfo::doFinalization(Module &M) {
-
   Personalities.clear();
 
   delete AddrLabelSymbols;
@@ -256,7 +258,14 @@ void MachineModuleInfo::addPersonality(const Function *Personality) {
 
 /// \}
 
-MachineFunction &MachineModuleInfo::getMachineFunction(const Function &F) {
+MachineFunction *
+MachineModuleInfo::getMachineFunction(const Function &F) const {
+  auto I = MachineFunctions.find(&F);
+  return I != MachineFunctions.end() ? I->second.get() : nullptr;
+}
+
+MachineFunction &
+MachineModuleInfo::getOrCreateMachineFunction(const Function &F) {
   // Shortcut for the common case where a sequence of MachineFunctionPasses
   // all query for the same Function.
   if (LastRequest == &F)
@@ -267,13 +276,10 @@ MachineFunction &MachineModuleInfo::getMachineFunction(const Function &F) {
   MachineFunction *MF;
   if (I.second) {
     // No pre-existing machine function, create a new one.
-    MF = new MachineFunction(&F, TM, NextFnNum++, *this);
+    const TargetSubtargetInfo &STI = *TM.getSubtargetImpl(F);
+    MF = new MachineFunction(F, TM, STI, NextFnNum++, *this);
     // Update the set entry.
     I.first->second.reset(MF);
-
-    if (MFInitializer)
-      if (MFInitializer->initializeMachineFunction(*MF))
-        report_fatal_error("Unable to initialize machine function");
   } else {
     MF = I.first->second.get();
   }
@@ -290,10 +296,12 @@ void MachineModuleInfo::deleteMachineFunctionFor(Function &F) {
 }
 
 namespace {
+
 /// This pass frees the MachineFunction object associated with a Function.
 class FreeMachineFunction : public FunctionPass {
 public:
   static char ID;
+
   FreeMachineFunction() : FunctionPass(ID) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -306,31 +314,16 @@ public:
     MMI.deleteMachineFunctionFor(F);
     return true;
   }
+
+  StringRef getPassName() const override {
+    return "Free MachineFunction";
+  }
 };
-char FreeMachineFunction::ID;
+
 } // end anonymous namespace
 
-namespace llvm {
-FunctionPass *createFreeMachineFunctionPass() {
+char FreeMachineFunction::ID;
+
+FunctionPass *llvm::createFreeMachineFunctionPass() {
   return new FreeMachineFunction();
-}
-} // end namespace llvm
-
-//===- MMI building helpers -----------------------------------------------===//
-
-void llvm::computeUsesVAFloatArgument(const CallInst &I,
-                                      MachineModuleInfo &MMI) {
-  FunctionType *FT =
-      cast<FunctionType>(I.getCalledValue()->getType()->getContainedType(0));
-  if (FT->isVarArg() && !MMI.usesVAFloatArgument()) {
-    for (unsigned i = 0, e = I.getNumArgOperands(); i != e; ++i) {
-      Type *T = I.getArgOperand(i)->getType();
-      for (auto i : post_order(T)) {
-        if (i->isFloatingPointTy()) {
-          MMI.setUsesVAFloatArgument(true);
-          return;
-        }
-      }
-    }
-  }
 }

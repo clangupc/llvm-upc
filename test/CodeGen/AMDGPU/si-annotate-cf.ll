@@ -10,7 +10,7 @@
 ; SI: s_andn2_b64
 ; s_cbranch_execnz [[LOOP_LABEL]]
 ; SI: s_endpgm
-define void @break_inserted_outside_of_loop(i32 addrspace(1)* %out, i32 %a) {
+define amdgpu_kernel void @break_inserted_outside_of_loop(i32 addrspace(1)* %out, i32 %a) {
 main_body:
   %tid = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #0
   %0 = and i32 %a, %tid
@@ -27,20 +27,25 @@ ENDIF:
 
 
 ; FUNC-LABEL: {{^}}phi_cond_outside_loop:
-; FIXME: This could be folded into the s_or_b64 instruction
-; SI: s_mov_b64 [[ZERO:s\[[0-9]+:[0-9]+\]]], 0
-; SI: [[LOOP_LABEL:[A-Z0-9]+]]
-; SI: v_cmp_ne_u32_e32 vcc, 0, v{{[0-9]+}}
 
-; SI_IF_BREAK instruction:
-; SI: s_or_b64 [[BREAK:s\[[0-9]+:[0-9]+\]]], vcc, [[ZERO]]
+; SI:     s_mov_b64         [[LEFT:s\[[0-9]+:[0-9]+\]]], 0
+; SI:     s_mov_b64         [[PHI:s\[[0-9]+:[0-9]+\]]], 0
 
-; SI_LOOP instruction:
-; SI: s_andn2_b64 exec, exec, [[BREAK]]
-; SI: s_cbranch_execnz [[LOOP_LABEL]]
-; SI: s_endpgm
+; SI: ; %else
+; SI:     v_cmp_eq_u32_e64  [[TMP:s\[[0-9]+:[0-9]+\]]],
+; SI:     s_and_b64         [[PHI]], [[TMP]], exec
 
-define void @phi_cond_outside_loop(i32 %b) {
+; SI: ; %endif
+
+; SI: [[LOOP_LABEL:BB[0-9]+_[0-9]+]]: ; %loop
+; SI:     s_mov_b64         [[TMP:s\[[0-9]+:[0-9]+\]]], [[LEFT]]
+; SI:     s_and_b64         [[TMP1:s\[[0-9]+:[0-9]+\]]], exec, [[PHI]]
+; SI:     s_or_b64          [[LEFT]], [[TMP1]], [[TMP]]
+; SI:     s_andn2_b64       exec, exec, [[LEFT]]
+; SI:     s_cbranch_execnz  [[LOOP_LABEL]]
+; SI:     s_endpgm
+
+define amdgpu_kernel void @phi_cond_outside_loop(i32 %b) {
 entry:
   %tid = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #0
   %0 = icmp eq i32 %tid , 0
@@ -68,7 +73,7 @@ exit:
 ; CHECK-LABEL: {{^}}switch_unreachable:
 ; CHECK-NOT: s_endpgm
 ; CHECK: .Lfunc_end2
-define void @switch_unreachable(i32 addrspace(1)* %g, i8 addrspace(3)* %l, i32 %x) nounwind {
+define amdgpu_kernel void @switch_unreachable(i32 addrspace(1)* %g, i8 addrspace(3)* %l, i32 %x) nounwind {
 centry:
   switch i32 %x, label %sw.default [
     i32 0, label %sw.bb
@@ -89,18 +94,27 @@ declare float @llvm.fabs.f32(float) nounwind readnone
 
 ; This broke the old AMDIL cfg structurizer
 ; FUNC-LABEL: {{^}}loop_land_info_assert:
-; SI: s_cmp_gt_i32
-; SI-NEXT: s_cbranch_scc0 [[ENDPGM:BB[0-9]+_[0-9]+]]
+; SI:      v_cmp_lt_i32_e64 [[CMP4:s\[[0-9:]+\]]], s{{[0-9]+}}, 4{{$}}
+; SI:      s_and_b64        [[CMP4M:s\[[0-9]+:[0-9]+\]]], exec, [[CMP4]]
 
-; SI: s_cmpk_gt_i32
-; SI-NEXT: s_cbranch_scc1 [[ENDPGM]]
+; SI: [[WHILELOOP:BB[0-9]+_[0-9]+]]: ; %while.cond
+; SI:      s_cbranch_vccz [[FOR_COND_PH:BB[0-9]+_[0-9]+]]
 
-; SI: [[INFLOOP:BB[0-9]+_[0-9]+]]
-; SI: s_branch [[INFLOOP]]
+; SI:      [[CONVEX_EXIT:BB[0-9_]+]]
+; SI:      s_mov_b64        vcc,
+; SI-NEXT: s_cbranch_vccnz  [[ENDPGM:BB[0-9]+_[0-9]+]]
 
-; SI: [[ENDPGM]]:
-; SI: s_endpgm
-define void @loop_land_info_assert(i32 %c0, i32 %c1, i32 %c2, i32 %c3, i32 %x, i32 %y, i1 %arg) nounwind {
+; SI:      s_cbranch_vccnz  [[WHILELOOP]]
+
+; SI: ; %if.else
+; SI:      buffer_store_dword
+
+; SI: [[FOR_COND_PH]]: ; %for.cond.preheader
+; SI:      s_cbranch_vccz [[ENDPGM]]
+
+; SI:      [[ENDPGM]]:
+; SI-NEXT: s_endpgm
+define amdgpu_kernel void @loop_land_info_assert(i32 %c0, i32 %c1, i32 %c2, i32 %c3, i32 %x, i32 %y, i1 %arg) nounwind {
 entry:
   %cmp = icmp sgt i32 %c0, 0
   br label %while.cond.outer
@@ -143,7 +157,6 @@ self.loop:
 return:
   ret void
 }
-
 
 declare i32 @llvm.amdgcn.mbcnt.lo(i32, i32) #0
 

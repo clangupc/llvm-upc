@@ -2,20 +2,25 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-set(ADTSources
+add_llvm_unittest(ADTTests
+  AnyTest.cpp
   APFloatTest.cpp
   APIntTest.cpp
   APSIntTest.cpp
   ArrayRefTest.cpp
   BitmaskEnumTest.cpp
   BitVectorTest.cpp
+  BreadthFirstIteratorTest.cpp
   BumpPtrListTest.cpp
   DAGDeltaAlgorithmTest.cpp
   DeltaAlgorithmTest.cpp
   DenseMapTest.cpp
   DenseSetTest.cpp
   DepthFirstIteratorTest.cpp
+  EquivalenceClassesTest.cpp
+  FallibleIteratorTest.cpp
   FoldingSet.cpp
+  FunctionExtrasTest.cpp
   FunctionRefTest.cpp
   HashingTest.cpp
   IListBaseTest.cpp
@@ -24,6 +29,7 @@ set(ADTSources
   IListNodeTest.cpp
   IListSentinelTest.cpp
   IListTest.cpp
+  ImmutableListTest.cpp
   ImmutableMapTest.cpp
   ImmutableSetTest.cpp
   IntEqClassesTest.cpp
@@ -31,6 +37,7 @@ set(ADTSources
   IntrusiveRefCntPtrTest.cpp
   IteratorTest.cpp
   MakeUniqueTest.cpp
+  MappedIteratorTest.cpp
   MapVectorTest.cpp
   OptionalTest.cpp
   PackedVectorTest.cpp
@@ -41,7 +48,6 @@ set(ADTSources
   PostOrderIteratorTest.cpp
   PriorityWorklistTest.cpp
   RangeAdapterTest.cpp
-  ReverseIterationTest.cpp
   SCCIteratorTest.cpp
   STLExtrasTest.cpp
   ScopeExitTest.cpp
@@ -49,23 +55,24 @@ set(ADTSources
   SetVectorTest.cpp
   SimpleIListTest.cpp
   SmallPtrSetTest.cpp
+  SmallSetTest.cpp
   SmallStringTest.cpp
   SmallVectorTest.cpp
   SparseBitVectorTest.cpp
   SparseMultiSetTest.cpp
   SparseSetTest.cpp
+  StatisticTest.cpp
   StringExtrasTest.cpp
   StringMapTest.cpp
   StringRefTest.cpp
+  StringSetTest.cpp
   StringSwitchTest.cpp
   TinyPtrVectorTest.cpp
   TripleTest.cpp
   TwineTest.cpp
   VariadicFunctionTest.cpp
- )
-
-add_llvm_unittest(ADTTests
-  ${ADTSources}
   )
+
+target_link_libraries(ADTTests PRIVATE LLVMTestingSupport)
 
 add_dependencies(ADTTests intrinsics_gen)

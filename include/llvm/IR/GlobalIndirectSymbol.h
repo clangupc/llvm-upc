@@ -1,9 +1,8 @@
 //===- llvm/GlobalIndirectSymbol.h - GlobalIndirectSymbol class -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -48,30 +47,34 @@ public:
     setOperand(0, Symbol);
   }
   const Constant *getIndirectSymbol() const {
-    return const_cast<GlobalIndirectSymbol *>(this)->getIndirectSymbol();
+    return getOperand(0);
   }
   Constant *getIndirectSymbol() {
-    return getOperand(0);
+    return const_cast<Constant *>(
+          static_cast<const GlobalIndirectSymbol *>(this)->getIndirectSymbol());
   }
 
   const GlobalObject *getBaseObject() const {
-    return const_cast<GlobalIndirectSymbol *>(this)->getBaseObject();
+    return dyn_cast<GlobalObject>(getIndirectSymbol()->stripInBoundsOffsets());
   }
   GlobalObject *getBaseObject() {
-    return dyn_cast<GlobalObject>(getIndirectSymbol()->stripInBoundsOffsets());
+    return const_cast<GlobalObject *>(
+              static_cast<const GlobalIndirectSymbol *>(this)->getBaseObject());
   }
 
   const GlobalObject *getBaseObject(const DataLayout &DL, APInt &Offset) const {
-    return const_cast<GlobalIndirectSymbol *>(this)->getBaseObject(DL, Offset);
-  }
-  GlobalObject *getBaseObject(const DataLayout &DL, APInt &Offset) {
     return dyn_cast<GlobalObject>(
         getIndirectSymbol()->stripAndAccumulateInBoundsConstantOffsets(DL,
                                                                        Offset));
   }
+  GlobalObject *getBaseObject(const DataLayout &DL, APInt &Offset) {
+    return const_cast<GlobalObject *>(
+                                 static_cast<const GlobalIndirectSymbol *>(this)
+                                   ->getBaseObject(DL, Offset));
+  }
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return V->getValueID() == Value::GlobalAliasVal ||
            V->getValueID() == Value::GlobalIFuncVal;
   }

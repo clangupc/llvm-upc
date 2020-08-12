@@ -1,9 +1,8 @@
 //===-- MSP430RegisterInfo.cpp - MSP430 Register Information --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -38,15 +37,15 @@ MSP430RegisterInfo::MSP430RegisterInfo()
 const MCPhysReg*
 MSP430RegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   const MSP430FrameLowering *TFI = getFrameLowering(*MF);
-  const Function* F = MF->getFunction();
+  const Function* F = &MF->getFunction();
   static const MCPhysReg CalleeSavedRegs[] = {
     MSP430::FP, MSP430::R5, MSP430::R6, MSP430::R7,
-    MSP430::R8, MSP430::R9, MSP430::R10, MSP430::R11,
+    MSP430::R8, MSP430::R9, MSP430::R10,
     0
   };
   static const MCPhysReg CalleeSavedRegsFP[] = {
     MSP430::R5, MSP430::R6, MSP430::R7,
-    MSP430::R8, MSP430::R9, MSP430::R10, MSP430::R11,
+    MSP430::R8, MSP430::R9, MSP430::R10,
     0
   };
   static const MCPhysReg CalleeSavedRegsIntr[] = {
@@ -127,7 +126,7 @@ MSP430RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // Fold imm into offset
   Offset += MI.getOperand(FIOperandNum + 1).getImm();
 
-  if (MI.getOpcode() == MSP430::ADD16ri) {
+  if (MI.getOpcode() == MSP430::ADDframe) {
     // This is actually "load effective address" of the stack slot
     // instruction. We have only two-address instructions, thus we need to
     // expand it into mov + add
@@ -155,7 +154,7 @@ MSP430RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
 }
 
-unsigned MSP430RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
+Register MSP430RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   const MSP430FrameLowering *TFI = getFrameLowering(MF);
   return TFI->hasFP(MF) ? MSP430::FP : MSP430::SP;
 }

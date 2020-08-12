@@ -378,6 +378,95 @@ define <2 x i1> @or1_vec(<2 x i32> %X) {
   ret <2 x i1> %B
 }
 
+; Single bit OR.
+define i1 @or2_true(i8 %x) {
+; CHECK-LABEL: @or2_true(
+; CHECK-NEXT:    [[Y:%.*]] = or i8 [[X:%.*]], 64
+; CHECK-NEXT:    [[Z:%.*]] = icmp sge i8 [[Y]], -64
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = or i8 %x, 64
+  %z = icmp sge i8 %y, -64
+  ret i1 %z
+}
+
+define i1 @or2_unknown(i8 %x) {
+; CHECK-LABEL: @or2_unknown(
+; CHECK-NEXT:    [[Y:%.*]] = or i8 [[X:%.*]], 64
+; CHECK-NEXT:    [[Z:%.*]] = icmp sgt i8 [[Y]], -64
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = or i8 %x, 64
+  %z = icmp sgt i8 %y, -64
+  ret i1 %z
+}
+
+; Multi bit OR.
+; 78 = 0b01001110; -50 = 0b11001110
+define i1 @or3_true(i8 %x) {
+; CHECK-LABEL: @or3_true(
+; CHECK-NEXT:    [[Y:%.*]] = or i8 [[X:%.*]], 78
+; CHECK-NEXT:    [[Z:%.*]] = icmp sge i8 [[Y]], -50
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = or i8 %x, 78
+  %z = icmp sge i8 %y, -50
+  ret i1 %z
+}
+
+define i1 @or3_unknown(i8 %x) {
+; CHECK-LABEL: @or3_unknown(
+; CHECK-NEXT:    [[Y:%.*]] = or i8 [[X:%.*]], 78
+; CHECK-NEXT:    [[Z:%.*]] = icmp sgt i8 [[Y]], -50
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = or i8 %x, 78
+  %z = icmp sgt i8 %y, -50
+  ret i1 %z
+}
+
+; OR with sign bit.
+define i1 @or4_true(i8 %x) {
+; CHECK-LABEL: @or4_true(
+; CHECK-NEXT:    ret i1 true
+;
+  %y = or i8 %x, -64
+  %z = icmp sge i8 %y, -64
+  ret i1 %z
+}
+
+define i1 @or4_unknown(i8 %x) {
+; CHECK-LABEL: @or4_unknown(
+; CHECK-NEXT:    [[Y:%.*]] = or i8 [[X:%.*]], -64
+; CHECK-NEXT:    [[Z:%.*]] = icmp sgt i8 [[Y]], -64
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = or i8 %x, -64
+  %z = icmp sgt i8 %y, -64
+  ret i1 %z
+}
+
+; If sign bit is set, signed & unsigned ranges are the same.
+define i1 @or5_true(i8 %x) {
+; CHECK-LABEL: @or5_true(
+; CHECK-NEXT:    ret i1 true
+;
+  %y = or i8 %x, -64
+  %z = icmp uge i8 %y, -64
+  ret i1 %z
+}
+
+define i1 @or5_unknown(i8 %x) {
+; CHECK-LABEL: @or5_unknown(
+; CHECK-NEXT:    [[Y:%.*]] = or i8 [[X:%.*]], -64
+; CHECK-NEXT:    [[Z:%.*]] = icmp ugt i8 [[Y]], -64
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = or i8 %x, -64
+  %z = icmp ugt i8 %y, -64
+  ret i1 %z
+}
+
 ; 'and x, C2' produces [0, C2]
 define i1 @and1(i32 %X) {
 ; CHECK-LABEL: @and1(
@@ -397,6 +486,61 @@ define <2 x i1> @and1_vec(<2 x i32> %X) {
   ret <2 x i1> %B
 }
 
+; If the sign bit is not set, signed and unsigned ranges are the same.
+define i1 @and2(i32 %X) {
+; CHECK-LABEL: @and2(
+; CHECK-NEXT:    ret i1 false
+;
+  %A = and i32 %X, 62
+  %B = icmp sgt i32 %A, 70
+  ret i1 %B
+}
+
+; -75 = 0b10110101, 53 = 0b00110101
+define i1 @and3_true1(i8 %x) {
+; CHECK-LABEL: @and3_true1(
+; CHECK-NEXT:    [[Y:%.*]] = and i8 [[X:%.*]], -75
+; CHECK-NEXT:    [[Z:%.*]] = icmp sge i8 [[Y]], -75
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = and i8 %x, -75
+  %z = icmp sge i8 %y, -75
+  ret i1 %z
+}
+
+define i1 @and3_unknown1(i8 %x) {
+; CHECK-LABEL: @and3_unknown1(
+; CHECK-NEXT:    [[Y:%.*]] = and i8 [[X:%.*]], -75
+; CHECK-NEXT:    [[Z:%.*]] = icmp sgt i8 [[Y]], -75
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = and i8 %x, -75
+  %z = icmp sgt i8 %y, -75
+  ret i1 %z
+}
+
+define i1 @and3_true2(i8 %x) {
+; CHECK-LABEL: @and3_true2(
+; CHECK-NEXT:    [[Y:%.*]] = and i8 [[X:%.*]], -75
+; CHECK-NEXT:    [[Z:%.*]] = icmp sle i8 [[Y]], 53
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = and i8 %x, -75
+  %z = icmp sle i8 %y, 53
+  ret i1 %z
+}
+
+define i1 @and3_unknown2(i8 %x) {
+; CHECK-LABEL: @and3_unknown2(
+; CHECK-NEXT:    [[Y:%.*]] = and i8 [[X:%.*]], -75
+; CHECK-NEXT:    [[Z:%.*]] = icmp slt i8 [[Y]], 53
+; CHECK-NEXT:    ret i1 [[Z]]
+;
+  %y = and i8 %x, -75
+  %z = icmp slt i8 %y, 53
+  ret i1 %z
+}
+
 ; 'add nuw x, C2' produces [C2, UINT_MAX]
 define i1 @tautological9(i32 %x) {
 ; CHECK-LABEL: @tautological9(
@@ -414,5 +558,203 @@ define <2 x i1> @tautological9_vec(<2 x i32> %x) {
   %add = add nuw <2 x i32> %x, <i32 13, i32 13>
   %cmp = icmp ne <2 x i32> %add, <i32 12, i32 12>
   ret <2 x i1> %cmp
+}
+
+; The upper bound of the 'add' is 0.
+
+define i1 @add_nsw_neg_const1(i32 %x) {
+; CHECK-LABEL: @add_nsw_neg_const1(
+; CHECK-NEXT:    ret i1 false
+;
+  %add = add nsw i32 %x, -2147483647
+  %cmp = icmp sgt i32 %add, 0
+  ret i1 %cmp
+}
+
+; InstCombine can fold this, but not InstSimplify.
+
+define i1 @add_nsw_neg_const2(i32 %x) {
+; CHECK-LABEL: @add_nsw_neg_const2(
+; CHECK-NEXT:    [[ADD:%.*]] = add nsw i32 [[X:%.*]], -2147483647
+; CHECK-NEXT:    [[CMP:%.*]] = icmp sgt i32 [[ADD]], -1
+; CHECK-NEXT:    ret i1 [[CMP]]
+;
+  %add = add nsw i32 %x, -2147483647
+  %cmp = icmp sgt i32 %add, -1
+  ret i1 %cmp
+}
+
+; The upper bound of the 'add' is 1 (move the constants to prove we're doing range-based analysis).
+
+define i1 @add_nsw_neg_const3(i32 %x) {
+; CHECK-LABEL: @add_nsw_neg_const3(
+; CHECK-NEXT:    ret i1 false
+;
+  %add = add nsw i32 %x, -2147483646
+  %cmp = icmp sgt i32 %add, 1
+  ret i1 %cmp
+}
+
+; InstCombine can fold this, but not InstSimplify.
+
+define i1 @add_nsw_neg_const4(i32 %x) {
+; CHECK-LABEL: @add_nsw_neg_const4(
+; CHECK-NEXT:    [[ADD:%.*]] = add nsw i32 [[X:%.*]], -2147483646
+; CHECK-NEXT:    [[CMP:%.*]] = icmp sgt i32 [[ADD]], 0
+; CHECK-NEXT:    ret i1 [[CMP]]
+;
+  %add = add nsw i32 %x, -2147483646
+  %cmp = icmp sgt i32 %add, 0
+  ret i1 %cmp
+}
+
+; The upper bound of the 'add' is 2147483647 - 42 = 2147483605 (move the constants again and try a different cmp predicate).
+
+define i1 @add_nsw_neg_const5(i32 %x) {
+; CHECK-LABEL: @add_nsw_neg_const5(
+; CHECK-NEXT:    ret i1 true
+;
+  %add = add nsw i32 %x, -42
+  %cmp = icmp ne i32 %add, 2147483606
+  ret i1 %cmp
+}
+
+; InstCombine can fold this, but not InstSimplify.
+
+define i1 @add_nsw_neg_const6(i32 %x) {
+; CHECK-LABEL: @add_nsw_neg_const6(
+; CHECK-NEXT:    [[ADD:%.*]] = add nsw i32 [[X:%.*]], -42
+; CHECK-NEXT:    [[CMP:%.*]] = icmp ne i32 [[ADD]], 2147483605
+; CHECK-NEXT:    ret i1 [[CMP]]
+;
+  %add = add nsw i32 %x, -42
+  %cmp = icmp ne i32 %add, 2147483605
+  ret i1 %cmp
+}
+
+; The lower bound of the 'add' is -1.
+
+define i1 @add_nsw_pos_const1(i32 %x) {
+; CHECK-LABEL: @add_nsw_pos_const1(
+; CHECK-NEXT:    ret i1 false
+;
+  %add = add nsw i32 %x, 2147483647
+  %cmp = icmp slt i32 %add, -1
+  ret i1 %cmp
+}
+
+; InstCombine can fold this, but not InstSimplify.
+
+define i1 @add_nsw_pos_const2(i32 %x) {
+; CHECK-LABEL: @add_nsw_pos_const2(
+; CHECK-NEXT:    [[ADD:%.*]] = add nsw i32 [[X:%.*]], 2147483647
+; CHECK-NEXT:    [[CMP:%.*]] = icmp slt i32 [[ADD]], 0
+; CHECK-NEXT:    ret i1 [[CMP]]
+;
+  %add = add nsw i32 %x, 2147483647
+  %cmp = icmp slt i32 %add, 0
+  ret i1 %cmp
+}
+
+; The lower bound of the 'add' is -2 (move the constants to prove we're doing range-based analysis).
+
+define i1 @add_nsw_pos_const3(i32 %x) {
+; CHECK-LABEL: @add_nsw_pos_const3(
+; CHECK-NEXT:    ret i1 false
+;
+  %add = add nsw i32 %x, 2147483646
+  %cmp = icmp slt i32 %add, -2
+  ret i1 %cmp
+}
+
+; InstCombine can fold this, but not InstSimplify.
+
+define i1 @add_nsw_pos_const4(i32 %x) {
+; CHECK-LABEL: @add_nsw_pos_const4(
+; CHECK-NEXT:    [[ADD:%.*]] = add nsw i32 [[X:%.*]], 2147483646
+; CHECK-NEXT:    [[CMP:%.*]] = icmp slt i32 [[ADD]], -1
+; CHECK-NEXT:    ret i1 [[CMP]]
+;
+  %add = add nsw i32 %x, 2147483646
+  %cmp = icmp slt i32 %add, -1
+  ret i1 %cmp
+}
+
+; The lower bound of the 'add' is -2147483648 + 42 = -2147483606 (move the constants again and change the cmp predicate).
+
+define i1 @add_nsw_pos_const5(i32 %x) {
+; CHECK-LABEL: @add_nsw_pos_const5(
+; CHECK-NEXT:    ret i1 false
+;
+  %add = add nsw i32 %x, 42
+  %cmp = icmp eq i32 %add, -2147483607
+  ret i1 %cmp
+}
+
+; InstCombine can fold this, but not InstSimplify.
+
+define i1 @add_nsw_pos_const6(i32 %x) {
+; CHECK-LABEL: @add_nsw_pos_const6(
+; CHECK-NEXT:    [[ADD:%.*]] = add nsw i32 [[X:%.*]], 42
+; CHECK-NEXT:    [[CMP:%.*]] = icmp eq i32 [[ADD]], -2147483606
+; CHECK-NEXT:    ret i1 [[CMP]]
+;
+  %add = add nsw i32 %x, 42
+  %cmp = icmp eq i32 %add, -2147483606
+  ret i1 %cmp
+}
+
+; Verify that vectors work too.
+
+define <2 x i1> @add_nsw_pos_const5_splat_vec(<2 x i32> %x) {
+; CHECK-LABEL: @add_nsw_pos_const5_splat_vec(
+; CHECK-NEXT:    ret <2 x i1> <i1 true, i1 true>
+;
+  %add = add nsw <2 x i32> %x, <i32 42, i32 42>
+  %cmp = icmp ne <2 x i32> %add, <i32 -2147483607, i32 -2147483607>
+  ret <2 x i1> %cmp
+}
+
+; PR34838 - https://bugs.llvm.org/show_bug.cgi?id=34838
+; The shift is known to create poison, so we can simplify the cmp.
+
+define i1 @ne_shl_by_constant_produces_poison(i8 %x) {
+; CHECK-LABEL: @ne_shl_by_constant_produces_poison(
+; CHECK-NEXT:    ret i1 true
+;
+  %zx = zext i8 %x to i16      ; zx  = 0x00xx
+  %xor = xor i16 %zx, 32767    ; xor = 0x7fyy
+  %sub = sub nsw i16 %zx, %xor ; sub = 0x80zz  (the top bit is known one)
+  %poison = shl nsw i16 %sub, 2    ; oops! this shl can't be nsw; that's POISON
+  %cmp = icmp ne i16 %poison, 1
+  ret i1 %cmp
+}
+
+define i1 @eq_shl_by_constant_produces_poison(i8 %x) {
+; CHECK-LABEL: @eq_shl_by_constant_produces_poison(
+; CHECK-NEXT:    ret i1 false
+;
+  %clear_high_bit = and i8 %x, 127                 ; 0x7f
+  %set_next_high_bits = or i8 %clear_high_bit, 112 ; 0x70
+  %poison = shl nsw i8 %set_next_high_bits, 3
+  %cmp = icmp eq i8 %poison, 15
+  ret i1 %cmp
+}
+
+; Shift-by-variable that produces poison is more complicated but still possible.
+; We guarantee that the shift will change the sign of the shifted value (and
+; therefore produce poison) by limiting its range from 1 to 3.
+
+define i1 @eq_shl_by_variable_produces_poison(i8 %x) {
+; CHECK-LABEL: @eq_shl_by_variable_produces_poison(
+; CHECK-NEXT:    ret i1 false
+;
+  %clear_high_bit = and i8 %x, 127                 ; 0x7f
+  %set_next_high_bits = or i8 %clear_high_bit, 112 ; 0x70
+  %notundef_shiftamt = and i8 %x, 3
+  %nonzero_shiftamt = or i8 %notundef_shiftamt, 1
+  %poison = shl nsw i8 %set_next_high_bits, %nonzero_shiftamt
+  %cmp = icmp eq i8 %poison, 15
+  ret i1 %cmp
 }
 

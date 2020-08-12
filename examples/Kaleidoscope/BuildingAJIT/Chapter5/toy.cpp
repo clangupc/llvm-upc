@@ -1150,7 +1150,8 @@ static void HandleExtern() {
   if (auto ProtoAST = ParseExtern()) {
     if (auto *FnIR = ProtoAST->codegen()) {
       fprintf(stderr, "Read extern: ");
-      FnIR->dump();
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
       FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
     }
   } else {
@@ -1176,7 +1177,7 @@ static void HandleTopLevelExpression() {
 
       // Get the symbol's address and cast it to the right type (takes no
       // arguments, returns a double) so we can call it as a native function.
-      ExitOnErr(TheJIT->executeRemoteExpr(ExprSymbol.getAddress()));
+      ExitOnErr(TheJIT->executeRemoteExpr(cantFail(ExprSymbol.getAddress())));
 
       // Delete the anonymous expression module from the JIT.
       TheJIT->removeModule(H);
@@ -1242,7 +1243,9 @@ std::unique_ptr<FDRPCChannel> connect() {
   sockaddr_in servAddr;
   memset(&servAddr, 0, sizeof(servAddr));
   servAddr.sin_family = PF_INET;
-  memcpy(&servAddr.sin_addr.s_addr, server->h_addr, server->h_length);
+  char *src;
+  memcpy(&src, &server->h_addr, sizeof(char *));
+  memcpy(&servAddr.sin_addr.s_addr, src, server->h_length);
   servAddr.sin_port = htons(Port);
   if (connect(sockfd, reinterpret_cast<sockaddr*>(&servAddr),
               sizeof(servAddr)) < 0) {
@@ -1275,9 +1278,10 @@ int main(int argc, char *argv[]) {
   BinopPrecedence['-'] = 20;
   BinopPrecedence['*'] = 40; // highest.
 
+  ExecutionSession ES;
   auto TCPChannel = connect();
-  auto Remote = ExitOnErr(MyRemote::Create(*TCPChannel));
-  TheJIT = llvm::make_unique<KaleidoscopeJIT>(*Remote);
+  auto Remote = ExitOnErr(MyRemote::Create(*TCPChannel, ES));
+  TheJIT = llvm::make_unique<KaleidoscopeJIT>(ES, *Remote);
 
   // Automatically inject a definition for 'printExprResult'.
   FunctionProtos["printExprResult"] =

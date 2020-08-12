@@ -1,4 +1,4 @@
-; RUN: llc < %s -enable-unsafe-fp-math -march=x86 | not grep xor
+; RUN: llc < %s -enable-unsafe-fp-math | not grep xor
 ; PR3374
 
 target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f80:128:128"
@@ -188,7 +188,6 @@ target triple = "i386-apple-darwin7"
 @"\01LC28" = external constant [15 x i8]		; <[15 x i8]*> [#uses=0]
 @"\01LC29" = external constant [20 x i8]		; <[20 x i8]*> [#uses=0]
 @"\01LC30" = external constant [41 x i8]		; <[41 x i8]*> [#uses=0]
-@llvm.global_ctors = external global [1 x { i32, void ()* }]		; <[1 x { i32, void ()* }]*> [#uses=0]
 
 declare void @_GLOBAL__I__ZN9HingeNode7DEG2RADE() section "__TEXT,__StaticInit,regular,pure_instructions"
 
@@ -1133,4 +1132,4 @@ declare %"struct.std::basic_ostream<char,std::char_traits<char> >"* @_ZlsIdLi5EL
 
 declare %"struct.std::basic_ostream<char,std::char_traits<char> >"* @_ZlsIdLi5ELi6EERSoS0_RK15FixedMatrixBaseIT_XT0_EXT1_EE(%"struct.std::basic_ostream<char,std::char_traits<char> >"*, %"struct.FixedMatrixBase<double,5,6>"*)
 
-declare void @llvm.memset.p0i8.i64(i8* nocapture, i8, i64, i32, i1) nounwind
+declare void @llvm.memset.p0i8.i64(i8* nocapture, i8, i64, i1) nounwind

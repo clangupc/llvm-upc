@@ -4,7 +4,7 @@
 ; RUN: llc %s -o - -filetype=asm -O0 -mtriple=i386-linux-gnu \
 ; RUN:   | FileCheck --check-prefix=NOEMU --check-prefix=SINGLE --check-prefix=SINGLE-32 --check-prefix=GNUOP %s
 
-; RUN: llc %s -o - -filetype=asm -O0 -mtriple=x86_64-unknown-linux-gnu -split-dwarf=Enable \
+; RUN: llc %s -o - -filetype=asm -O0 -mtriple=x86_64-unknown-linux-gnu -split-dwarf-file=foo.dwo \
 ; RUN:   | FileCheck --check-prefix=NOEMU --check-prefix=FISSION --check-prefix=GNUOP %s
 
 ; RUN: llc %s -o - -filetype=asm -O0 -mtriple=x86_64-scei-ps4 \
@@ -78,7 +78,7 @@
 
 ; check that the expected TLS address description is the first thing in the debug_addr section
 ; FISSION: .section    .debug_addr
-; FISSION: addr_sec:
+; FISSION-NEXT: .Laddr_table_base0:
 ; FISSION-NEXT: .quad  tls@DTPOFF
 ; FISSION-NEXT: .quad  glbl
 ; FISSION-NOT: .quad  glbl
@@ -112,11 +112,11 @@ attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointe
 !llvm.module.flags = !{!9, !10}
 !llvm.ident = !{!11}
 
-!0 = !DIGlobalVariableExpression(var: !1)
+!0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression())
 !1 = !DIGlobalVariable(name: "tls", scope: null, file: !2, line: 1, type: !3, isLocal: false, isDefinition: true)
 !2 = !DIFile(filename: "tls.cpp", directory: "/tmp/dbginfo")
 !3 = !DIBasicType(name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
-!4 = !DIGlobalVariableExpression(var: !5)
+!4 = !DIGlobalVariableExpression(var: !5, expr: !DIExpression())
 !5 = !DIGlobalVariable(name: "glbl", scope: null, file: !2, line: 2, type: !3, isLocal: false, isDefinition: true)
 !6 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !2, producer: "clang version 3.5 ", isOptimized: false, runtimeVersion: 0, splitDebugFilename: "-.dwo", emissionKind: FullDebug, enums: !7, retainedTypes: !7, globals: !8, imports: !7)
 !7 = !{}
@@ -124,7 +124,7 @@ attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointe
 !9 = !{i32 2, !"Dwarf Version", i32 4}
 !10 = !{i32 1, !"Debug Info Version", i32 3}
 !11 = !{!"clang version 3.5 "}
-!12 = distinct !DISubprogram(name: "func<&glbl>", linkageName: "_Z4funcIXadL_Z4glblEEEiv", scope: !2, file: !2, line: 5, type: !13, isLocal: false, isDefinition: true, scopeLine: 5, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !6, templateParams: !15, variables: !7)
+!12 = distinct !DISubprogram(name: "func<&glbl>", linkageName: "_Z4funcIXadL_Z4glblEEEiv", scope: !2, file: !2, line: 5, type: !13, isLocal: false, isDefinition: true, scopeLine: 5, virtualIndex: 6, flags: DIFlagPrototyped, isOptimized: false, unit: !6, templateParams: !15, retainedNodes: !7)
 !13 = !DISubroutineType(types: !14)
 !14 = !{!3}
 !15 = !{!16}

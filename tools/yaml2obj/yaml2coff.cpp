@@ -1,14 +1,13 @@
 //===- yaml2coff - Convert YAML to a COFF object file ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief The COFF component of yaml2obj.
+/// The COFF component of yaml2obj.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -17,11 +16,14 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/DebugInfo/CodeView/DebugStringTableSubsection.h"
+#include "llvm/DebugInfo/CodeView/StringsAndChecksums.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/ObjectYAML/ObjectYAML.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/WithColor.h"
 #include "llvm/Support/raw_ostream.h"
 #include <vector>
 
@@ -44,7 +46,8 @@ struct COFFParser {
 
   bool isPE() const { return Obj.OptionalHeader.hasValue(); }
   bool is64Bit() const {
-    return Obj.Header.Machine == COFF::IMAGE_FILE_MACHINE_AMD64;
+    return Obj.Header.Machine == COFF::IMAGE_FILE_MACHINE_AMD64 ||
+           Obj.Header.Machine == COFF::IMAGE_FILE_MACHINE_ARM64;
   }
 
   uint32_t getFileAlignment() const {
@@ -142,6 +145,8 @@ struct COFFParser {
 
   COFFYAML::Object &Obj;
 
+  codeview::StringsAndChecksums StringsAndChecksums;
+  BumpPtrAllocator Allocator;
   StringMap<unsigned> StringTableMap;
   std::string StringTable;
   uint32_t SectionTableStart;
@@ -165,6 +170,32 @@ namespace {
 enum { DOSStubSize = 128 };
 }
 
+static yaml::BinaryRef
+toDebugS(ArrayRef<CodeViewYAML::YAMLDebugSubsection> Subsections,
+         const codeview::StringsAndChecksums &SC, BumpPtrAllocator &Allocator) {
+  using namespace codeview;
+  ExitOnError Err("Error occurred writing .debug$S section");
+  auto CVSS =
+      Err(CodeViewYAML::toCodeViewSubsectionList(Allocator, Subsections, SC));
+
+  std::vector<DebugSubsectionRecordBuilder> Builders;
+  uint32_t Size = sizeof(uint32_t);
+  for (auto &SS : CVSS) {
+    DebugSubsectionRecordBuilder B(SS, CodeViewContainer::ObjectFile);
+    Size += B.calculateSerializedLength();
+    Builders.push_back(std::move(B));
+  }
+  uint8_t *Buffer = Allocator.Allocate<uint8_t>(Size);
+  MutableArrayRef<uint8_t> Output(Buffer, Size);
+  BinaryStreamWriter Writer(Output, support::little);
+
+  Err(Writer.writeInteger<uint32_t>(COFF::DEBUG_SECTION_MAGIC));
+  for (const auto &B : Builders) {
+    Err(B.commit(Writer));
+  }
+  return {Output};
+}
+
 // Take a CP and assign addresses and sizes to everything. Returns false if the
 // layout is not valid to do.
 static bool layoutCOFF(COFFParser &CP) {
@@ -179,8 +210,39 @@ static bool layoutCOFF(COFFParser &CP) {
   uint32_t CurrentSectionDataOffset =
       CP.SectionTableStart + CP.SectionTableSize;
 
+  for (COFFYAML::Section &S : CP.Obj.Sections) {
+    // We support specifying exactly one of SectionData or Subsections.  So if
+    // there is already some SectionData, then we don't need to do any of this.
+    if (S.Name == ".debug$S" && S.SectionData.binary_size() == 0) {
+      CodeViewYAML::initializeStringsAndChecksums(S.DebugS,
+                                                  CP.StringsAndChecksums);
+      if (CP.StringsAndChecksums.hasChecksums() &&
+          CP.StringsAndChecksums.hasStrings())
+        break;
+    }
+  }
+
   // Assign each section data address consecutively.
   for (COFFYAML::Section &S : CP.Obj.Sections) {
+    if (S.Name == ".debug$S") {
+      if (S.SectionData.binary_size() == 0) {
+        assert(CP.StringsAndChecksums.hasStrings() &&
+               "Object file does not have debug string table!");
+
+        S.SectionData =
+            toDebugS(S.DebugS, CP.StringsAndChecksums, CP.Allocator);
+      }
+    } else if (S.Name == ".debug$T") {
+      if (S.SectionData.binary_size() == 0)
+        S.SectionData = CodeViewYAML::toDebugT(S.DebugT, CP.Allocator, S.Name);
+    } else if (S.Name == ".debug$P") {
+      if (S.SectionData.binary_size() == 0)
+        S.SectionData = CodeViewYAML::toDebugT(S.DebugP, CP.Allocator, S.Name);
+    } else if (S.Name == ".debug$H") {
+      if (S.DebugH.hasValue() && S.SectionData.binary_size() == 0)
+        S.SectionData = CodeViewYAML::toDebugH(*S.DebugH, CP.Allocator);
+    }
+
     if (S.SectionData.binary_size() > 0) {
       CurrentSectionDataOffset = alignTo(CurrentSectionDataOffset,
                                          CP.isPE() ? CP.getFileAlignment() : 4);
@@ -197,7 +259,8 @@ static bool layoutCOFF(COFFParser &CP) {
             S.Header.NumberOfRelocations * COFF::RelocationSize;
       }
     } else {
-      S.Header.SizeOfRawData = 0;
+      // Leave SizeOfRawData unaltered. For .bss sections in object files, it
+      // carries the section size.
       S.Header.PointerToRawData = 0;
     }
   }
@@ -277,22 +340,6 @@ zeros_impl<sizeof(T)> zeros(const T &) {
   return zeros_impl<sizeof(T)>();
 }
 
-struct num_zeros_impl {
-  size_t N;
-  num_zeros_impl(size_t N) : N(N) {}
-};
-
-raw_ostream &operator<<(raw_ostream &OS, const num_zeros_impl &NZI) {
-  for (size_t I = 0; I != NZI.N; ++I)
-    OS.write(0);
-  return OS;
-}
-
-static num_zeros_impl num_zeros(size_t N) {
-  num_zeros_impl NZI(N);
-  return NZI;
-}
-
 template <typename T>
 static uint32_t initializeOptionalHeader(COFFParser &CP, uint16_t Magic, T Header) {
   memset(Header, 0, sizeof(*Header));
@@ -369,7 +416,7 @@ static bool writeCOFF(COFFParser &CP, raw_ostream &OS) {
     OS.write(reinterpret_cast<char *>(&DH), sizeof(DH));
     // Write padding until we reach the position of where our PE signature
     // should live.
-    OS << num_zeros(DOSStubSize - sizeof(DH));
+    OS.write_zeros(DOSStubSize - sizeof(DH));
     // Write out the PE signature.
     OS.write(COFF::PEMagic, sizeof(COFF::PEMagic));
   }
@@ -450,15 +497,23 @@ static bool writeCOFF(COFFParser &CP, raw_ostream &OS) {
 
   // Output section data.
   for (const COFFYAML::Section &S : CP.Obj.Sections) {
-    if (!S.Header.SizeOfRawData)
+    if (S.Header.SizeOfRawData == 0 || S.Header.PointerToRawData == 0)
       continue;
     assert(S.Header.PointerToRawData >= OS.tell());
-    OS << num_zeros(S.Header.PointerToRawData - OS.tell());
+    OS.write_zeros(S.Header.PointerToRawData - OS.tell());
     S.SectionData.writeAsBinary(OS);
     assert(S.Header.SizeOfRawData >= S.SectionData.binary_size());
-    OS << num_zeros(S.Header.SizeOfRawData - S.SectionData.binary_size());
+    OS.write_zeros(S.Header.SizeOfRawData - S.SectionData.binary_size());
     for (const COFFYAML::Relocation &R : S.Relocations) {
-      uint32_t SymbolTableIndex = SymbolTableIndexMap[R.SymbolName];
+      uint32_t SymbolTableIndex;
+      if (R.SymbolTableIndex) {
+        if (!R.SymbolName.empty())
+          WithColor::error()
+              << "Both SymbolName and SymbolTableIndex specified\n";
+        SymbolTableIndex = *R.SymbolTableIndex;
+      } else {
+        SymbolTableIndex = SymbolTableIndexMap[R.SymbolName];
+      }
       OS << binary_le(R.VirtualAddress)
          << binary_le(SymbolTableIndex)
          << binary_le(R.Type);
@@ -480,25 +535,28 @@ static bool writeCOFF(COFFParser &CP, raw_ostream &OS) {
        << binary_le(i->Header.StorageClass)
        << binary_le(i->Header.NumberOfAuxSymbols);
 
-    if (i->FunctionDefinition)
+    if (i->FunctionDefinition) {
       OS << binary_le(i->FunctionDefinition->TagIndex)
          << binary_le(i->FunctionDefinition->TotalSize)
          << binary_le(i->FunctionDefinition->PointerToLinenumber)
          << binary_le(i->FunctionDefinition->PointerToNextFunction)
-         << zeros(i->FunctionDefinition->unused)
-         << num_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
-    if (i->bfAndefSymbol)
+         << zeros(i->FunctionDefinition->unused);
+      OS.write_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
+    }
+    if (i->bfAndefSymbol) {
       OS << zeros(i->bfAndefSymbol->unused1)
          << binary_le(i->bfAndefSymbol->Linenumber)
          << zeros(i->bfAndefSymbol->unused2)
          << binary_le(i->bfAndefSymbol->PointerToNextFunction)
-         << zeros(i->bfAndefSymbol->unused3)
-         << num_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
-    if (i->WeakExternal)
+         << zeros(i->bfAndefSymbol->unused3);
+      OS.write_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
+    }
+    if (i->WeakExternal) {
       OS << binary_le(i->WeakExternal->TagIndex)
          << binary_le(i->WeakExternal->Characteristics)
-         << zeros(i->WeakExternal->unused)
-         << num_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
+         << zeros(i->WeakExternal->unused);
+      OS.write_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
+    }
     if (!i->File.empty()) {
       unsigned SymbolSize = CP.getSymbolSize();
       uint32_t NumberOfAuxRecords =
@@ -506,9 +564,9 @@ static bool writeCOFF(COFFParser &CP, raw_ostream &OS) {
       uint32_t NumberOfAuxBytes = NumberOfAuxRecords * SymbolSize;
       uint32_t NumZeros = NumberOfAuxBytes - i->File.size();
       OS.write(i->File.data(), i->File.size());
-      OS << num_zeros(NumZeros);
+      OS.write_zeros(NumZeros);
     }
-    if (i->SectionDefinition)
+    if (i->SectionDefinition) {
       OS << binary_le(i->SectionDefinition->Length)
          << binary_le(i->SectionDefinition->NumberOfRelocations)
          << binary_le(i->SectionDefinition->NumberOfLinenumbers)
@@ -516,14 +574,16 @@ static bool writeCOFF(COFFParser &CP, raw_ostream &OS) {
          << binary_le(static_cast<int16_t>(i->SectionDefinition->Number))
          << binary_le(i->SectionDefinition->Selection)
          << zeros(i->SectionDefinition->unused)
-         << binary_le(static_cast<int16_t>(i->SectionDefinition->Number >> 16))
-         << num_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
-    if (i->CLRToken)
+         << binary_le(static_cast<int16_t>(i->SectionDefinition->Number >> 16));
+      OS.write_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
+    }
+    if (i->CLRToken) {
       OS << binary_le(i->CLRToken->AuxType)
          << zeros(i->CLRToken->unused1)
          << binary_le(i->CLRToken->SymbolTableIndex)
-         << zeros(i->CLRToken->unused2)
-         << num_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
+         << zeros(i->CLRToken->unused2);
+      OS.write_zeros(CP.getSymbolSize() - COFF::Symbol16Size);
+    }
   }
 
   // Output string table.
@@ -543,6 +603,7 @@ int yaml2coff(llvm::COFFYAML::Object &Doc, raw_ostream &Out) {
     errs() << "yaml2obj: Failed to layout optional header for COFF file!\n";
     return 1;
   }
+
   if (!layoutCOFF(CP)) {
     errs() << "yaml2obj: Failed to layout COFF file!\n";
     return 1;

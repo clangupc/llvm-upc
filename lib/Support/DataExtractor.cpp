@@ -1,9 +1,8 @@
 //===-- DataExtractor.cpp -------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,6 +10,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/SwapByteOrder.h"
+#include "llvm/Support/LEB128.h"
 using namespace llvm;
 
 template <typename T>
@@ -66,6 +66,13 @@ uint16_t *DataExtractor::getU16(uint32_t *offset_ptr, uint16_t *dst,
                                 uint32_t count) const {
   return getUs<uint16_t>(offset_ptr, dst, count, this, IsLittleEndian,
                         Data.data());
+}
+
+uint32_t DataExtractor::getU24(uint32_t *offset_ptr) const {
+  uint24_t ExtractedVal =
+      getU<uint24_t>(offset_ptr, this, IsLittleEndian, Data.data());
+  // The 3 bytes are in the correct byte order for the host.
+  return ExtractedVal.getAsUint32(sys::IsLittleEndianHost);
 }
 
 uint32_t DataExtractor::getU32(uint32_t *offset_ptr) const {
@@ -128,48 +135,40 @@ const char *DataExtractor::getCStr(uint32_t *offset_ptr) const {
   return nullptr;
 }
 
-uint64_t DataExtractor::getULEB128(uint32_t *offset_ptr) const {
-  uint64_t result = 0;
-  if (Data.empty())
-    return 0;
-
-  unsigned shift = 0;
-  uint32_t offset = *offset_ptr;
-  uint8_t byte = 0;
-
-  while (isValidOffset(offset)) {
-    byte = Data[offset++];
-    result |= uint64_t(byte & 0x7f) << shift;
-    shift += 7;
-    if ((byte & 0x80) == 0)
-      break;
+StringRef DataExtractor::getCStrRef(uint32_t *OffsetPtr) const {
+  uint32_t Start = *OffsetPtr;
+  StringRef::size_type Pos = Data.find('\0', Start);
+  if (Pos != StringRef::npos) {
+    *OffsetPtr = Pos + 1;
+    return StringRef(Data.data() + Start, Pos - Start);
   }
+  return StringRef();
+}
 
-  *offset_ptr = offset;
+uint64_t DataExtractor::getULEB128(uint32_t *offset_ptr) const {
+  assert(*offset_ptr <= Data.size());
+
+  const char *error;
+  unsigned bytes_read;
+  uint64_t result = decodeULEB128(
+      reinterpret_cast<const uint8_t *>(Data.data() + *offset_ptr), &bytes_read,
+      reinterpret_cast<const uint8_t *>(Data.data() + Data.size()), &error);
+  if (error)
+    return 0;
+  *offset_ptr += bytes_read;
   return result;
 }
 
 int64_t DataExtractor::getSLEB128(uint32_t *offset_ptr) const {
-  int64_t result = 0;
-  if (Data.empty())
+  assert(*offset_ptr <= Data.size());
+
+  const char *error;
+  unsigned bytes_read;
+  int64_t result = decodeSLEB128(
+      reinterpret_cast<const uint8_t *>(Data.data() + *offset_ptr), &bytes_read,
+      reinterpret_cast<const uint8_t *>(Data.data() + Data.size()), &error);
+  if (error)
     return 0;
-
-  unsigned shift = 0;
-  uint32_t offset = *offset_ptr;
-  uint8_t byte = 0;
-
-  while (isValidOffset(offset)) {
-    byte = Data[offset++];
-    result |= uint64_t(byte & 0x7f) << shift;
-    shift += 7;
-    if ((byte & 0x80) == 0)
-      break;
-  }
-
-  // Sign bit of byte is 2nd high order bit (0x40)
-  if (shift < 64 && (byte & 0x40))
-    result |= -(1ULL << shift);
-
-  *offset_ptr = offset;
+  *offset_ptr += bytes_read;
   return result;
 }

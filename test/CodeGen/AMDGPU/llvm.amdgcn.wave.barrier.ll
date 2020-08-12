@@ -4,10 +4,22 @@
 ; GCN-DAG: ; wave barrier
 ; GCN-NOT: s_barrier
 
-define void @test_wave_barrier() #0 {
+define amdgpu_kernel void @test_wave_barrier() #0 {
 entry:
   call void @llvm.amdgcn.wave.barrier() #1
   ret void
+}
+
+; Check for verifier error from interpreting wave_barrier as a control
+; flow barrier.
+
+; GCN-LABEL: {{^}}test_wave_barrier_is_not_isBarrier:
+; GCN-DAG: ; wave barrier
+; GCN-NOT: s_barrier
+define amdgpu_kernel void @test_wave_barrier_is_not_isBarrier() #0 {
+entry:
+  call void @llvm.amdgcn.wave.barrier() #1
+  unreachable
 }
 
 declare void @llvm.amdgcn.wave.barrier() #1

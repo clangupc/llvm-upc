@@ -1,9 +1,8 @@
 //===- SjLjEHPrepare.cpp - Eliminate Invoke & Unwind instructions ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,11 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Transforms/Utils/Local.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -27,7 +27,6 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Utils/Local.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "sjljehprepare"
@@ -40,15 +39,15 @@ class SjLjEHPrepare : public FunctionPass {
   Type *doubleUnderDataTy;
   Type *doubleUnderJBufTy;
   Type *FunctionContextTy;
-  Constant *RegisterFn;
-  Constant *UnregisterFn;
-  Constant *BuiltinSetupDispatchFn;
-  Constant *FrameAddrFn;
-  Constant *StackAddrFn;
-  Constant *StackRestoreFn;
-  Constant *LSDAAddrFn;
-  Constant *CallSiteFn;
-  Constant *FuncCtxFn;
+  FunctionCallee RegisterFn;
+  FunctionCallee UnregisterFn;
+  Function *BuiltinSetupDispatchFn;
+  Function *FrameAddrFn;
+  Function *StackAddrFn;
+  Function *StackRestoreFn;
+  Function *LSDAAddrFn;
+  Function *CallSiteFn;
+  Function *FuncCtxFn;
   AllocaInst *FuncCtx;
 
 public:
@@ -73,7 +72,7 @@ private:
 } // end anonymous namespace
 
 char SjLjEHPrepare::ID = 0;
-INITIALIZE_PASS(SjLjEHPrepare, "sjljehprepare", "Prepare SjLj exceptions",
+INITIALIZE_PASS(SjLjEHPrepare, DEBUG_TYPE, "Prepare SjLj exceptions",
                 false, false)
 
 // Public Interface To the SjLjEHPrepare pass.
@@ -92,8 +91,8 @@ bool SjLjEHPrepare::doInitialization(Module &M) {
                                       doubleUnderDataTy, // __data
                                       VoidPtrTy,         // __personality
                                       VoidPtrTy,         // __lsda
-                                      doubleUnderJBufTy, // __jbuf
-                                      nullptr);
+                                      doubleUnderJBufTy  // __jbuf
+                                      );
 
   return true;
 }
@@ -124,8 +123,11 @@ static void MarkBlocksLiveIn(BasicBlock *BB,
   if (!LiveBBs.insert(BB).second)
     return; // already been here.
 
-  for (BasicBlock *PredBB : predecessors(BB))
-    MarkBlocksLiveIn(PredBB, LiveBBs);
+  df_iterator_default_set<BasicBlock*> Visited;
+
+  for (BasicBlock *B : inverse_depth_first_ext(BB, Visited))
+    LiveBBs.insert(B);
+
 }
 
 /// substituteLPadValues - Substitute the values returned by the landingpad
@@ -174,8 +176,8 @@ Value *SjLjEHPrepare::setupFunctionContext(Function &F,
   // because the value needs to be added to the global context list.
   auto &DL = F.getParent()->getDataLayout();
   unsigned Align = DL.getPrefTypeAlignment(FunctionContextTy);
-  FuncCtx = new AllocaInst(FunctionContextTy, nullptr, Align, "fn_context",
-                           &EntryBB->front());
+  FuncCtx = new AllocaInst(FunctionContextTy, DL.getAllocaAddrSpace(),
+                           nullptr, Align, "fn_context", &EntryBB->front());
 
   // Fill in the function context structure.
   for (LandingPadInst *LPI : LPads) {
@@ -187,14 +189,16 @@ Value *SjLjEHPrepare::setupFunctionContext(Function &F,
         Builder.CreateConstGEP2_32(FunctionContextTy, FuncCtx, 0, 2, "__data");
 
     // The exception values come back in context->__data[0].
+    Type *Int32Ty = Type::getInt32Ty(F.getContext());
     Value *ExceptionAddr = Builder.CreateConstGEP2_32(doubleUnderDataTy, FCData,
                                                       0, 0, "exception_gep");
-    Value *ExnVal = Builder.CreateLoad(ExceptionAddr, true, "exn_val");
+    Value *ExnVal = Builder.CreateLoad(Int32Ty, ExceptionAddr, true, "exn_val");
     ExnVal = Builder.CreateIntToPtr(ExnVal, Builder.getInt8PtrTy());
 
     Value *SelectorAddr = Builder.CreateConstGEP2_32(doubleUnderDataTy, FCData,
                                                      0, 1, "exn_selector_gep");
-    Value *SelVal = Builder.CreateLoad(SelectorAddr, true, "exn_selector_val");
+    Value *SelVal =
+        Builder.CreateLoad(Int32Ty, SelectorAddr, true, "exn_selector_val");
 
     substituteLPadValues(LPI, ExnVal, SelVal);
   }
@@ -229,6 +233,13 @@ void SjLjEHPrepare::lowerIncomingArguments(Function &F) {
   assert(AfterAllocaInsPt != F.front().end());
 
   for (auto &AI : F.args()) {
+    // Swift error really is a register that we model as memory -- instruction
+    // selection will perform mem-to-reg for us and spill/reload appropriately
+    // around calls that clobber it. There is no need to spill this
+    // value to the stack and doing so would not be allowed.
+    if (AI.isSwiftError())
+      continue;
+
     Type *Ty = AI.getType();
 
     // Use 'select i8 true, %arg, undef' to simulate a 'no-op' instruction.
@@ -297,8 +308,8 @@ void SjLjEHPrepare::lowerAcrossUnwindEdges(Function &F,
       for (InvokeInst *Invoke : Invokes) {
         BasicBlock *UnwindBlock = Invoke->getUnwindDest();
         if (UnwindBlock != &BB && LiveBBs.count(UnwindBlock)) {
-          DEBUG(dbgs() << "SJLJ Spill: " << Inst << " around "
-                       << UnwindBlock->getName() << "\n");
+          LLVM_DEBUG(dbgs() << "SJLJ Spill: " << Inst << " around "
+                            << UnwindBlock->getName() << "\n");
           NeedsSpill = true;
           break;
         }
@@ -462,10 +473,10 @@ bool SjLjEHPrepare::runOnFunction(Function &F) {
   Module &M = *F.getParent();
   RegisterFn = M.getOrInsertFunction(
       "_Unwind_SjLj_Register", Type::getVoidTy(M.getContext()),
-      PointerType::getUnqual(FunctionContextTy), nullptr);
+      PointerType::getUnqual(FunctionContextTy));
   UnregisterFn = M.getOrInsertFunction(
       "_Unwind_SjLj_Unregister", Type::getVoidTy(M.getContext()),
-      PointerType::getUnqual(FunctionContextTy), nullptr);
+      PointerType::getUnqual(FunctionContextTy));
   FrameAddrFn = Intrinsic::getDeclaration(&M, Intrinsic::frameaddress);
   StackAddrFn = Intrinsic::getDeclaration(&M, Intrinsic::stacksave);
   StackRestoreFn = Intrinsic::getDeclaration(&M, Intrinsic::stackrestore);

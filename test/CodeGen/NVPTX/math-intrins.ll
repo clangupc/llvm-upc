@@ -21,6 +21,8 @@ declare float @llvm.minnum.f32(float, float) #0
 declare double @llvm.minnum.f64(double, double) #0
 declare float @llvm.maxnum.f32(float, float) #0
 declare double @llvm.maxnum.f64(double, double) #0
+declare float @llvm.fma.f32(float, float, float) #0
+declare double @llvm.fma.f64(double, double, double) #0
 
 ; ---- ceil ----
 
@@ -72,21 +74,27 @@ define double @floor_double(double %a) {
 
 ; CHECK-LABEL: round_float
 define float @round_float(float %a) {
-  ; CHECK: cvt.rni.f32.f32
+; check the use of sign mask and 0.5 to implement round
+; CHECK: and.b32 [[R1:%r[0-9]+]], {{.*}}, -2147483648;
+; CHECK: or.b32 {{.*}}, [[R1]], 1056964608;
   %b = call float @llvm.round.f32(float %a)
   ret float %b
 }
 
 ; CHECK-LABEL: round_float_ftz
 define float @round_float_ftz(float %a) #1 {
-  ; CHECK: cvt.rni.ftz.f32.f32
+; check the use of sign mask and 0.5 to implement round
+; CHECK: and.b32 [[R1:%r[0-9]+]], {{.*}}, -2147483648;
+; CHECK: or.b32 {{.*}}, [[R1]], 1056964608;
   %b = call float @llvm.round.f32(float %a)
   ret float %b
 }
 
 ; CHECK-LABEL: round_double
 define double @round_double(double %a) {
-  ; CHECK: cvt.rni.f64.f64
+; check the use of 0.5 to implement round
+; CHECK: setp.lt.f64 {{.*}}, [[R:%fd[0-9]+]], 0d3FE0000000000000;
+; CHECK: add.rn.f64 {{.*}}, [[R]], 0d3FE0000000000000;
   %b = call double @llvm.round.f64(double %a)
   ret double %b
 }
@@ -254,6 +262,29 @@ define float @max_float_ftz(float %a, float %b) #1 {
 define double @max_double(double %a, double %b) {
   ; CHECK: max.f64
   %x = call double @llvm.maxnum.f64(double %a, double %b)
+  ret double %x
+}
+
+; ---- fma ----
+
+; CHECK-LABEL: @fma_float
+define float @fma_float(float %a, float %b, float %c) {
+  ; CHECK: fma.rn.f32
+  %x = call float @llvm.fma.f32(float %a, float %b, float %c)
+  ret float %x
+}
+
+; CHECK-LABEL: @fma_float_ftz
+define float @fma_float_ftz(float %a, float %b, float %c) #1 {
+  ; CHECK: fma.rn.ftz.f32
+  %x = call float @llvm.fma.f32(float %a, float %b, float %c)
+  ret float %x
+}
+
+; CHECK-LABEL: @fma_double
+define double @fma_double(double %a, double %b, double %c) {
+  ; CHECK: fma.rn.f64
+  %x = call double @llvm.fma.f64(double %a, double %b, double %c)
   ret double %x
 }
 

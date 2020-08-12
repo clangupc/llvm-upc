@@ -1,4 +1,4 @@
-// RUN: llvm-mc -triple i386-apple-darwin9 %s -filetype=obj -o - | llvm-readobj -file-headers -s -sd -r -macho-segment -macho-version-min | FileCheck %s
+// RUN: llvm-mc -triple i386-apple-darwin9 %s -filetype=obj -o - | llvm-readobj --file-headers -S --sd -r --macho-segment --macho-version-min | FileCheck %s
 
 	.section	__TEXT,__text,regular,pure_instructions
 Leh_func_begin0:
@@ -82,6 +82,6 @@ Ltmp4 = Leh_func_begin0-Ltmp3
 // CHECK-NEXT: MinVersion {
 // CHECK-NEXT:   Cmd: LC_VERSION_MIN_MACOSX
 // CHECK-NEXT:   Size: 16
-// CHECK-NEXT:   Version: 9.0
+// CHECK-NEXT:   Version: 10.5
 // CHECK-NEXT:   SDK: n/a
 // CHECK-NEXT: }

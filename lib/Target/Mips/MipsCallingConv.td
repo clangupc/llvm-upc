@@ -1,9 +1,8 @@
 //===-- MipsCallingConv.td - Calling Conventions for Mips --*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 // This describes the calling conventions for Mips architecture.
@@ -37,6 +36,10 @@ class CCIfOrigArgWasF128<CCAction A>
 class CCIfArgIsVarArg<CCAction A>
     : CCIf<"!static_cast<MipsCCState *>(&State)->IsCallOperandFixed(ValNo)", A>;
 
+/// Match if the return was a floating point vector.
+class CCIfOrigArgWasNotVectorFloat<CCAction A>
+    : CCIf<"!static_cast<MipsCCState *>(&State)"
+                "->WasOriginalRetVectorFloat(ValNo)", A>;
 
 /// Match if the special calling conv is the specified value.
 class CCIfSpecialCallingConv<string CC, CCAction A>
@@ -93,8 +96,10 @@ def RetCC_MipsO32 : CallingConv<[
   // Promote i1/i8/i16 return values to i32.
   CCIfType<[i1, i8, i16], CCPromoteToType<i32>>,
 
-  // i32 are returned in registers V0, V1, A0, A1
-  CCIfType<[i32], CCAssignToReg<[V0, V1, A0, A1]>>,
+  // i32 are returned in registers V0, V1, A0, A1, unless the original return
+  // type was a vector of floats.
+  CCIfOrigArgWasNotVectorFloat<CCIfType<[i32],
+                                        CCAssignToReg<[V0, V1, A0, A1]>>>,
 
   // f32 are returned in registers F0, F2
   CCIfType<[f32], CCAssignToReg<[F0, F2]>>,

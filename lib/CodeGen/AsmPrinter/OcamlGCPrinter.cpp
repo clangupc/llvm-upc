@@ -1,9 +1,8 @@
-//===-- OcamlGCPrinter.cpp - Ocaml frametable emitter ---------------------===//
+//===- OcamlGCPrinter.cpp - Ocaml frametable emitter ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,23 +10,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/GCs.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
+#include "llvm/CodeGen/BuiltinGCs.h"
+#include "llvm/CodeGen/GCMetadata.h"
 #include "llvm/CodeGen/GCMetadataPrinter.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Function.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Module.h"
-#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/FormattedStream.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
 using namespace llvm;
 
 namespace {
@@ -37,7 +40,8 @@ public:
   void beginAssembly(Module &M, GCModuleInfo &Info, AsmPrinter &AP) override;
   void finishAssembly(Module &M, GCModuleInfo &Info, AsmPrinter &AP) override;
 };
-}
+
+} // end anonymous namespace
 
 static GCMetadataPrinterRegistry::Add<OcamlGCMetadataPrinter>
     Y("ocaml", "ocaml 3.10-compatible collector");
@@ -50,7 +54,7 @@ static void EmitCamlGlobal(const Module &M, AsmPrinter &AP, const char *Id) {
   std::string SymName;
   SymName += "caml";
   size_t Letter = SymName.size();
-  SymName.append(MId.begin(), find(MId, '.'));
+  SymName.append(MId.begin(), llvm::find(MId, '.'));
   SymName += "__";
   SymName += Id;
 
@@ -124,7 +128,7 @@ void OcamlGCMetadataPrinter::finishAssembly(Module &M, GCModuleInfo &Info,
     // Very rude!
     report_fatal_error(" Too much descriptor for ocaml GC");
   }
-  AP.EmitInt16(NumDescriptors);
+  AP.emitInt16(NumDescriptors);
   AP.EmitAlignment(IntPtrSize == 4 ? 2 : 3);
 
   for (GCModuleInfo::FuncInfoVec::iterator I = Info.funcinfo_begin(),
@@ -161,8 +165,8 @@ void OcamlGCMetadataPrinter::finishAssembly(Module &M, GCModuleInfo &Info,
       }
 
       AP.OutStreamer->EmitSymbolValue(J->Label, IntPtrSize);
-      AP.EmitInt16(FrameSize);
-      AP.EmitInt16(LiveCount);
+      AP.emitInt16(FrameSize);
+      AP.emitInt16(LiveCount);
 
       for (GCFunctionInfo::live_iterator K = FI.live_begin(J),
                                          KE = FI.live_end(J);
@@ -173,7 +177,7 @@ void OcamlGCMetadataPrinter::finishAssembly(Module &M, GCModuleInfo &Info,
               "GC root stack offset is outside of fixed stack frame and out "
               "of range for ocaml GC!");
         }
-        AP.EmitInt16(K->StackOffset);
+        AP.emitInt16(K->StackOffset);
       }
 
       AP.EmitAlignment(IntPtrSize == 4 ? 2 : 3);

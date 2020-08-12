@@ -1,14 +1,13 @@
 //===- llvm/unittest/MC/DwarfLineTables.cpp ------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/Dwarf.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDwarf.h"
@@ -58,9 +57,7 @@ void verifyEncoding(MCDwarfLineTableParams Params, int LineDelta, int AddrDelta,
   raw_svector_ostream EncodingOS(Buffer);
   MCDwarfLineAddr::Encode(getContext(), Params, LineDelta, AddrDelta,
                           EncodingOS);
-  ArrayRef<uint8_t> Encoding(reinterpret_cast<uint8_t *>(Buffer.data()),
-                             Buffer.size());
-  EXPECT_EQ(ExpectedEncoding, Encoding);
+  EXPECT_EQ(ExpectedEncoding, arrayRefFromStringRef(Buffer));
 }
 
 TEST(DwarfLineTables, TestDefaultParams) {

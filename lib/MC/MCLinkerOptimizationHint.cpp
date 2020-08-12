@@ -1,17 +1,18 @@
-//===-- llvm/MC/MCLinkerOptimizationHint.cpp ----- LOH handling -*- C++ -*-===//
+//===- llvm/MC/MCLinkerOptimizationHint.cpp ----- LOH handling ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCLinkerOptimizationHint.h"
 #include "llvm/MC/MCAsmLayout.h"
-#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCMachObjectWriter.h"
 #include "llvm/Support/LEB128.h"
+#include "llvm/Support/raw_ostream.h"
+#include <cstddef>
+#include <cstdint>
 
 using namespace llvm;
 
@@ -34,21 +35,21 @@ void MCLOHDirective::emit_impl(raw_ostream &OutStream,
 
 void MCLOHDirective::emit(MachObjectWriter &ObjWriter,
                           const MCAsmLayout &Layout) const {
-  raw_ostream &OutStream = ObjWriter.getStream();
+  raw_ostream &OutStream = ObjWriter.W.OS;
   emit_impl(OutStream, ObjWriter, Layout);
 }
 
 uint64_t MCLOHDirective::getEmitSize(const MachObjectWriter &ObjWriter,
                                      const MCAsmLayout &Layout) const {
   class raw_counting_ostream : public raw_ostream {
-    uint64_t Count;
+    uint64_t Count = 0;
 
     void write_impl(const char *, size_t size) override { Count += size; }
 
     uint64_t current_pos() const override { return Count; }
 
   public:
-    raw_counting_ostream() : Count(0) {}
+    raw_counting_ostream() = default;
     ~raw_counting_ostream() override { flush(); }
   };
 

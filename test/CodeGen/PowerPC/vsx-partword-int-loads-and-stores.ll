@@ -41,11 +41,11 @@ entry:
   %splat.splat = shufflevector <4 x i32> %splat.splatinsert, <4 x i32> undef, <4 x i32> zeroinitializer
   ret <4 x i32> %splat.splat
 ; CHECK-LABEL: vecuiuc
-; CHECK: lxsibzx 34, 0, 3
-; CHECK-NEXT: xxspltw 34, 34, 1
+; CHECK: lxsibzx 0, 0, 3
+; CHECK-NEXT: xxspltw 34, 0, 1
 ; CHECK-BE-LABEL: vecuiuc
-; CHECK-BE: lxsibzx 34, 0, 3
-; CHECK-BE-NEXT: xxspltw 34, 34, 1
+; CHECK-BE: lxsibzx 0, 0, 3
+; CHECK-BE-NEXT: xxspltw 34, 0, 1
 }
 
 ; Function Attrs: norecurse nounwind readonly
@@ -104,11 +104,11 @@ entry:
   %splat.splat = shufflevector <4 x i32> %splat.splatinsert, <4 x i32> undef, <4 x i32> zeroinitializer
   ret <4 x i32> %splat.splat
 ; CHECK-LABEL: vecsiuc
-; CHECK: lxsibzx 34, 0, 3
-; CHECK-NEXT: xxspltw 34, 34, 1
+; CHECK: lxsibzx 0, 0, 3
+; CHECK-NEXT: xxspltw 34, 0, 1
 ; CHECK-BE-LABEL: vecsiuc
-; CHECK-BE: lxsibzx 34, 0, 3
-; CHECK-BE-NEXT: xxspltw 34, 34, 1
+; CHECK-BE: lxsibzx 0, 0, 3
+; CHECK-BE-NEXT: xxspltw 34, 0, 1
 }
 
 ; Function Attrs: norecurse nounwind readonly
@@ -321,8 +321,8 @@ entry:
 ; CHECK: lxsibzx 34, 0, 3
 ; CHECK-NEXT: vspltb 2, 2, 7
 ; CHECK-BE-LABEL: vecucus
-; CHECK-BE: li [[OFFSET:[0-9]+]], 1
-; CHECK-BE-NEXT: lxsibzx 34, 3, [[OFFSET]]
+; CHECK-BE: addi [[OFFSET:[0-9]+]], [[OFFSET]], 1
+; CHECK-BE-NEXT: lxsibzx 34, 0, [[OFFSET]]
 ; CHECK-BE-NEXT: vspltb 2, 2, 7
 }
 
@@ -350,11 +350,11 @@ entry:
   %splat.splat = shufflevector <4 x i32> %splat.splatinsert, <4 x i32> undef, <4 x i32> zeroinitializer
   ret <4 x i32> %splat.splat
 ; CHECK-LABEL: vecuius
-; CHECK: lxsihzx 34, 0, 3
-; CHECK-NEXT: xxspltw 34, 34, 1
+; CHECK: lxsihzx 0, 0, 3
+; CHECK-NEXT: xxspltw 34, 0, 1
 ; CHECK-BE-LABEL: vecuius
-; CHECK-BE: lxsihzx 34, 0, 3
-; CHECK-BE-NEXT: xxspltw 34, 34, 1
+; CHECK-BE: lxsihzx 0, 0, 3
+; CHECK-BE-NEXT: xxspltw 34, 0, 1
 }
 
 ; Function Attrs: norecurse nounwind readonly
@@ -385,8 +385,8 @@ entry:
 ; CHECK: lxsibzx 34, 0, 3
 ; CHECK-NEXT: vspltb 2, 2, 7
 ; CHECK-BE-LABEL: vecscus
-; CHECK-BE: li [[OFFSET:[0-9]+]], 1
-; CHECK-BE-NEXT: lxsibzx 34, 3, [[OFFSET]]
+; CHECK-BE: addi [[OFFSET:[0-9]+]], [[OFFSET]], 1
+; CHECK-BE-NEXT: lxsibzx 34, 0, [[OFFSET]]
 ; CHECK-BE-NEXT: vspltb 2, 2, 7
 }
 
@@ -414,11 +414,11 @@ entry:
   %splat.splat = shufflevector <4 x i32> %splat.splatinsert, <4 x i32> undef, <4 x i32> zeroinitializer
   ret <4 x i32> %splat.splat
 ; CHECK-LABEL: vecsius
-; CHECK: lxsihzx 34, 0, 3
-; CHECK-NEXT: xxspltw 34, 34, 1
+; CHECK: lxsihzx 0, 0, 3
+; CHECK-NEXT: xxspltw 34, 0, 1
 ; CHECK-BE-LABEL: vecsius
-; CHECK-BE: lxsihzx 34, 0, 3
-; CHECK-BE-NEXT: xxspltw 34, 34, 1
+; CHECK-BE: lxsihzx 0, 0, 3
+; CHECK-BE-NEXT: xxspltw 34, 0, 1
 }
 
 ; Function Attrs: norecurse nounwind readonly
@@ -487,8 +487,8 @@ entry:
 ; CHECK: lxsibzx 34, 0, 3
 ; CHECK-NEXT: vspltb 2, 2, 7
 ; CHECK-BE-LABEL: vecucss
-; CHECK-BE: li [[OFFSET:[0-9]+]], 1
-; CHECK-BE-NEXT: lxsibzx 34, 3, [[OFFSET]]
+; CHECK-BE: addi [[OFFSET:[0-9]+]], [[OFFSET]], 1
+; CHECK-BE-NEXT: lxsibzx 34, 0, [[OFFSET]]
 ; CHECK-BE-NEXT: vspltb 2, 2, 7
 }
 
@@ -540,8 +540,8 @@ entry:
 ; CHECK: lxsibzx 34, 0, 3
 ; CHECK-NEXT: vspltb 2, 2, 7
 ; CHECK-BE-LABEL: vecscss
-; CHECK-BE: li [[OFFSET:[0-9]+]], 1
-; CHECK-BE-NEXT: lxsibzx 34, 3, [[OFFSET]]
+; CHECK-BE: addi [[OFFSET:[0-9]+]], [[OFFSET]], 1
+; CHECK-BE-NEXT: lxsibzx 34, 0, [[OFFSET]]
 ; CHECK-BE-NEXT: vspltb 2, 2, 7
 }
 

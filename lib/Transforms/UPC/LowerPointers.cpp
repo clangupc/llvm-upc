@@ -4,22 +4,25 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/Module.h>
-#include <llvm/InitializePasses.h>
+//#include <llvm/InitializePasses.h>
 #include <llvm/Transforms/UPC.h>
 #include <llvm/Config/config.h> // for UPC_IR_RP_ADDRSPACE
 
 using namespace llvm;
 
+#define DEBUG_TYPE "lower-upc-pointers"
+
 namespace {
 
 static const int UPC_PTS_ADDR_SPACE = UPC_IR_RP_ADDRSPACE;
 
-struct LowerUPCPointers : FunctionPass {
+class LowerUPCPointers : public FunctionPass {
+public:
   static char ID;
   LowerUPCPointers() : FunctionPass(ID) {
     initializeLowerUPCPointersPass(*PassRegistry::getPassRegistry());
   }
-  bool runOnFunction(Function &F) {
+  bool runOnFunction(Function &F) override {
     bool result = doInitialization(F);
     for(Function::iterator iter = F.begin(), end = F.end(); iter != end; ++iter) {
       if(runOnBasicBlock(*iter)) {
@@ -106,9 +109,9 @@ struct LowerUPCPointers : FunctionPass {
             Result = CastInst::Create(Instruction::IntToPtr, Result, Ty, "", &I);
           }
         } else {
-          Value * Tmp = new AllocaInst(Ty, "ptsload", AllocaInsertPoint);
+          Value * Tmp = new AllocaInst(Ty, LI->getPointerAddressSpace(), "ptsload", AllocaInsertPoint);
           Value * Arg = CastInst::Create(Instruction::BitCast, Tmp, Int8PtrTy, "", &I);
-        
+
           Value * Size = ConstantInt::get(Int64Ty, Layout->getTypeStoreSize(Ty));
           Value * args[] = { Thread, Addr, Arg, Size };
           CallInst::Create(LoadFns[GenericFn][IsStrict], args, "", &I);
@@ -137,7 +140,7 @@ struct LowerUPCPointers : FunctionPass {
           Value * args[] = { Thread, Addr, Val };
           Result = CallInst::Create(StoreFns[Fn][IsStrict], args, "", &I);
         } else {
-          Value * Tmp = new AllocaInst(Ty, "ptsstore", AllocaInsertPoint);
+          Value * Tmp = new AllocaInst(Ty, SI->getPointerAddressSpace(), "ptsstore", AllocaInsertPoint);
           Value * Arg = CastInst::Create(Instruction::BitCast, Tmp, Int8PtrTy, "", &I);
           Value * Size = ConstantInt::get(Int64Ty, Layout->getTypeStoreSize(Ty));
           new StoreInst(Val, Tmp, false, &I);
@@ -151,7 +154,7 @@ struct LowerUPCPointers : FunctionPass {
     }
     return false;
   }
-  
+
   virtual void getAnalysisUsage(AnalysisUsage &AU) const {
     AU.setPreservesCFG();
   }
@@ -240,22 +243,24 @@ struct LowerUPCPointers : FunctionPass {
 
     return true;
   }
+private:
   LLVMContext *Ctx;
   const DataLayout *Layout;
   Instruction *AllocaInsertPoint;
-  Constant *LoadFns[NumFns][2];
-  Constant *StoreFns[NumFns][2];
-  Constant *StoreStrictFn;
-  Constant *StoreRelaxedFn;
+  FunctionCallee LoadFns[NumFns][2];
+  FunctionCallee StoreFns[NumFns][2];
+  FunctionCallee StoreStrictFn;
+  FunctionCallee StoreRelaxedFn;
 };
-
 }
 
 char LowerUPCPointers::ID = 0;
-
-INITIALIZE_PASS(LowerUPCPointers, "lower-upc-pointers",
-                "Pass for lowering UPC pointer accesses",
-                false, false)
+INITIALIZE_PASS_BEGIN(LowerUPCPointers, "lower-upc-pointers",
+                      "Pass for lowering UPC pointer accesses",
+                      false, false)
+INITIALIZE_PASS_END(LowerUPCPointers, "lower-upc-pointers",
+                    "Pass for lowering UPC pointer accesses",
+                    false, false)
 
 FunctionPass *llvm::createLowerUPCPointersPass() {
   return new LowerUPCPointers();

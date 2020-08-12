@@ -1,9 +1,8 @@
 //===- PredIteratorCache.h - pred_iterator Cache ----------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,8 +26,8 @@ namespace llvm {
 /// wants the predecessor list for the same blocks.
 class PredIteratorCache {
   /// BlockToPredsMap - Pointer to null-terminated list.
-  DenseMap<BasicBlock *, BasicBlock **> BlockToPredsMap;
-  DenseMap<BasicBlock *, unsigned> BlockToPredCountMap;
+  mutable DenseMap<BasicBlock *, BasicBlock **> BlockToPredsMap;
+  mutable DenseMap<BasicBlock *, unsigned> BlockToPredCountMap;
 
   /// Memory - This is the space that holds cached preds.
   BumpPtrAllocator Memory;
@@ -55,13 +54,15 @@ private:
     return Entry;
   }
 
-  unsigned GetNumPreds(BasicBlock *BB) {
-    GetPreds(BB);
-    return BlockToPredCountMap[BB];
+  unsigned GetNumPreds(BasicBlock *BB) const {
+    auto Result = BlockToPredCountMap.find(BB);
+    if (Result != BlockToPredCountMap.end())
+      return Result->second;
+    return BlockToPredCountMap[BB] = std::distance(pred_begin(BB), pred_end(BB));
   }
 
 public:
-  size_t size(BasicBlock *BB) { return GetNumPreds(BB); }
+  size_t size(BasicBlock *BB) const { return GetNumPreds(BB); }
   ArrayRef<BasicBlock *> get(BasicBlock *BB) {
     return makeArrayRef(GetPreds(BB), GetNumPreds(BB));
   }

@@ -1,9 +1,8 @@
 //===- XCoreMachineFunctionInfo.h - XCore machine function info -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,51 +13,40 @@
 #ifndef LLVM_LIB_TARGET_XCORE_XCOREMACHINEFUNCTIONINFO_H
 #define LLVM_LIB_TARGET_XCORE_XCOREMACHINEFUNCTIONINFO_H
 
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include <cassert>
+#include <utility>
 #include <vector>
 
 namespace llvm {
 
-// Forward declarations
-class Function;
-
 /// XCoreFunctionInfo - This class is derived from MachineFunction private
 /// XCore target-specific information for each MachineFunction.
 class XCoreFunctionInfo : public MachineFunctionInfo {
-  virtual void anchor();
-  bool LRSpillSlotSet;
+  bool LRSpillSlotSet = false;
   int LRSpillSlot;
-  bool FPSpillSlotSet;
+  bool FPSpillSlotSet = false;
   int FPSpillSlot;
-  bool EHSpillSlotSet;
+  bool EHSpillSlotSet = false;
   int EHSpillSlot[2];
   unsigned ReturnStackOffset;
-  bool ReturnStackOffsetSet;
-  int VarArgsFrameIndex;
-  mutable int CachedEStackSize;
+  bool ReturnStackOffsetSet = false;
+  int VarArgsFrameIndex = 0;
+  mutable int CachedEStackSize = -1;
   std::vector<std::pair<MachineBasicBlock::iterator, CalleeSavedInfo>>
   SpillLabels;
 
+  virtual void anchor();
+
 public:
-  XCoreFunctionInfo() :
-    LRSpillSlotSet(false),
-    FPSpillSlotSet(false),
-    EHSpillSlotSet(false),
-    ReturnStackOffsetSet(false),
-    VarArgsFrameIndex(0),
-    CachedEStackSize(-1) {}
-  
-  explicit XCoreFunctionInfo(MachineFunction &MF) :
-    LRSpillSlotSet(false),
-    FPSpillSlotSet(false),
-    EHSpillSlotSet(false),
-    ReturnStackOffsetSet(false),
-    VarArgsFrameIndex(0),
-    CachedEStackSize(-1) {}
-  
-  ~XCoreFunctionInfo() {}
-  
+  XCoreFunctionInfo() = default;
+
+  explicit XCoreFunctionInfo(MachineFunction &MF) {}
+
+  ~XCoreFunctionInfo() override = default;
+
   void setVarArgsFrameIndex(int off) { VarArgsFrameIndex = off; }
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
 
@@ -101,6 +89,7 @@ public:
     return SpillLabels;
   }
 };
-} // End llvm namespace
 
-#endif
+} // end namespace llvm
+
+#endif // LLVM_LIB_TARGET_XCORE_XCOREMACHINEFUNCTIONINFO_H
