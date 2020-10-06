@@ -740,10 +740,6 @@ public:
     return ArgInfo.ImplicitBufferPtr.getRegister();
   }
 
-  unsigned getPrivateMemoryPtrUserSGPR() const {
-    return PrivateMemoryPtrUserSGPR;
-  }
-
   bool hasSpilledSGPRs() const {
     return HasSpilledSGPRs;
   }

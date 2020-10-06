@@ -503,6 +503,7 @@ void SIFrameLowering::emitEntryFunctionPrologue(MachineFunction &MF,
       .addReg(PreloadedPrivateBufferReg, RegState::Kill);
   }
 
+  if (ResourceRegUsed) {
     emitEntryFunctionScratchSetup(ST, MF, MBB, MFI, I,
         PreloadedPrivateBufferReg, ScratchRsrcReg);
   }
