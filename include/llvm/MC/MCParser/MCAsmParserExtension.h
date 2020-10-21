@@ -1,29 +1,28 @@
-//===-- llvm/MC/MCAsmParserExtension.h - Asm Parser Hooks -------*- C++ -*-===//
+//===- llvm/MC/MCAsmParserExtension.h - Asm Parser Hooks --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_MC_MCPARSER_MCASMPARSEREXTENSION_H
 #define LLVM_MC_MCPARSER_MCASMPARSEREXTENSION_H
 
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/Support/SMLoc.h"
 
 namespace llvm {
+
 class Twine;
 
-/// \brief Generic interface for extending the MCAsmParser,
+/// Generic interface for extending the MCAsmParser,
 /// which is implemented by target and object file assembly parser
 /// implementations.
 class MCAsmParserExtension {
-  MCAsmParserExtension(const MCAsmParserExtension &) = delete;
-  void operator=(const MCAsmParserExtension &) = delete;
-
   MCAsmParser *Parser;
 
 protected:
@@ -38,12 +37,14 @@ protected:
     return (Obj->*Handler)(Directive, DirectiveLoc);
   }
 
-  bool BracketExpressionsSupported;
+  bool BracketExpressionsSupported = false;
 
 public:
+  MCAsmParserExtension(const MCAsmParserExtension &) = delete;
+  MCAsmParserExtension &operator=(const MCAsmParserExtension &) = delete;
   virtual ~MCAsmParserExtension();
 
-  /// \brief Initialize the extension for parsing using the given \p Parser.
+  /// Initialize the extension for parsing using the given \p Parser.
   /// The extension should use the AsmParser interfaces to register its
   /// parsing routines.
   virtual void Initialize(MCAsmParser &Parser);
@@ -65,15 +66,19 @@ public:
 
   SourceMgr &getSourceManager() { return getParser().getSourceManager(); }
   MCStreamer &getStreamer() { return getParser().getStreamer(); }
+
   bool Warning(SMLoc L, const Twine &Msg) {
     return getParser().Warning(L, Msg);
   }
+
   bool Error(SMLoc L, const Twine &Msg, SMRange Range = SMRange()) {
     return getParser().Error(L, Msg, Range);
   }
+
   void Note(SMLoc L, const Twine &Msg) {
     getParser().Note(L, Msg);
   }
+
   bool TokError(const Twine &Msg) {
     return getParser().TokError(Msg);
   }
@@ -85,7 +90,7 @@ public:
     return getParser().parseToken(T, Msg);
   }
 
-  bool parseMany(std::function<bool()> parseOne, bool hasComma = true) {
+  bool parseMany(function_ref<bool()> parseOne, bool hasComma = true) {
     return getParser().parseMany(parseOne, hasComma);
   }
 
@@ -93,11 +98,11 @@ public:
     return getParser().parseOptionalToken(T);
   }
 
-  bool check(bool P, const llvm::Twine &Msg) {
+  bool check(bool P, const Twine &Msg) {
     return getParser().check(P, Msg);
   }
 
-  bool check(bool P, SMLoc Loc, const llvm::Twine &Msg) {
+  bool check(bool P, SMLoc Loc, const Twine &Msg) {
     return getParser().check(P, Loc, Msg);
   }
 
@@ -110,6 +115,6 @@ public:
   /// @}
 };
 
-} // End llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_MC_MCPARSER_MCASMPARSEREXTENSION_H

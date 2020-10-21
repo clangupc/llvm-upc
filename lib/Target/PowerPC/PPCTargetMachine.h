@@ -1,9 +1,8 @@
 //===-- PPCTargetMachine.h - Define TargetMachine for PowerPC ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,30 +22,33 @@ namespace llvm {
 
 /// Common code between 32-bit and 64-bit PowerPC targets.
 ///
-class PPCTargetMachine : public LLVMTargetMachine {
+class PPCTargetMachine final : public LLVMTargetMachine {
 public:
   enum PPCABI { PPC_ABI_UNKNOWN, PPC_ABI_ELFv1, PPC_ABI_ELFv2 };
 private:
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   PPCABI TargetABI;
-  PPCSubtarget Subtarget;
 
   mutable StringMap<std::unique_ptr<PPCSubtarget>> SubtargetMap;
 
 public:
   PPCTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                    StringRef FS, const TargetOptions &Options,
-                   Optional<Reloc::Model> RM, CodeModel::Model CM,
-                   CodeGenOpt::Level OL);
+                   Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
+                   CodeGenOpt::Level OL, bool JIT);
 
   ~PPCTargetMachine() override;
 
   const PPCSubtarget *getSubtargetImpl(const Function &F) const override;
+  // DO NOT IMPLEMENT: There is no such thing as a valid default subtarget,
+  // subtargets are per-function entities based on the target-specific
+  // attributes of each function.
+  const PPCSubtarget *getSubtargetImpl() const = delete;
 
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
-  TargetIRAnalysis getTargetIRAnalysis() override;
+  TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
@@ -57,29 +59,6 @@ public:
     return (TT.getArch() == Triple::ppc64 || TT.getArch() == Triple::ppc64le);
   };
 };
-
-/// PowerPC 32-bit target machine.
-///
-class PPC32TargetMachine : public PPCTargetMachine {
-  virtual void anchor();
-public:
-  PPC32TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
-                     StringRef FS, const TargetOptions &Options,
-                     Optional<Reloc::Model> RM, CodeModel::Model CM,
-                     CodeGenOpt::Level OL);
-};
-
-/// PowerPC 64-bit target machine.
-///
-class PPC64TargetMachine : public PPCTargetMachine {
-  virtual void anchor();
-public:
-  PPC64TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
-                     StringRef FS, const TargetOptions &Options,
-                     Optional<Reloc::Model> RM, CodeModel::Model CM,
-                     CodeGenOpt::Level OL);
-};
-
 } // end namespace llvm
 
 #endif

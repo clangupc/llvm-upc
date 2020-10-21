@@ -1,9 +1,8 @@
 //=- llvm/CodeGen/ScheduleHazardRecognizer.h - Scheduling Support -*- C++ -*-=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -29,10 +28,10 @@ protected:
   /// state. Important to restore the state after backtracking. Additionally,
   /// MaxLookAhead=0 identifies a fake recognizer, allowing the client to
   /// bypass virtual calls. Currently the PostRA scheduler ignores it.
-  unsigned MaxLookAhead;
+  unsigned MaxLookAhead = 0;
 
 public:
-  ScheduleHazardRecognizer(): MaxLookAhead(0) {}
+  ScheduleHazardRecognizer() = default;
   virtual ~ScheduleHazardRecognizer();
 
   enum HazardType {
@@ -117,6 +116,6 @@ public:
   }
 };
 
-}
+} // end namespace llvm
 
-#endif
+#endif // LLVM_CODEGEN_SCHEDULEHAZARDRECOGNIZER_H

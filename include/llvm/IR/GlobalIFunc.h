@@ -1,9 +1,8 @@
 //===-------- llvm/GlobalIFunc.h - GlobalIFunc class ------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -47,12 +46,16 @@ public:
                              LinkageTypes Linkage, const Twine &Name,
                              Constant *Resolver, Module *Parent);
 
+  void copyAttributesFrom(const GlobalIFunc *Src) {
+    GlobalValue::copyAttributesFrom(Src);
+  }
+
   /// This method unlinks 'this' from the containing module, but does not
   /// delete it.
-  void removeFromParent() final;
+  void removeFromParent();
 
   /// This method unlinks 'this' from the containing module and deletes it.
-  void eraseFromParent() final;
+  void eraseFromParent();
 
   /// These methods retrieve and set ifunc resolver function.
   void setResolver(Constant *Resolver) {
@@ -66,7 +69,7 @@ public:
   }
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static inline bool classof(const Value *V) {
+  static bool classof(const Value *V) {
     return V->getValueID() == Value::GlobalIFuncVal;
   }
 };

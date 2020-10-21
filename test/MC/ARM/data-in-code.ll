@@ -1,10 +1,10 @@
 ;; RUN: llc -verify-machineinstrs \
 ;; RUN:   -mtriple=armv7-linux-gnueabi -filetype=obj %s -o - | \
-;; RUN:   llvm-readobj -t | FileCheck -check-prefix=ARM %s
+;; RUN:   llvm-readobj --symbols | FileCheck -check-prefix=ARM %s
 
 ;; RUN: llc -verify-machineinstrs \
 ;; RUN:   -mtriple=thumbv7-linux-gnueabi -filetype=obj %s -o - | \
-;; RUN:   llvm-readobj -t | FileCheck -check-prefix=TMB %s
+;; RUN:   llvm-readobj --symbols | FileCheck -check-prefix=TMB %s
 
 ;; Ensure that if a jump table is generated that it has Mapping Symbols
 ;; marking the data-in-code region.
@@ -27,7 +27,7 @@ bb2:
   store i32 2, i32* %ptr, align 4
   br label %exit
 bb3:
-  store i32 3, i32* %ptr, align 4
+  store i32 4, i32* %ptr, align 4
   br label %exit
 exit:
   ret void
@@ -59,23 +59,6 @@ exit:
 ;; ARM-NEXT:     Type: None
 ;; ARM-NEXT:     Other:
 ;; ARM-NEXT:     Section: [[MIXED_SECT]]
-
-;; ARM:        Symbol {
-;; ARM:          Name: $d
-;; ARM-NEXT:     Value: 0x0
-;; ARM-NEXT:     Size: 0
-;; ARM-NEXT:     Binding: Local (0x0)
-;; ARM-NEXT:     Type: None (0x0)
-;; ARM-NEXT:     Other: 0
-;; ARM-NEXT:     Section: .ARM.exidx
-;; ARM-NEXT:   }
-
-;; ARM:        Symbol {
-;; ARM:          Name: $d
-;; ARM-NEXT:     Value: 0
-;; ARM-NEXT:     Size: 0
-;; ARM-NEXT:     Binding: Local
-;; ARM-NEXT:     Type: None
 
 ;; ARM-NOT:     ${{[atd]}}
 

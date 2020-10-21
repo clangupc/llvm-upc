@@ -1,9 +1,8 @@
 //===-- XCoreInstrInfo.td - Target Description for XCore ---*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -73,9 +72,10 @@ def XCoreLdwsp        : SDNode<"XCoreISD::LDWSP", SDT_XCoreLdwsp,
                                [SDNPHasChain, SDNPMayLoad]>;
 
 // These are target-independent nodes, but have target-specific formats.
-def SDT_XCoreCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32> ]>;
+def SDT_XCoreCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32>,
+                                             SDTCisVT<1, i32> ]>;
 def SDT_XCoreCallSeqEnd   : SDCallSeqEnd<[ SDTCisVT<0, i32>,
-                                        SDTCisVT<1, i32> ]>;
+                                           SDTCisVT<1, i32> ]>;
 
 def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_XCoreCallSeqStart,
                            [SDNPHasChain, SDNPOutGlue]>;
@@ -323,9 +323,9 @@ class F2R_np<bits<6> opc, string OpcStr> :
 //===----------------------------------------------------------------------===//
 
 let Defs = [SP], Uses = [SP] in {
-def ADJCALLSTACKDOWN : PseudoInstXCore<(outs), (ins i32imm:$amt),
-                               "# ADJCALLSTACKDOWN $amt",
-                               [(callseq_start timm:$amt)]>;
+def ADJCALLSTACKDOWN : PseudoInstXCore<(outs), (ins i32imm:$amt, i32imm:$amt2),
+                               "# ADJCALLSTACKDOWN $amt, $amt2",
+                               [(callseq_start timm:$amt, timm:$amt2)]>;
 def ADJCALLSTACKUP : PseudoInstXCore<(outs), (ins i32imm:$amt1, i32imm:$amt2),
                             "# ADJCALLSTACKUP $amt1",
                             [(callseq_end timm:$amt1, timm:$amt2)]>;

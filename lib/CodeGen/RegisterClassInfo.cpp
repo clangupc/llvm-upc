@@ -1,9 +1,8 @@
-//===-- RegisterClassInfo.cpp - Dynamic Register Class Info ---------------===//
+//===- RegisterClassInfo.cpp - Dynamic Register Class Info ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,11 +14,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/RegisterClassInfo.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
 
 using namespace llvm;
 
@@ -29,8 +38,7 @@ static cl::opt<unsigned>
 StressRA("stress-regalloc", cl::Hidden, cl::init(0), cl::value_desc("N"),
          cl::desc("Limit all regclasses to N registers"));
 
-RegisterClassInfo::RegisterClassInfo()
-  : Tag(0), MF(nullptr), TRI(nullptr), CalleeSaved(nullptr) {}
+RegisterClassInfo::RegisterClassInfo() = default;
 
 void RegisterClassInfo::runOnMachineFunction(const MachineFunction &mf) {
   bool Update = false;
@@ -40,26 +48,25 @@ void RegisterClassInfo::runOnMachineFunction(const MachineFunction &mf) {
   if (MF->getSubtarget().getRegisterInfo() != TRI) {
     TRI = MF->getSubtarget().getRegisterInfo();
     RegClass.reset(new RCInfo[TRI->getNumRegClasses()]);
-    unsigned NumPSets = TRI->getNumRegPressureSets();
-    PSetLimits.reset(new unsigned[NumPSets]);
-    std::fill(&PSetLimits[0], &PSetLimits[NumPSets], 0);
     Update = true;
   }
 
   // Does this MF have different CSRs?
   assert(TRI && "no register info set");
-  const MCPhysReg *CSR = TRI->getCalleeSavedRegs(MF);
-  if (Update || CSR != CalleeSaved) {
-    // Build a CSRNum map. Every CSR alias gets an entry pointing to the last
+
+  // Get the callee saved registers.
+  const MCPhysReg *CSR = MF->getRegInfo().getCalleeSavedRegs();
+  if (Update || CSR != CalleeSavedRegs) {
+    // Build a CSRAlias map. Every CSR alias saves the last
     // overlapping CSR.
-    CSRNum.clear();
-    CSRNum.resize(TRI->getNumRegs(), 0);
-    for (unsigned N = 0; unsigned Reg = CSR[N]; ++N)
-      for (MCRegAliasIterator AI(Reg, TRI, true); AI.isValid(); ++AI)
-        CSRNum[*AI] = N + 1; // 0 means no CSR, 1 means CalleeSaved[0], ...
+    CalleeSavedAliases.resize(TRI->getNumRegs(), 0);
+    for (const MCPhysReg *I = CSR; *I; ++I)
+      for (MCRegAliasIterator AI(*I, TRI, true); AI.isValid(); ++AI)
+        CalleeSavedAliases[*AI] = *I;
+
     Update = true;
   }
-  CalleeSaved = CSR;
+  CalleeSavedRegs = CSR;
 
   // Different reserved registers?
   const BitVector &RR = MF->getRegInfo().getReservedRegs();
@@ -69,8 +76,12 @@ void RegisterClassInfo::runOnMachineFunction(const MachineFunction &mf) {
   }
 
   // Invalidate cached information from previous function.
-  if (Update)
+  if (Update) {
+    unsigned NumPSets = TRI->getNumRegPressureSets();
+    PSetLimits.reset(new unsigned[NumPSets]);
+    std::fill(&PSetLimits[0], &PSetLimits[NumPSets], 0);
     ++Tag;
+  }
 }
 
 /// compute - Compute the preferred allocation order for RC with reserved
@@ -79,6 +90,7 @@ void RegisterClassInfo::runOnMachineFunction(const MachineFunction &mf) {
 void RegisterClassInfo::compute(const TargetRegisterClass *RC) const {
   assert(RC && "no register class given");
   RCInfo &RCI = RegClass[RC->getID()];
+  auto &STI = MF->getSubtarget();
 
   // Raw register count, including all reserved regs.
   unsigned NumRegs = RC->getNumRegs();
@@ -103,7 +115,8 @@ void RegisterClassInfo::compute(const TargetRegisterClass *RC) const {
     unsigned Cost = TRI->getCostPerUse(PhysReg);
     MinCost = std::min(MinCost, Cost);
 
-    if (CSRNum[PhysReg])
+    if (CalleeSavedAliases[PhysReg] &&
+        !STI.ignoreCSRForAllocationOrder(*MF, PhysReg))
       // PhysReg aliases a CSR, save it for later.
       CSRAlias.push_back(PhysReg);
     else {
@@ -114,7 +127,7 @@ void RegisterClassInfo::compute(const TargetRegisterClass *RC) const {
     }
   }
   RCI.NumRegs = N + CSRAlias.size();
-  assert (RCI.NumRegs <= NumRegs && "Allocation order larger than regclass");
+  assert(RCI.NumRegs <= NumRegs && "Allocation order larger than regclass");
 
   // CSR aliases go after the volatile registers, preserve the target's order.
   for (unsigned i = 0, e = CSRAlias.size(); i != e; ++i) {
@@ -139,10 +152,10 @@ void RegisterClassInfo::compute(const TargetRegisterClass *RC) const {
   RCI.MinCost = uint8_t(MinCost);
   RCI.LastCostChange = LastCostChange;
 
-  DEBUG({
+  LLVM_DEBUG({
     dbgs() << "AllocationOrder(" << TRI->getRegClassName(RC) << ") = [";
     for (unsigned I = 0; I != RCI.NumRegs; ++I)
-      dbgs() << ' ' << PrintReg(RCI.Order[I], TRI);
+      dbgs() << ' ' << printReg(RCI.Order[I], TRI);
     dbgs() << (RCI.ProperSubClass ? " ] (sub-class)\n" : " ]\n");
   });
 
@@ -156,9 +169,8 @@ void RegisterClassInfo::compute(const TargetRegisterClass *RC) const {
 unsigned RegisterClassInfo::computePSetLimit(unsigned Idx) const {
   const TargetRegisterClass *RC = nullptr;
   unsigned NumRCUnits = 0;
-  for (TargetRegisterInfo::regclass_iterator
-         RI = TRI->regclass_begin(), RE = TRI->regclass_end(); RI != RE; ++RI) {
-    const int *PSetID = TRI->getRegClassPressureSets(*RI);
+  for (const TargetRegisterClass *C : TRI->regclasses()) {
+    const int *PSetID = TRI->getRegClassPressureSets(C);
     for (; *PSetID != -1; ++PSetID) {
       if ((unsigned)*PSetID == Idx)
         break;
@@ -168,9 +180,9 @@ unsigned RegisterClassInfo::computePSetLimit(unsigned Idx) const {
 
     // Found a register class that counts against this pressure set.
     // For efficiency, only compute the set order for the largest set.
-    unsigned NUnits = TRI->getRegClassWeight(*RI).WeightLimit;
+    unsigned NUnits = TRI->getRegClassWeight(C).WeightLimit;
     if (!RC || NUnits > NumRCUnits) {
-      RC = *RI;
+      RC = C;
       NumRCUnits = NUnits;
     }
   }

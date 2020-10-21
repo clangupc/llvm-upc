@@ -1,9 +1,8 @@
 //===- llvm/unittest/Support/CompressionTest.cpp - Compression tests ------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +14,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Config/config.h"
+#include "llvm/Support/Error.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
@@ -23,18 +23,24 @@ namespace {
 
 #if LLVM_ENABLE_ZLIB == 1 && HAVE_LIBZ
 
-void TestZlibCompression(StringRef Input, zlib::CompressionLevel Level) {
+void TestZlibCompression(StringRef Input, int Level) {
   SmallString<32> Compressed;
   SmallString<32> Uncompressed;
-  EXPECT_EQ(zlib::StatusOK, zlib::compress(Input, Compressed, Level));
+
+  Error E = zlib::compress(Input, Compressed, Level);
+  EXPECT_FALSE(E);
+  consumeError(std::move(E));
+
   // Check that uncompressed buffer is the same as original.
-  EXPECT_EQ(zlib::StatusOK,
-            zlib::uncompress(Compressed, Uncompressed, Input.size()));
+  E = zlib::uncompress(Compressed, Uncompressed, Input.size());
+  EXPECT_FALSE(E);
+  consumeError(std::move(E));
+
   EXPECT_EQ(Input, Uncompressed);
   if (Input.size() > 0) {
     // Uncompression fails if expected length is too short.
-    EXPECT_EQ(zlib::StatusBufferTooShort,
-              zlib::uncompress(Compressed, Uncompressed, Input.size() - 1));
+    E = zlib::uncompress(Compressed, Uncompressed, Input.size() - 1);
+    EXPECT_EQ("zlib error: Z_BUF_ERROR", llvm::toString(std::move(E)));
   }
 }
 

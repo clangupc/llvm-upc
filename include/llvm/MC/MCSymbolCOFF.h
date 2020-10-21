@@ -1,21 +1,22 @@
 //===- MCSymbolCOFF.h -  ----------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+
 #ifndef LLVM_MC_MCSYMBOLCOFF_H
 #define LLVM_MC_MCSYMBOLCOFF_H
 
 #include "llvm/MC/MCSymbol.h"
+#include <cstdint>
 
 namespace llvm {
-class MCSymbolCOFF : public MCSymbol {
 
+class MCSymbolCOFF : public MCSymbol {
   /// This corresponds to the e_type field of the COFF symbol.
-  mutable uint16_t Type;
+  mutable uint16_t Type = 0;
 
   enum SymbolFlags : uint16_t {
     SF_ClassMask = 0x00FF,
@@ -27,7 +28,7 @@ class MCSymbolCOFF : public MCSymbol {
 
 public:
   MCSymbolCOFF(const StringMapEntry<bool> *Name, bool isTemporary)
-      : MCSymbol(SymbolKindCOFF, Name, isTemporary), Type(0) {}
+      : MCSymbol(SymbolKindCOFF, Name, isTemporary) {}
 
   uint16_t getType() const {
     return Type;
@@ -59,6 +60,7 @@ public:
 
   static bool classof(const MCSymbol *S) { return S->isCOFF(); }
 };
-}
 
-#endif
+} // end namespace llvm
+
+#endif // LLVM_MC_MCSYMBOLCOFF_H

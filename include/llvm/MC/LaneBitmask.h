@@ -1,9 +1,8 @@
-//===-- llvm/MC/LaneBitmask.h -----------------------------------*- C++ -*-===//
+//===- llvm/MC/LaneBitmask.h ------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -30,14 +29,16 @@
 #ifndef LLVM_MC_LANEBITMASK_H
 #define LLVM_MC_LANEBITMASK_H
 
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/Printable.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
+
   struct LaneBitmask {
     // When changing the underlying type, change the format string as well.
-    typedef unsigned Type;
+    using Type = unsigned;
     enum : unsigned { BitWidth = 8*sizeof(Type) };
     constexpr static const char *const FormatStr = "%08X";
 
@@ -71,19 +72,30 @@ namespace llvm {
 
     constexpr Type getAsInteger() const { return Mask; }
 
-    static LaneBitmask getNone() { return LaneBitmask(0); }
-    static LaneBitmask getAll()  { return ~LaneBitmask(0); }
+    unsigned getNumLanes() const {
+      return countPopulation(Mask);
+    }
+    unsigned getHighestLane() const {
+      return Log2_32(Mask);
+    }
+
+    static constexpr LaneBitmask getNone() { return LaneBitmask(0); }
+    static constexpr LaneBitmask getAll() { return ~LaneBitmask(0); }
+    static constexpr LaneBitmask getLane(unsigned Lane) {
+      return LaneBitmask(Type(1) << Lane);
+    }
 
   private:
     Type Mask = 0;
   };
 
   /// Create Printable object to print LaneBitmasks on a \ref raw_ostream.
-  static LLVM_ATTRIBUTE_UNUSED Printable PrintLaneMask(LaneBitmask LaneMask) {
+  inline Printable PrintLaneMask(LaneBitmask LaneMask) {
     return Printable([LaneMask](raw_ostream &OS) {
       OS << format(LaneBitmask::FormatStr, LaneMask.getAsInteger());
     });
   }
-}
+
+} // end namespace llvm
 
 #endif // LLVM_MC_LANEBITMASK_H

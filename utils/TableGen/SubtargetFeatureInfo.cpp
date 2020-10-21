@@ -1,25 +1,26 @@
 //===- SubtargetFeatureInfo.cpp - Helpers for subtarget features ----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "SubtargetFeatureInfo.h"
 
 #include "Types.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/TableGen/Record.h"
 
 #include <map>
 
 using namespace llvm;
 
-void SubtargetFeatureInfo::dump() const {
-  errs() << getEnumName() << " " << Index << "\n";
-  TheDef->dump();
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void SubtargetFeatureInfo::dump() const {
+  errs() << getEnumName() << " " << Index << "\n" << *TheDef;
 }
+#endif
 
 std::vector<std::pair<Record *, SubtargetFeatureInfo>>
 SubtargetFeatureInfo::getAll(const RecordKeeper &Records) {
@@ -43,29 +44,39 @@ SubtargetFeatureInfo::getAll(const RecordKeeper &Records) {
   return SubtargetFeatures;
 }
 
-void SubtargetFeatureInfo::emitSubtargetFeatureFlagEnumeration(
-    std::map<Record *, SubtargetFeatureInfo, LessRecordByID> &SubtargetFeatures,
-    raw_ostream &OS) {
-  OS << "// Flags for subtarget features that participate in "
+void SubtargetFeatureInfo::emitSubtargetFeatureBitEnumeration(
+    SubtargetFeatureInfoMap &SubtargetFeatures, raw_ostream &OS) {
+  OS << "// Bits for subtarget features that participate in "
      << "instruction matching.\n";
-  OS << "enum SubtargetFeatureFlag : "
-     << getMinimalTypeForEnumBitfield(SubtargetFeatures.size()) << " {\n";
+  OS << "enum SubtargetFeatureBits : "
+     << getMinimalTypeForRange(SubtargetFeatures.size()) << " {\n";
   for (const auto &SF : SubtargetFeatures) {
     const SubtargetFeatureInfo &SFI = SF.second;
-    OS << "  " << SFI.getEnumName() << " = (1ULL << " << SFI.Index << "),\n";
+    OS << "  " << SFI.getEnumBitName() << " = " << SFI.Index << ",\n";
   }
-  OS << "  Feature_None = 0\n";
   OS << "};\n\n";
 }
 
 void SubtargetFeatureInfo::emitNameTable(
-    std::map<Record *, SubtargetFeatureInfo, LessRecordByID> &SubtargetFeatures,
-    raw_ostream &OS) {
+    SubtargetFeatureInfoMap &SubtargetFeatures, raw_ostream &OS) {
+  // Need to sort the name table so that lookup by the log of the enum value
+  // gives the proper name. More specifically, for a feature of value 1<<n,
+  // SubtargetFeatureNames[n] should be the name of the feature.
+  uint64_t IndexUB = 0;
+  for (const auto &SF : SubtargetFeatures)
+    if (IndexUB <= SF.second.Index)
+      IndexUB = SF.second.Index+1;
+
+  std::vector<std::string> Names;
+  if (IndexUB > 0)
+    Names.resize(IndexUB);
+  for (const auto &SF : SubtargetFeatures)
+    Names[SF.second.Index] = SF.second.getEnumName();
+
   OS << "static const char *SubtargetFeatureNames[] = {\n";
-  for (const auto &SF : SubtargetFeatures) {
-    const SubtargetFeatureInfo &SFI = SF.second;
-    OS << "  \"" << SFI.getEnumName() << "\",\n";
-  }
+  for (uint64_t I = 0; I < IndexUB; ++I)
+    OS << "  \"" << Names[I] << "\",\n";
+
   // A small number of targets have no predicates. Null terminate the array to
   // avoid a zero-length array.
   OS << "  nullptr\n"
@@ -74,11 +85,30 @@ void SubtargetFeatureInfo::emitNameTable(
 
 void SubtargetFeatureInfo::emitComputeAvailableFeatures(
     StringRef TargetName, StringRef ClassName, StringRef FuncName,
-    std::map<Record *, SubtargetFeatureInfo, LessRecordByID> &SubtargetFeatures,
-    raw_ostream &OS) {
-  OS << "uint64_t " << TargetName << ClassName << "::\n"
+    SubtargetFeatureInfoMap &SubtargetFeatures, raw_ostream &OS,
+    StringRef ExtraParams) {
+  OS << "PredicateBitset " << TargetName << ClassName << "::\n"
+     << FuncName << "(const " << TargetName << "Subtarget *Subtarget";
+  if (!ExtraParams.empty())
+    OS << ", " << ExtraParams;
+  OS << ") const {\n";
+  OS << "  PredicateBitset Features;\n";
+  for (const auto &SF : SubtargetFeatures) {
+    const SubtargetFeatureInfo &SFI = SF.second;
+
+    OS << "  if (" << SFI.TheDef->getValueAsString("CondString") << ")\n";
+    OS << "    Features[" << SFI.getEnumBitName() << "] = 1;\n";
+  }
+  OS << "  return Features;\n";
+  OS << "}\n\n";
+}
+
+void SubtargetFeatureInfo::emitComputeAssemblerAvailableFeatures(
+    StringRef TargetName, StringRef ClassName, StringRef FuncName,
+    SubtargetFeatureInfoMap &SubtargetFeatures, raw_ostream &OS) {
+  OS << "FeatureBitset " << TargetName << ClassName << "::\n"
      << FuncName << "(const FeatureBitset& FB) const {\n";
-  OS << "  uint64_t Features = 0;\n";
+  OS << "  FeatureBitset Features;\n";
   for (const auto &SF : SubtargetFeatures) {
     const SubtargetFeatureInfo &SFI = SF.second;
 
@@ -112,7 +142,7 @@ void SubtargetFeatureInfo::emitComputeAvailableFeatures(
     } while (true);
 
     OS << ")\n";
-    OS << "    Features |= " << SFI.getEnumName() << ";\n";
+    OS << "    Features[" << SFI.getEnumBitName() << "] = 1;\n";
   }
   OS << "  return Features;\n";
   OS << "}\n\n";

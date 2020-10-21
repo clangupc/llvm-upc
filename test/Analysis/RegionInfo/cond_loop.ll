@@ -1,24 +1,24 @@
 ; REQUIRES: asserts
 ; RUN: opt -regions -analyze < %s | FileCheck %s
-; RUN: opt -regions -stats < %s 2>&1 | FileCheck -check-prefix=STAT %s
+; RUN: opt -regions -stats -disable-output < %s 2>&1 | FileCheck -check-prefix=STAT %s
 ; RUN: opt -regions -print-region-style=bb  -analyze < %s 2>&1 | FileCheck -check-prefix=BBIT %s
 ; RUN: opt -regions -print-region-style=rn  -analyze < %s 2>&1 | FileCheck -check-prefix=RNIT %s
 
 ; RUN: opt < %s -passes='print<regions>' 2>&1 | FileCheck %s
 
 define void @normal_condition() nounwind {
-5:
+"5":
         br label %"0"
 
-0:
+"0":
 	br label %"1"
-1:
+"1":
 	br i1 1, label %"2", label %"3"
-2:
+"2":
 	ret void
-3:
+"3":
 	br i1 1, label %"1", label %"4"
-4:
+"4":
         br label %"0"
 }
 

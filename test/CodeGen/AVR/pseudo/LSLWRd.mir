@@ -1,4 +1,4 @@
-# RUN: llc -O0 -run-pass=avr-expand-pseudo %s -o - 2>&1 | FileCheck %s
+# RUN: llc -O0 -run-pass=avr-expand-pseudo %s -o - | FileCheck %s
 
 --- |
   target triple = "avr--"
@@ -15,8 +15,8 @@ body: |
 
     ; CHECK-LABEL: test
 
-    ; CHECK:      %r14 = LSLRd %r14, implicit-def %sreg
-    ; CHECK-NEXT: %r15 = ROLRd %r15, implicit-def %sreg, implicit killed %sreg
+    ; CHECK:      $r14 = ADDRdRr $r14, $r14, implicit-def $sreg
+    ; CHECK-NEXT: $r15 = ADCRdRr $r15, $r15, implicit-def $sreg, implicit killed $sreg
 
-    %r15r14 = LSLWRd %r15r14, implicit-def %sreg
+    $r15r14 = LSLWRd $r15r14, implicit-def $sreg
 ...

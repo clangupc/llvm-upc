@@ -1,6 +1,5 @@
-; RUN: llc -verify-machineinstrs -mcpu=pwr7 < %s | FileCheck %s
-; RUN: llc -verify-machineinstrs -mcpu=a2q < %s | FileCheck %s --check-prefix=QPX
-target triple = "powerpc64-unknown-linux-gnu"
+; RUN: llc -mtriple=powerpc64-unknown-linux-gnu -verify-machineinstrs -mcpu=pwr7 < %s | FileCheck %s
+; RUN: llc -mtriple=powerpc64-unknown-linux-gnu -verify-machineinstrs -mcpu=a2q < %s | FileCheck %s --check-prefix=QPX
 
 declare float @fabsf(float)
 
@@ -38,6 +37,9 @@ loop_exit:
 ; CHECK-LABEL: test1:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fminf
+; CHECK-NOT: bl fminf
+; CHECK-NOT: mtctr
+; CHECK: blr
 
 define void @test1v(<4 x float> %f, <4 x float>* %fp) {
 entry:
@@ -48,7 +50,7 @@ loop_body:
   %0 = call <4 x float> @llvm.minnum.v4f32(<4 x float> %f, <4 x float> <float 1.0, float 1.0, float 1.0, float 1.0>)
   store <4 x float> %0, <4 x float>* %fp, align 16
   %1 = add i64 %invar_address.dim.0.01, 1
-  %2 = icmp eq i64 %1, 2
+  %2 = icmp eq i64 %1, 4
   br i1 %2, label %loop_exit, label %loop_body
 
 loop_exit:
@@ -56,8 +58,11 @@ loop_exit:
 }
 
 ; CHECK-LABEL: test1v:
-; CHECK-NOT: mtctr
-; CHECK: bl fminf
+; CHECK: xvminsp
+; CHECK-NOT: bl fminf
+; CHECK: mtctr
+; CHECK-NOT: bl fminf
+; CHECK: blr
 
 ; QPX-LABEL: test1v:
 ; QPX: mtctr
@@ -83,6 +88,9 @@ loop_exit:
 ; CHECK-LABEL: test1a:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fminf
+; CHECK-NOT: bl fminf
+; CHECK-NOT: mtctr
+; CHECK: blr
 
 define void @test2(float %f, float* %fp) {
 entry:
@@ -103,6 +111,9 @@ loop_exit:
 ; CHECK-LABEL: test2:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fmaxf
+; CHECK-NOT: bl fmaxf
+; CHECK-NOT: mtctr
+; CHECK: blr
 
 define void @test2v(<4 x double> %f, <4 x double>* %fp) {
 entry:
@@ -113,7 +124,7 @@ loop_body:
   %0 = call <4 x double> @llvm.maxnum.v4f64(<4 x double> %f, <4 x double> <double 1.0, double 1.0, double 1.0, double 1.0>)
   store <4 x double> %0, <4 x double>* %fp, align 16
   %1 = add i64 %invar_address.dim.0.01, 1
-  %2 = icmp eq i64 %1, 2
+  %2 = icmp eq i64 %1, 4
   br i1 %2, label %loop_exit, label %loop_body
 
 loop_exit:
@@ -121,8 +132,12 @@ loop_exit:
 }
 
 ; CHECK-LABEL: test2v:
-; CHECK-NOT: mtctr
-; CHECK: bl fmax
+; CHECK: xvmaxdp
+; CHECK: xvmaxdp
+; CHECK-NOT: bl fmax
+; CHECK: mtctr
+; CHECK-NOT: bl fmax
+; CHECK: blr
 
 ; QPX-LABEL: test2v:
 ; QPX: mtctr
@@ -148,6 +163,9 @@ loop_exit:
 ; CHECK-LABEL: test2a:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fmaxf
+; CHECK-NOT: bl fmaxf
+; CHECK-NOT: mtctr
+; CHECK: blr
 
 define void @test3(double %f, double* %fp) {
 entry:
@@ -168,6 +186,9 @@ loop_exit:
 ; CHECK-LABEL: test3:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fmin
+; CHECK-NOT: bl fmin
+; CHECK-NOT: mtctr
+; CHECK: blr
 
 define void @test3a(double %f, double* %fp) {
 entry:
@@ -188,6 +209,9 @@ loop_exit:
 ; CHECK-LABEL: test3a:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fmin
+; CHECK-NOT: bl fmin
+; CHECK-NOT: mtctr
+; CHECK: blr
 
 define void @test4(double %f, double* %fp) {
 entry:
@@ -208,6 +232,9 @@ loop_exit:
 ; CHECK-LABEL: test4:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fmax
+; CHECK-NOT: bl fmax
+; CHECK-NOT: mtctr
+; CHECK: blr
 
 define void @test4a(double %f, double* %fp) {
 entry:
@@ -228,4 +255,7 @@ loop_exit:
 ; CHECK-LABEL: test4a:
 ; CHECK-NOT: mtctr
 ; CHECK: bl fmax
+; CHECK-NOT: bl fmax
+; CHECK-NOT: mtctr
+; CHECK: blr
 

@@ -1,9 +1,8 @@
-//===-- llvm/Value.h - Definition of the Value class ------------*- C++ -*-===//
+//===- llvm/Value.h - Definition of the Value class -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,13 +13,14 @@
 #ifndef LLVM_IR_VALUE_H
 #define LLVM_IR_VALUE_H
 
+#include "llvm-c/Types.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Use.h"
 #include "llvm/Support/CBindingWrapping.h"
 #include "llvm/Support/Casting.h"
-#include "llvm-c/Types.h"
 #include <cassert>
 #include <iterator>
+#include <memory>
 
 namespace llvm {
 
@@ -44,18 +44,19 @@ class LLVMContext;
 class Module;
 class ModuleSlotTracker;
 class raw_ostream;
+template<typename ValueTy> class StringMapEntry;
 class StringRef;
 class Twine;
 class Type;
+class User;
 
-template<typename ValueTy> class StringMapEntry;
-typedef StringMapEntry<Value*> ValueName;
+using ValueName = StringMapEntry<Value *>;
 
 //===----------------------------------------------------------------------===//
 //                                 Value Class
 //===----------------------------------------------------------------------===//
 
-/// \brief LLVM Value Representation
+/// LLVM Value Representation
 ///
 /// This is a very important LLVM class. It is the base class of all values
 /// computed by a program that may be used as operands to other values. Value is
@@ -69,6 +70,8 @@ typedef StringMapEntry<Value*> ValueName;
 /// objects that watch it and listen to RAUW and Destroy events.  See
 /// llvm/IR/ValueHandle.h for details.
 class Value {
+  // The least-significant bit of the first word of Value *must* be zero:
+  //   http://www.llvm.org/docs/ProgrammersManual.html#the-waymarking-algorithm
   Type *VTy;
   Use *UseList;
 
@@ -79,7 +82,7 @@ class Value {
   unsigned char HasValueHandle : 1; // Has a ValueHandle pointing to this?
 
 protected:
-  /// \brief Hold subclass data that can be dropped.
+  /// Hold subclass data that can be dropped.
   ///
   /// This member is similar to SubclassData, however it is for holding
   /// information which may be used to aid optimization, but which may be
@@ -87,7 +90,7 @@ protected:
   unsigned char SubclassOptionalData : 7;
 
 private:
-  /// \brief Hold arbitrary subclass data.
+  /// Hold arbitrary subclass data.
   ///
   /// This member is defined by this class, but is not used for anything.
   /// Subclasses can use it to hold whatever state they find useful.  This
@@ -95,7 +98,7 @@ private:
   unsigned short SubclassData;
 
 protected:
-  /// \brief The number of operands in the subclass.
+  /// The number of operands in the subclass.
   ///
   /// This member is defined by this class, but not used for anything.
   /// Subclasses can use it to store their number of operands, if they have
@@ -120,9 +123,11 @@ private:
   template <typename UseT> // UseT == 'Use' or 'const Use'
   class use_iterator_impl
       : public std::iterator<std::forward_iterator_tag, UseT *> {
-    UseT *U;
-    explicit use_iterator_impl(UseT *u) : U(u) {}
     friend class Value;
+
+    UseT *U;
+
+    explicit use_iterator_impl(UseT *u) : U(u) {}
 
   public:
     use_iterator_impl() : U() {}
@@ -167,7 +172,7 @@ private:
     bool operator==(const user_iterator_impl &x) const { return UI == x.UI; }
     bool operator!=(const user_iterator_impl &x) const { return !operator==(x); }
 
-    /// \brief Returns true if this iterator is equal to user_end() on the value.
+    /// Returns true if this iterator is equal to user_end() on the value.
     bool atEnd() const { return *this == user_iterator_impl(); }
 
     user_iterator_impl &operator++() { // Preincrement
@@ -198,22 +203,31 @@ private:
 protected:
   Value(Type *Ty, unsigned scid);
 
+  /// Value's destructor should be virtual by design, but that would require
+  /// that Value and all of its subclasses have a vtable that effectively
+  /// duplicates the information in the value ID. As a size optimization, the
+  /// destructor has been protected, and the caller should manually call
+  /// deleteValue.
+  ~Value(); // Use deleteValue() to delete a generic Value.
+
 public:
   Value(const Value &) = delete;
-  void operator=(const Value &) = delete;
-  virtual ~Value();
+  Value &operator=(const Value &) = delete;
 
-  /// \brief Support for debugging, callable in GDB: V->dump()
+  /// Delete a pointer to a generic Value.
+  void deleteValue();
+
+  /// Support for debugging, callable in GDB: V->dump()
   void dump() const;
 
-  /// \brief Implement operator<< on Value.
+  /// Implement operator<< on Value.
   /// @{
   void print(raw_ostream &O, bool IsForDebug = false) const;
   void print(raw_ostream &O, ModuleSlotTracker &MST,
              bool IsForDebug = false) const;
   /// @}
 
-  /// \brief Print the name of this Value out to the specified raw_ostream.
+  /// Print the name of this Value out to the specified raw_ostream.
   ///
   /// This is useful when you just want to print 'int %reg126', not the
   /// instruction that generated it. If you specify a Module for context, then
@@ -226,52 +240,53 @@ public:
                       ModuleSlotTracker &MST) const;
   /// @}
 
-  /// \brief All values are typed, get the type of this value.
+  /// All values are typed, get the type of this value.
   Type *getType() const { return VTy; }
 
-  /// \brief All values hold a context through their type.
+  /// All values hold a context through their type.
   LLVMContext &getContext() const;
 
-  // \brief All values can potentially be named.
+  // All values can potentially be named.
   bool hasName() const { return HasName; }
   ValueName *getValueName() const;
   void setValueName(ValueName *VN);
 
 private:
   void destroyValueName();
-  void doRAUW(Value *New, bool NoMetadata);
+  enum class ReplaceMetadataUses { No, Yes };
+  void doRAUW(Value *New, ReplaceMetadataUses);
   void setNameImpl(const Twine &Name);
 
 public:
-  /// \brief Return a constant reference to the value's name.
+  /// Return a constant reference to the value's name.
   ///
   /// This guaranteed to return the same reference as long as the value is not
   /// modified.  If the value has a name, this does a hashtable lookup, so it's
   /// not free.
   StringRef getName() const;
 
-  /// \brief Change the name of the value.
+  /// Change the name of the value.
   ///
   /// Choose a new unique name if the provided name is taken.
   ///
   /// \param Name The new name; or "" if the value's name should be removed.
   void setName(const Twine &Name);
 
-  /// \brief Transfer the name from V to this value.
+  /// Transfer the name from V to this value.
   ///
   /// After taking V's name, sets V's name to empty.
   ///
   /// \note It is an error to call V->takeName(V).
   void takeName(Value *V);
 
-  /// \brief Change all uses of this to point to a new Value.
+  /// Change all uses of this to point to a new Value.
   ///
   /// Go through the uses list for this definition and make each use point to
   /// "V" instead of "this".  After this completes, 'this's use list is
   /// guaranteed to be empty.
   void replaceAllUsesWith(Value *V);
 
-  /// \brief Change non-metadata uses of this to point to a new Value.
+  /// Change non-metadata uses of this to point to a new Value.
   ///
   /// Go through the uses list for this definition and make each use point to
   /// "V" instead of "this". This function skips metadata entries in the list.
@@ -294,15 +309,28 @@ public:
   // when using them since you might not get all uses.
   // The methods that don't start with materialized_ assert that modules is
   // fully materialized.
-  void assertModuleIsMaterialized() const;
+  void assertModuleIsMaterializedImpl() const;
+  // This indirection exists so we can keep assertModuleIsMaterializedImpl()
+  // around in release builds of Value.cpp to be linked with other code built
+  // in debug mode. But this avoids calling it in any of the release built code.
+  void assertModuleIsMaterialized() const {
+#ifndef NDEBUG
+    assertModuleIsMaterializedImpl();
+#endif
+  }
 
   bool use_empty() const {
     assertModuleIsMaterialized();
     return UseList == nullptr;
   }
 
-  typedef use_iterator_impl<Use> use_iterator;
-  typedef use_iterator_impl<const Use> const_use_iterator;
+  bool materialized_use_empty() const {
+    return UseList == nullptr;
+  }
+
+  using use_iterator = use_iterator_impl<Use>;
+  using const_use_iterator = use_iterator_impl<const Use>;
+
   use_iterator materialized_use_begin() { return use_iterator(UseList); }
   const_use_iterator materialized_use_begin() const {
     return const_use_iterator(UseList);
@@ -337,8 +365,9 @@ public:
     return UseList == nullptr;
   }
 
-  typedef user_iterator_impl<User> user_iterator;
-  typedef user_iterator_impl<const User> const_user_iterator;
+  using user_iterator = user_iterator_impl<User>;
+  using const_user_iterator = user_iterator_impl<const User>;
+
   user_iterator materialized_user_begin() { return user_iterator(UseList); }
   const_user_iterator materialized_user_begin() const {
     return const_user_iterator(UseList);
@@ -376,7 +405,7 @@ public:
     return materialized_users();
   }
 
-  /// \brief Return true if there is exactly one user of this value.
+  /// Return true if there is exactly one user of this value.
   ///
   /// This is specialized because it is a common request and does not require
   /// traversing the whole use list.
@@ -386,27 +415,27 @@ public:
     return ++I == E;
   }
 
-  /// \brief Return true if this Value has exactly N users.
+  /// Return true if this Value has exactly N users.
   bool hasNUses(unsigned N) const;
 
-  /// \brief Return true if this value has N users or more.
+  /// Return true if this value has N users or more.
   ///
   /// This is logically equivalent to getNumUses() >= N.
   bool hasNUsesOrMore(unsigned N) const;
 
-  /// \brief Check if this value is used in the specified basic block.
+  /// Check if this value is used in the specified basic block.
   bool isUsedInBasicBlock(const BasicBlock *BB) const;
 
-  /// \brief This method computes the number of uses of this Value.
+  /// This method computes the number of uses of this Value.
   ///
   /// This is a linear time operation.  Use hasOneUse, hasNUses, or
   /// hasNUsesOrMore to check for specific values.
   unsigned getNumUses() const;
 
-  /// \brief This method should only be used by the Use class.
+  /// This method should only be used by the Use class.
   void addUse(Use &U) { U.addToList(&UseList); }
 
-  /// \brief Concrete subclass of this.
+  /// Concrete subclass of this.
   ///
   /// An enumeration for keeping track of the concrete subclass of Value that
   /// is actually instantiated. Values of this enumeration are kept in the
@@ -421,7 +450,7 @@ public:
 #include "llvm/IR/Value.def"
   };
 
-  /// \brief Return an ID for the concrete type of this object.
+  /// Return an ID for the concrete type of this object.
   ///
   /// This is used to implement the classof checks.  This should not be used
   /// for any other purpose, as the values may change as LLVM evolves.  Also,
@@ -435,121 +464,177 @@ public:
     return SubclassID;
   }
 
-  /// \brief Return the raw optional flags value contained in this value.
+  /// Return the raw optional flags value contained in this value.
   ///
   /// This should only be used when testing two Values for equivalence.
   unsigned getRawSubclassOptionalData() const {
     return SubclassOptionalData;
   }
 
-  /// \brief Clear the optional flags contained in this value.
+  /// Clear the optional flags contained in this value.
   void clearSubclassOptionalData() {
     SubclassOptionalData = 0;
   }
 
-  /// \brief Check the optional flags for equality.
+  /// Check the optional flags for equality.
   bool hasSameSubclassOptionalData(const Value *V) const {
     return SubclassOptionalData == V->SubclassOptionalData;
   }
 
-  /// \brief Return true if there is a value handle associated with this value.
+  /// Return true if there is a value handle associated with this value.
   bool hasValueHandle() const { return HasValueHandle; }
 
-  /// \brief Return true if there is metadata referencing this value.
+  /// Return true if there is metadata referencing this value.
   bool isUsedByMetadata() const { return IsUsedByMD; }
 
-  /// \brief Return true if this value is a swifterror value.
+  /// Return true if this value is a swifterror value.
   ///
   /// swifterror values can be either a function argument or an alloca with a
   /// swifterror attribute.
   bool isSwiftError() const;
 
-  /// \brief Strip off pointer casts, all-zero GEPs, and aliases.
+  /// Strip off pointer casts, all-zero GEPs, address space casts, and aliases.
   ///
   /// Returns the original uncasted value.  If this is called on a non-pointer
   /// value, it returns 'this'.
-  Value *stripPointerCasts();
-  const Value *stripPointerCasts() const {
-    return const_cast<Value*>(this)->stripPointerCasts();
+  const Value *stripPointerCasts() const;
+  Value *stripPointerCasts() {
+    return const_cast<Value *>(
+                         static_cast<const Value *>(this)->stripPointerCasts());
   }
 
-  /// \brief Strip off pointer casts and all-zero GEPs.
+  /// Strip off pointer casts, all-zero GEPs, address space casts, and aliases
+  /// but ensures the representation of the result stays the same.
+  ///
+  /// Returns the original uncasted value with the same representation. If this
+  /// is called on a non-pointer value, it returns 'this'.
+  const Value *stripPointerCastsSameRepresentation() const;
+  Value *stripPointerCastsSameRepresentation() {
+    return const_cast<Value *>(static_cast<const Value *>(this)
+                                   ->stripPointerCastsSameRepresentation());
+  }
+
+  /// Strip off pointer casts, all-zero GEPs, aliases and invariant group
+  /// info.
+  ///
+  /// Returns the original uncasted value.  If this is called on a non-pointer
+  /// value, it returns 'this'. This function should be used only in
+  /// Alias analysis.
+  const Value *stripPointerCastsAndInvariantGroups() const;
+  Value *stripPointerCastsAndInvariantGroups() {
+    return const_cast<Value *>(
+        static_cast<const Value *>(this)->stripPointerCastsAndInvariantGroups());
+  }
+
+  /// Strip off pointer casts and all-zero GEPs.
   ///
   /// Returns the original uncasted value.  If this is called on a non-pointer
   /// value, it returns 'this'.
-  Value *stripPointerCastsNoFollowAliases();
-  const Value *stripPointerCastsNoFollowAliases() const {
-    return const_cast<Value*>(this)->stripPointerCastsNoFollowAliases();
+  const Value *stripPointerCastsNoFollowAliases() const;
+  Value *stripPointerCastsNoFollowAliases() {
+    return const_cast<Value *>(
+          static_cast<const Value *>(this)->stripPointerCastsNoFollowAliases());
   }
 
-  /// \brief Strip off pointer casts and all-constant inbounds GEPs.
+  /// Strip off pointer casts and all-constant inbounds GEPs.
   ///
   /// Returns the original pointer value.  If this is called on a non-pointer
   /// value, it returns 'this'.
-  Value *stripInBoundsConstantOffsets();
-  const Value *stripInBoundsConstantOffsets() const {
-    return const_cast<Value*>(this)->stripInBoundsConstantOffsets();
+  const Value *stripInBoundsConstantOffsets() const;
+  Value *stripInBoundsConstantOffsets() {
+    return const_cast<Value *>(
+              static_cast<const Value *>(this)->stripInBoundsConstantOffsets());
   }
 
-  /// \brief Accumulate offsets from \a stripInBoundsConstantOffsets().
+  /// Accumulate the constant offset this value has compared to a base pointer.
+  /// Only 'getelementptr' instructions (GEPs) with constant indices are
+  /// accumulated but other instructions, e.g., casts, are stripped away as
+  /// well. The accumulated constant offset is added to \p Offset and the base
+  /// pointer is returned.
   ///
-  /// Stores the resulting constant offset stripped into the APInt provided.
-  /// The provided APInt will be extended or truncated as needed to be the
-  /// correct bitwidth for an offset of this pointer type.
+  /// The APInt \p Offset has to have a bit-width equal to the IntPtr type for
+  /// the address space of 'this' pointer value, e.g., use
+  /// DataLayout::getIndexTypeSizeInBits(Ty).
   ///
-  /// If this is called on a non-pointer value, it returns 'this'.
-  Value *stripAndAccumulateInBoundsConstantOffsets(const DataLayout &DL,
-                                                   APInt &Offset);
+  /// If \p AllowNonInbounds is true, constant offsets in GEPs are stripped and
+  /// accumulated even if the GEP is not "inbounds".
+  ///
+  /// If this is called on a non-pointer value, it returns 'this' and the
+  /// \p Offset is not modified.
+  ///
+  /// Note that this function will never return a nullptr. It will also never
+  /// manipulate the \p Offset in a way that would not match the difference
+  /// between the underlying value and the returned one. Thus, if no constant
+  /// offset was found, the returned value is the underlying one and \p Offset
+  /// is unchanged.
+  const Value *stripAndAccumulateConstantOffsets(const DataLayout &DL,
+                                                 APInt &Offset,
+                                                 bool AllowNonInbounds) const;
+  Value *stripAndAccumulateConstantOffsets(const DataLayout &DL, APInt &Offset,
+                                           bool AllowNonInbounds) {
+    return const_cast<Value *>(
+        static_cast<const Value *>(this)->stripAndAccumulateConstantOffsets(
+            DL, Offset, AllowNonInbounds));
+  }
+
+  /// This is a wrapper around stripAndAccumulateConstantOffsets with the
+  /// in-bounds requirement set to false.
   const Value *stripAndAccumulateInBoundsConstantOffsets(const DataLayout &DL,
                                                          APInt &Offset) const {
-    return const_cast<Value *>(this)
-        ->stripAndAccumulateInBoundsConstantOffsets(DL, Offset);
+    return stripAndAccumulateConstantOffsets(DL, Offset,
+                                             /* AllowNonInbounds */ false);
+  }
+  Value *stripAndAccumulateInBoundsConstantOffsets(const DataLayout &DL,
+                                                   APInt &Offset) {
+    return stripAndAccumulateConstantOffsets(DL, Offset,
+                                             /* AllowNonInbounds */ false);
   }
 
-  /// \brief Strip off pointer casts and inbounds GEPs.
+  /// Strip off pointer casts and inbounds GEPs.
   ///
   /// Returns the original pointer value.  If this is called on a non-pointer
   /// value, it returns 'this'.
-  Value *stripInBoundsOffsets();
-  const Value *stripInBoundsOffsets() const {
-    return const_cast<Value*>(this)->stripInBoundsOffsets();
+  const Value *stripInBoundsOffsets() const;
+  Value *stripInBoundsOffsets() {
+    return const_cast<Value *>(
+                      static_cast<const Value *>(this)->stripInBoundsOffsets());
   }
 
-  /// \brief Returns the number of bytes known to be dereferenceable for the
+  /// Returns the number of bytes known to be dereferenceable for the
   /// pointer value.
   ///
   /// If CanBeNull is set by this function the pointer can either be null or be
   /// dereferenceable up to the returned number of bytes.
-  unsigned getPointerDereferenceableBytes(const DataLayout &DL,
+  uint64_t getPointerDereferenceableBytes(const DataLayout &DL,
                                           bool &CanBeNull) const;
 
-  /// \brief Returns an alignment of the pointer value.
+  /// Returns an alignment of the pointer value.
   ///
   /// Returns an alignment which is either specified explicitly, e.g. via
   /// align attribute of a function argument, or guaranteed by DataLayout.
   unsigned getPointerAlignment(const DataLayout &DL) const;
 
-  /// \brief Translate PHI node to its predecessor from the given basic block.
+  /// Translate PHI node to its predecessor from the given basic block.
   ///
   /// If this value is a PHI node with CurBB as its parent, return the value in
   /// the PHI node corresponding to PredBB.  If not, return ourself.  This is
   /// useful if you want to know the value something has in a predecessor
   /// block.
-  Value *DoPHITranslation(const BasicBlock *CurBB, const BasicBlock *PredBB);
-
   const Value *DoPHITranslation(const BasicBlock *CurBB,
-                                const BasicBlock *PredBB) const{
-    return const_cast<Value*>(this)->DoPHITranslation(CurBB, PredBB);
+                                const BasicBlock *PredBB) const;
+  Value *DoPHITranslation(const BasicBlock *CurBB, const BasicBlock *PredBB) {
+    return const_cast<Value *>(
+             static_cast<const Value *>(this)->DoPHITranslation(CurBB, PredBB));
   }
 
-  /// \brief The maximum alignment for instructions.
+  /// The maximum alignment for instructions.
   ///
   /// This is the greatest alignment value supported by load, store, and alloca
   /// instructions, and global values.
   static const unsigned MaxAlignmentExponent = 29;
   static const unsigned MaximumAlignment = 1u << MaxAlignmentExponent;
 
-  /// \brief Mutate the type of this Value to be of the specified type.
+  /// Mutate the type of this Value to be of the specified type.
   ///
   /// Note that this is an extremely dangerous operation which can create
   /// completely invalid IR very easily.  It is strongly recommended that you
@@ -559,17 +644,17 @@ public:
     VTy = Ty;
   }
 
-  /// \brief Sort the use-list.
+  /// Sort the use-list.
   ///
   /// Sorts the Value's use-list by Cmp using a stable mergesort.  Cmp is
   /// expected to compare two \a Use references.
   template <class Compare> void sortUseList(Compare Cmp);
 
-  /// \brief Reverse the use-list.
+  /// Reverse the use-list.
   void reverseUseList();
 
 private:
-  /// \brief Merge two lists together.
+  /// Merge two lists together.
   ///
   /// Merges \c L and \c R using \c Cmp.  To enable stable sorts, always pushes
   /// "equal" items from L before items from R.
@@ -582,7 +667,7 @@ private:
     Use *Merged;
     Use **Next = &Merged;
 
-    for (;;) {
+    while (true) {
       if (!L) {
         *Next = R;
         break;
@@ -605,16 +690,17 @@ private:
     return Merged;
   }
 
-  /// \brief Tail-recursive helper for \a mergeUseLists().
-  ///
-  /// \param[out] Next the first element in the list.
-  template <class Compare>
-  static void mergeUseListsImpl(Use *L, Use *R, Use **Next, Compare Cmp);
-
 protected:
   unsigned short getSubclassDataFromValue() const { return SubclassData; }
   void setValueSubclassData(unsigned short D) { SubclassData = D; }
 };
+
+struct ValueDeleter { void operator()(Value *V) { V->deleteValue(); } };
+
+/// Use this instead of std::unique_ptr<Value> or std::unique_ptr<Instruction>.
+/// Those don't work because Value and Instruction's destructors are protected,
+/// aren't virtual, and won't destroy the complete object.
+using unique_value = std::unique_ptr<Value, ValueDeleter>;
 
 inline raw_ostream &operator<<(raw_ostream &OS, const Value &V) {
   V.print(OS);
@@ -709,8 +795,8 @@ template <class Compare> void Value::sortUseList(Compare Cmp) {
 //
 template <> struct isa_impl<Constant, Value> {
   static inline bool doit(const Value &Val) {
-    return Val.getValueID() >= Value::ConstantFirstVal &&
-      Val.getValueID() <= Value::ConstantLastVal;
+    static_assert(Value::ConstantFirstVal == 0, "Val.getValueID() >= Value::ConstantFirstVal");
+    return Val.getValueID() <= Value::ConstantLastVal;
   }
 };
 

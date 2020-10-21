@@ -1,17 +1,16 @@
 //===- llvm/unittest/IR/PassManager.cpp - PassManager tests ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/IR/PassManager.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/PassManager.h"
 #include "llvm/Support/SourceMgr.h"
 #include "gtest/gtest.h"
 
@@ -28,7 +27,7 @@ public:
 
   TestFunctionAnalysis(int &Runs) : Runs(Runs) {}
 
-  /// \brief Run the analysis pass over the function and return a result.
+  /// Run the analysis pass over the function and return a result.
   Result run(Function &F, FunctionAnalysisManager &AM) {
     ++Runs;
     int Count = 0;
@@ -209,6 +208,13 @@ TEST(PreservedAnalysesTest, Basic) {
     auto PAC = PA4.getChecker<TestFunctionAnalysis>();
     EXPECT_FALSE(PAC.preserved());
     EXPECT_FALSE(PAC.preservedSet<AllAnalysesOn<Function>>());
+  }
+  auto PA5 = PreservedAnalyses::allInSet<AllAnalysesOn<Function>>();
+  {
+    auto PAC = PA5.getChecker<TestFunctionAnalysis>();
+    EXPECT_FALSE(PAC.preserved());
+    EXPECT_TRUE(PAC.preservedSet<AllAnalysesOn<Function>>());
+    EXPECT_FALSE(PAC.preservedSet<AllAnalysesOn<Module>>());
   }
 }
 
@@ -399,6 +405,9 @@ TEST_F(PassManagerTest, Basic) {
   MAM.registerPass([&] { return FunctionAnalysisManagerModuleProxy(FAM); });
   FAM.registerPass([&] { return ModuleAnalysisManagerFunctionProxy(MAM); });
 
+  MAM.registerPass([&] { return PassInstrumentationAnalysis(); });
+  FAM.registerPass([&] { return PassInstrumentationAnalysis(); });
+
   ModulePassManager MPM;
 
   // Count the runs over a Function.
@@ -549,6 +558,8 @@ struct CustomizedPass : PassInfoMixin<CustomizedPass> {
 TEST_F(PassManagerTest, CustomizedPassManagerArgs) {
   CustomizedAnalysisManager AM;
   AM.registerPass([&] { return CustomizedAnalysis(); });
+  PassInstrumentationCallbacks PIC;
+  AM.registerPass([&] { return PassInstrumentationAnalysis(&PIC); });
 
   CustomizedPassManager PM;
 
@@ -680,6 +691,10 @@ TEST_F(PassManagerTest, IndirectAnalysisInvalidation) {
   MAM.registerPass([&] { return TestModuleAnalysis(ModuleAnalysisRuns); });
   MAM.registerPass([&] { return FunctionAnalysisManagerModuleProxy(FAM); });
   FAM.registerPass([&] { return ModuleAnalysisManagerFunctionProxy(MAM); });
+
+  PassInstrumentationCallbacks PIC;
+  MAM.registerPass([&] { return PassInstrumentationAnalysis(&PIC); });
+  FAM.registerPass([&] { return PassInstrumentationAnalysis(&PIC); });
 
   int InstrCount = 0, FunctionCount = 0;
   ModulePassManager MPM(/*DebugLogging*/ true);

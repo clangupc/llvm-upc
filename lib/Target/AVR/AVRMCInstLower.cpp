@@ -1,9 +1,8 @@
 //===-- AVRMCInstLower.cpp - Convert AVR MachineInstr to an MCInst --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -37,10 +36,22 @@ MCOperand AVRMCInstLower::lowerSymbolOperand(const MachineOperand &MO,
         Expr, MCConstantExpr::create(MO.getOffset(), Ctx), Ctx);
   }
 
+  bool IsFunction = MO.isGlobal() && isa<Function>(MO.getGlobal());
+
   if (TF & AVRII::MO_LO) {
-    Expr = AVRMCExpr::create(AVRMCExpr::VK_AVR_LO8, Expr, IsNegated, Ctx);
+    if (IsFunction) {
+      // N.B. Should we use _GS fixups here to cope with >128k progmem?
+      Expr = AVRMCExpr::create(AVRMCExpr::VK_AVR_PM_LO8, Expr, IsNegated, Ctx);
+    } else {
+      Expr = AVRMCExpr::create(AVRMCExpr::VK_AVR_LO8, Expr, IsNegated, Ctx);
+    }
   } else if (TF & AVRII::MO_HI) {
-    Expr = AVRMCExpr::create(AVRMCExpr::VK_AVR_HI8, Expr, IsNegated, Ctx);
+    if (IsFunction) {
+      // N.B. Should we use _GS fixups here to cope with >128k progmem?
+      Expr = AVRMCExpr::create(AVRMCExpr::VK_AVR_PM_HI8, Expr, IsNegated, Ctx);
+    } else {
+      Expr = AVRMCExpr::create(AVRMCExpr::VK_AVR_HI8, Expr, IsNegated, Ctx);
+    }
   } else if (TF != 0) {
     llvm_unreachable("Unknown target flag on symbol operand");
   }
@@ -56,7 +67,7 @@ void AVRMCInstLower::lowerInstruction(const MachineInstr &MI, MCInst &OutMI) con
 
     switch (MO.getType()) {
     default:
-      MI.dump();
+      MI.print(errs());
       llvm_unreachable("unknown operand type");
     case MachineOperand::MO_Register:
       // Ignore all implicit register operands.

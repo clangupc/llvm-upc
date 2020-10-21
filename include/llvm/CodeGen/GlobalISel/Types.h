@@ -1,9 +1,8 @@
-//===-- llvm/CodeGen/GlobalISel/Types.h - Types used by GISel ----*- C++ -*-===//
+//===- llvm/CodeGen/GlobalISel/Types.h - Types used by GISel ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -16,9 +15,10 @@
 #define LLVM_CODEGEN_GLOBALISEL_TYPES_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/IR/Value.h"
 
 namespace llvm {
+
+class Value;
 
 /// Map a value to a virtual register.
 /// For now, we chose to map aggregate types to on single virtual
@@ -26,7 +26,8 @@ namespace llvm {
 /// PR26161 tracks that.
 /// Note: We need to expose this type to the target hooks for thing like
 /// ABI lowering that would be used during IRTranslation.
-typedef DenseMap<const Value *, unsigned> ValueToVReg;
+using ValueToVReg = DenseMap<const Value *, unsigned>;
 
-} // End namespace llvm.
-#endif
+} // end namespace llvm
+
+#endif // LLVM_CODEGEN_GLOBALISEL_TYPES_H

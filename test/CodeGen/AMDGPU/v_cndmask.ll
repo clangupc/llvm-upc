@@ -1,15 +1,19 @@
-; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=SI %s
-; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs < %s | FileCheck -check-prefix=GCN -check-prefix=VI %s
+; RUN: llc -march=amdgcn -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,SI,SIVI %s
+; RUN: llc -march=amdgcn -mcpu=tonga -mattr=-flat-for-global -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,VI,SIVI %s
+; RUN: llc -march=amdgcn -mcpu=gfx1010 -mattr=-flat-for-global,+WavefrontSize64 -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,GFX10 %s
 
 declare i32 @llvm.amdgcn.workitem.id.x() #1
+declare half @llvm.fabs.f16(half)
+declare float @llvm.fabs.f32(float)
+declare double @llvm.fabs.f64(double)
 
 ; GCN-LABEL: {{^}}v_cnd_nan_nosgpr:
-; GCN: v_cmp_eq_u32_e64 vcc, s{{[0-9]+}}, 0
-; GCN: v_cndmask_b32_e32 v{{[0-9]}}, -1, v{{[0-9]+}}, vcc
+; GCN: v_cmp_eq_u32_e64 [[COND:vcc|s\[[0-9]+:[0-9]+\]]], s{{[0-9]+}}, 0
+; GCN: v_cndmask_b32_e{{32|64}} v{{[0-9]}}, -1, v{{[0-9]+}}, [[COND]]
 ; GCN-DAG: v{{[0-9]}}
 ; All nan values are converted to 0xffffffff
 ; GCN: s_endpgm
-define void @v_cnd_nan_nosgpr(float addrspace(1)* %out, i32 %c, float addrspace(1)* %fptr) #0 {
+define amdgpu_kernel void @v_cnd_nan_nosgpr(float addrspace(1)* %out, i32 %c, float addrspace(1)* %fptr) #0 {
   %idx = call i32 @llvm.amdgcn.workitem.id.x() #1
   %f.gep = getelementptr float, float addrspace(1)* %fptr, i32 %idx
   %f = load float, float addrspace(1)* %f.gep
@@ -23,14 +27,17 @@ define void @v_cnd_nan_nosgpr(float addrspace(1)* %out, i32 %c, float addrspace(
 ; This requires slightly trickier SGPR operand legalization since the
 ; single constant bus SGPR usage is the last operand, and it should
 ; never be moved.
+; However on GFX10 constant bus is limited to 2 scalar operands, not one.
 
 ; GCN-LABEL: {{^}}v_cnd_nan:
-; GCN: v_cmp_eq_u32_e64 vcc, s{{[0-9]+}}, 0
-; GCN: v_cndmask_b32_e32 v{{[0-9]}}, -1, v{{[0-9]}}, vcc
+; SIVI:  v_cmp_eq_u32_e64 vcc, s{{[0-9]+}}, 0
+; SIVI:  v_cndmask_b32_e32 v{{[0-9]+}}, -1, v{{[0-9]+}}, vcc
+; GFX10: v_cmp_eq_u32_e64 [[CC:s\[[0-9:]+\]]], s{{[0-9]+}}, 0
+; GFX10: v_cndmask_b32_e64 v{{[0-9]+}}, -1, s{{[0-9]+}}, [[CC]]
 ; GCN-DAG: v{{[0-9]}}
 ; All nan values are converted to 0xffffffff
 ; GCN: s_endpgm
-define void @v_cnd_nan(float addrspace(1)* %out, i32 %c, float %f) #0 {
+define amdgpu_kernel void @v_cnd_nan(float addrspace(1)* %out, i32 %c, float %f) #0 {
   %setcc = icmp ne i32 %c, 0
   %select = select i1 %setcc, float 0xFFFFFFFFE0000000, float %f
   store float %select, float addrspace(1)* %out
@@ -42,12 +49,14 @@ define void @v_cnd_nan(float addrspace(1)* %out, i32 %c, float %f) #0 {
 ; (select (cmp (sgprX, constant)), constant, sgprZ)
 
 ; GCN-LABEL: {{^}}fcmp_sgprX_k0_select_k1_sgprZ_f32:
-; GCN: s_load_dword [[X:s[0-9]+]]
-; GCN: s_load_dword [[Z:s[0-9]+]]
-; GCN-DAG: v_cmp_nlg_f32_e64 vcc, [[X]], 0
-; GCN-DAG: v_mov_b32_e32 [[VZ:v[0-9]+]], [[Z]]
-; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[VZ]], vcc
-define void @fcmp_sgprX_k0_select_k1_sgprZ_f32(float addrspace(1)* %out, float %x, float %z) #0 {
+; GCN: s_load_dwordx2
+; GCN: s_load_dwordx2 s{{\[}}[[X:[0-9]+]]:[[Z:[0-9]+]]{{\]}}
+; SIVI-DAG:  v_cmp_nlg_f32_e64 [[CC:vcc]], s[[X]], 0
+; GFX10-DAG: v_cmp_nlg_f32_e64 [[CC:s\[[0-9:]+\]]], s[[X]], 0
+; SIVI-DAG:  v_mov_b32_e32 [[VZ:v[0-9]+]], s[[Z]]
+; SIVI:      v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[VZ]], [[CC]]
+; GFX10:     v_cndmask_b32_e64 v{{[0-9]+}}, 1.0, s[[Z]], [[CC]]
+define amdgpu_kernel void @fcmp_sgprX_k0_select_k1_sgprZ_f32(float addrspace(1)* %out, [8 x i32], float %x, float %z) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %out.gep = getelementptr inbounds float, float addrspace(1)* %out, i64 %tid.ext
@@ -59,10 +68,12 @@ define void @fcmp_sgprX_k0_select_k1_sgprZ_f32(float addrspace(1)* %out, float %
 
 ; GCN-LABEL: {{^}}fcmp_sgprX_k0_select_k1_sgprX_f32:
 ; GCN: s_load_dword [[X:s[0-9]+]]
-; GCN-DAG: v_cmp_nlg_f32_e64 vcc, [[X]], 0
-; GCN-DAG: v_mov_b32_e32 [[VZ:v[0-9]+]], [[Z]]
-; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[VZ]], vcc
-define void @fcmp_sgprX_k0_select_k1_sgprX_f32(float addrspace(1)* %out, float %x) #0 {
+; SIVI-DAG:  v_cmp_nlg_f32_e64 [[CC:vcc]], [[X]], 0
+; GFX10-DAG: v_cmp_nlg_f32_e64 [[CC:s\[[0-9:]+\]]], [[X]], 0
+; SIVI-DAG:  v_mov_b32_e32 [[VX:v[0-9]+]], [[X]]
+; SIVI:      v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[VX]], [[CC]]
+; GFX10:     v_cndmask_b32_e64 v{{[0-9]+}}, 1.0, [[X]], [[CC]]
+define amdgpu_kernel void @fcmp_sgprX_k0_select_k1_sgprX_f32(float addrspace(1)* %out, float %x) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %out.gep = getelementptr inbounds float, float addrspace(1)* %out, i64 %tid.ext
@@ -73,11 +84,13 @@ define void @fcmp_sgprX_k0_select_k1_sgprX_f32(float addrspace(1)* %out, float %
 }
 
 ; GCN-LABEL: {{^}}fcmp_sgprX_k0_select_k0_sgprZ_f32:
-; GCN: s_load_dword [[X:s[0-9]+]]
-; GCN-DAG: v_cmp_nlg_f32_e64 vcc, [[X]], 0
-; GCN-DAG: v_mov_b32_e32 [[VZ:v[0-9]+]], [[Z]]
-; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 0, [[VZ]], vcc
-define void @fcmp_sgprX_k0_select_k0_sgprZ_f32(float addrspace(1)* %out, float %x, float %z) #0 {
+; GCN-DAG: s_load_dwordx2 s{{\[}}[[X:[0-9]+]]:[[Z:[0-9]+]]{{\]}}, s{{\[[0-9]+:[0-9]+\]}}, {{0x13|0x4c}}
+; SIVI-DAG:  v_cmp_nlg_f32_e64 [[CC:vcc]], s[[X]], 0
+; GFX10-DAG: v_cmp_nlg_f32_e64 [[CC:s\[[0-9:]+\]]], s[[X]], 0
+; SIVI-DAG:  v_mov_b32_e32 [[VZ:v[0-9]+]], s[[Z]]
+; SIVI:      v_cndmask_b32_e32 v{{[0-9]+}}, 0, [[VZ]], [[CC]]
+; GFX10:     v_cndmask_b32_e64 v{{[0-9]+}}, 0, s[[Z]], [[CC]]
+define amdgpu_kernel void @fcmp_sgprX_k0_select_k0_sgprZ_f32(float addrspace(1)* %out, [8 x i32], float %x, float %z) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %out.gep = getelementptr inbounds float, float addrspace(1)* %out, i64 %tid.ext
@@ -89,10 +102,12 @@ define void @fcmp_sgprX_k0_select_k0_sgprZ_f32(float addrspace(1)* %out, float %
 
 ; GCN-LABEL: {{^}}fcmp_sgprX_k0_select_k0_sgprX_f32:
 ; GCN: s_load_dword [[X:s[0-9]+]]
-; GCN-DAG: v_cmp_nlg_f32_e64 vcc, [[X]], 0
-; GCN-DAG: v_mov_b32_e32 [[VZ:v[0-9]+]], [[Z]]
-; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 0, [[VZ]], vcc
-define void @fcmp_sgprX_k0_select_k0_sgprX_f32(float addrspace(1)* %out, float %x) #0 {
+; SIVI-DAG:  v_cmp_nlg_f32_e64 [[CC:vcc]], [[X]], 0
+; GFX10-DAG: v_cmp_nlg_f32_e64 [[CC:s\[[0-9:]+\]]], [[X]], 0
+; SIVI-DAG:  v_mov_b32_e32 [[VX:v[0-9]+]], [[X]]
+; SIVI:      v_cndmask_b32_e32 v{{[0-9]+}}, 0, [[VX]], [[CC]]
+; GFX10:     v_cndmask_b32_e64 v{{[0-9]+}}, 0, [[X]], [[CC]]
+define amdgpu_kernel void @fcmp_sgprX_k0_select_k0_sgprX_f32(float addrspace(1)* %out, float %x) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %out.gep = getelementptr inbounds float, float addrspace(1)* %out, i64 %tid.ext
@@ -104,10 +119,10 @@ define void @fcmp_sgprX_k0_select_k0_sgprX_f32(float addrspace(1)* %out, float %
 
 ; GCN-LABEL: {{^}}fcmp_sgprX_k0_select_k0_vgprZ_f32:
 ; GCN-DAG: s_load_dword [[X:s[0-9]+]]
-; GCN-DAG: {{buffer|flat}}_load_dword [[Z:v[0-9]+]]
-; GCN-DAG: v_cmp_nlg_f32_e64 vcc, [[X]], 0
-; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 0, [[Z]], vcc
-define void @fcmp_sgprX_k0_select_k0_vgprZ_f32(float addrspace(1)* %out, float %x, float addrspace(1)* %z.ptr) #0 {
+; GCN-DAG: {{buffer|flat|global}}_load_dword [[Z:v[0-9]+]]
+; GCN-DAG: v_cmp_nlg_f32_e64 [[COND:vcc|s\[[0-9]+:[0-9]+\]]], [[X]], 0
+; GCN: v_cndmask_b32_e{{32|64}} v{{[0-9]+}}, 0, [[Z]], [[COND]]
+define amdgpu_kernel void @fcmp_sgprX_k0_select_k0_vgprZ_f32(float addrspace(1)* %out, float %x, float addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %z.gep = getelementptr inbounds float, float addrspace(1)* %z.ptr, i64 %tid.ext
@@ -120,11 +135,11 @@ define void @fcmp_sgprX_k0_select_k0_vgprZ_f32(float addrspace(1)* %out, float %
 }
 
 ; GCN-LABEL: {{^}}fcmp_sgprX_k0_select_k1_vgprZ_f32:
-; GCN-DAG: {{buffer|flat}}_load_dword [[Z:v[0-9]+]]
+; GCN-DAG: {{buffer|flat|global}}_load_dword [[Z:v[0-9]+]]
 ; GCN-DAG: s_load_dword [[X:s[0-9]+]]
-; GCN: v_cmp_nlg_f32_e64 vcc, [[X]], 0
-; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[Z]], vcc
-define void @fcmp_sgprX_k0_select_k1_vgprZ_f32(float addrspace(1)* %out, float %x, float addrspace(1)* %z.ptr) #0 {
+; GCN-DAG: v_cmp_nlg_f32_e64 [[COND:vcc|s\[[0-9]+:[0-9]+\]]], [[X]], 0
+; GCN: v_cndmask_b32_e{{32|64}} v{{[0-9]+}}, 1.0, [[Z]], [[COND]]
+define amdgpu_kernel void @fcmp_sgprX_k0_select_k1_vgprZ_f32(float addrspace(1)* %out, float %x, float addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %z.gep = getelementptr inbounds float, float addrspace(1)* %z.ptr, i64 %tid.ext
@@ -137,12 +152,13 @@ define void @fcmp_sgprX_k0_select_k1_vgprZ_f32(float addrspace(1)* %out, float %
 }
 
 ; GCN-LABEL: {{^}}fcmp_vgprX_k0_select_k1_sgprZ_f32:
-; GCN-DAG: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
+; GCN-DAG: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
 ; GCN-DAG: s_load_dword [[Z:s[0-9]+]]
 ; GCN-DAG: v_cmp_ngt_f32_e32 vcc, 0, [[X]]
-; GCN-DAG: v_mov_b32_e32 [[VZ:v[0-9]+]], [[Z]]
-; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[VZ]], vcc
-define void @fcmp_vgprX_k0_select_k1_sgprZ_f32(float addrspace(1)* %out, float addrspace(1)* %x.ptr, float %z) #0 {
+; SIVI-DAG: v_mov_b32_e32 [[VZ:v[0-9]+]], [[Z]]
+; SIVI:     v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[VZ]], vcc
+; GFX10:    v_cndmask_b32_e64 v{{[0-9]+}}, 1.0, [[Z]], vcc
+define amdgpu_kernel void @fcmp_vgprX_k0_select_k1_sgprZ_f32(float addrspace(1)* %out, float addrspace(1)* %x.ptr, float %z) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -155,11 +171,11 @@ define void @fcmp_vgprX_k0_select_k1_sgprZ_f32(float addrspace(1)* %out, float a
 }
 
 ; GCN-LABEL: {{^}}fcmp_vgprX_k0_select_k1_vgprZ_f32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dword [[Z:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dword [[Z:v[0-9]+]]
 ; GCN: v_cmp_le_f32_e32 vcc, 0, [[X]]
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, [[Z]], vcc
-define void @fcmp_vgprX_k0_select_k1_vgprZ_f32(float addrspace(1)* %out, float addrspace(1)* %x.ptr, float addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @fcmp_vgprX_k0_select_k1_vgprZ_f32(float addrspace(1)* %out, float addrspace(1)* %x.ptr, float addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -174,11 +190,11 @@ define void @fcmp_vgprX_k0_select_k1_vgprZ_f32(float addrspace(1)* %out, float a
 }
 
 ; GCN-LABEL: {{^}}icmp_vgprX_k0_select_k1_vgprZ_i32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dword [[Z:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dword [[Z:v[0-9]+]]
 ; GCN: v_cmp_lt_i32_e32 vcc, -1, [[X]]
 ; GCN: v_cndmask_b32_e32 v{{[0-9]+}}, 2, [[Z]], vcc
-define void @icmp_vgprX_k0_select_k1_vgprZ_i32(i32 addrspace(1)* %out, i32 addrspace(1)* %x.ptr, i32 addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @icmp_vgprX_k0_select_k1_vgprZ_i32(i32 addrspace(1)* %out, i32 addrspace(1)* %x.ptr, i32 addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds i32, i32 addrspace(1)* %x.ptr, i64 %tid.ext
@@ -194,16 +210,16 @@ define void @icmp_vgprX_k0_select_k1_vgprZ_i32(i32 addrspace(1)* %out, i32 addrs
 
 ; FIXME: Why does VI make the wrong regalloc choice?
 ; GCN-LABEL: {{^}}icmp_vgprX_k0_select_k1_vgprZ_i64:
-; GCN: {{buffer|flat}}_load_dwordx2 v{{\[}}[[X_LO:[0-9]+]]:[[X_HI:[0-9]+]]{{\]}}
-; GCN-DAG: {{buffer|flat}}_load_dwordx2 v{{\[}}[[Z_LO:[0-9]+]]:[[Z_HI:[0-9]+]]{{\]}}
+; GCN: {{buffer|flat|global}}_load_dwordx2 v{{\[}}[[X_LO:[0-9]+]]:[[X_HI:[0-9]+]]{{\]}}
+; GCN-DAG: {{buffer|flat|global}}_load_dwordx2 v{{\[}}[[Z_LO:[0-9]+]]:[[Z_HI:[0-9]+]]{{\]}}
 ; SI-DAG: v_cmp_lt_i64_e32 vcc, -1, v{{\[}}[[X_LO]]:[[X_HI]]{{\]}}
 ; SI-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 0, v[[Z_HI]], vcc
 ; SI-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 2, v[[Z_LO]], vcc
 
-; VI-DAG: v_cmp_lt_i64_e64 s{{\[[0-9]+:[0-9]+\]}}, -1, v{{\[}}[[X_LO]]:[[X_HI]]{{\]}}
-; VI-DAG: v_cndmask_b32_e64 v{{[0-9]+}}, 0, v[[Z_HI]], s
-; VI-DAG: v_cndmask_b32_e64 v{{[0-9]+}}, 2, v[[Z_LO]], s
-define void @icmp_vgprX_k0_select_k1_vgprZ_i64(i64 addrspace(1)* %out, i64 addrspace(1)* %x.ptr, i64 addrspace(1)* %z.ptr) #0 {
+; VI-DAG: v_cmp_lt_i64_e32 vcc, -1, v{{\[}}[[X_LO]]:[[X_HI]]{{\]}}
+; VI-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 0, v[[Z_HI]], vcc
+; VI-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 2, v[[Z_LO]], vcc
+define amdgpu_kernel void @icmp_vgprX_k0_select_k1_vgprZ_i64(i64 addrspace(1)* %out, i64 addrspace(1)* %x.ptr, i64 addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds i64, i64 addrspace(1)* %x.ptr, i64 %tid.ext
@@ -218,15 +234,15 @@ define void @icmp_vgprX_k0_select_k1_vgprZ_i64(i64 addrspace(1)* %out, i64 addrs
 }
 
 ; GCN-LABEL: {{^}}fcmp_vgprX_k0_select_vgprZ_k1_v4f32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dwordx4
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dwordx4
 
 ; GCN: v_cmp_nge_f32_e32 vcc, 4.0, [[X]]
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 2.0, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, -0.5, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 4.0, v{{[0-9]+}}, vcc
-define void @fcmp_vgprX_k0_select_vgprZ_k1_v4f32(<4 x float> addrspace(1)* %out, float addrspace(1)* %x.ptr, <4 x float> addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @fcmp_vgprX_k0_select_vgprZ_k1_v4f32(<4 x float> addrspace(1)* %out, float addrspace(1)* %x.ptr, <4 x float> addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -241,15 +257,15 @@ define void @fcmp_vgprX_k0_select_vgprZ_k1_v4f32(<4 x float> addrspace(1)* %out,
 }
 
 ; GCN-LABEL: {{^}}fcmp_vgprX_k0_select_k1_vgprZ_v4f32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dwordx4
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dwordx4
 
 ; GCN: v_cmp_ge_f32_e32 vcc, 4.0, [[X]]
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 2.0, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, -0.5, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 4.0, v{{[0-9]+}}, vcc
-define void @fcmp_vgprX_k0_select_k1_vgprZ_v4f32(<4 x float> addrspace(1)* %out, float addrspace(1)* %x.ptr, <4 x float> addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @fcmp_vgprX_k0_select_k1_vgprZ_v4f32(<4 x float> addrspace(1)* %out, float addrspace(1)* %x.ptr, <4 x float> addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -267,15 +283,15 @@ define void @fcmp_vgprX_k0_select_k1_vgprZ_v4f32(<4 x float> addrspace(1)* %out,
 ; multiple uses.
 
 ; GCN-LABEL: {{^}}fcmp_k0_vgprX_select_k1_vgprZ_v4f32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dwordx4
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dwordx4
 
 ; GCN: v_cmp_le_f32_e32 vcc, 4.0, [[X]]
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 1.0, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 2.0, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, -0.5, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 4.0, v{{[0-9]+}}, vcc
-define void @fcmp_k0_vgprX_select_k1_vgprZ_v4f32(<4 x float> addrspace(1)* %out, float addrspace(1)* %x.ptr, <4 x float> addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @fcmp_k0_vgprX_select_k1_vgprZ_v4f32(<4 x float> addrspace(1)* %out, float addrspace(1)* %x.ptr, <4 x float> addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -292,13 +308,13 @@ define void @fcmp_k0_vgprX_select_k1_vgprZ_v4f32(<4 x float> addrspace(1)* %out,
 ; GCN-LABEL: {{^}}icmp_vgprX_k0_select_k1_vgprZ_i1:
 ; GCN: load_dword
 ; GCN: load_ubyte
-; GCN-DAG: v_cmp_gt_i32_e64 s{{\[[0-9]+:[0-9]+\]}}, 0, v
+; GCN-DAG: v_cmp_gt_i32_e32 vcc, 0, v
 ; DCN-DAG: v_and_b32_e32 v{{[0-9]+}}, 1,
-; GCN-DAG: v_cmp_eq_u32_e32 vcc, 1, v
-; GCN-DAG: s_or_b64 s{{\[[0-9]+:[0-9]+\]}}, s{{\[[0-9]+:[0-9]+\]}}, vcc
+; GCN-DAG: v_cmp_eq_u32_e64 s{{\[[0-9]+:[0-9]+\]}}, 1, v
+; GCN-DAG: s_or_b64 s{{\[[0-9]+:[0-9]+\]}}, vcc, s{{\[[0-9]+:[0-9]+\]}}
 ; GCN: v_cndmask_b32_e64 v{{[0-9]+}}, 0, 1, s
 ; GCN: store_byte
-define void @icmp_vgprX_k0_select_k1_vgprZ_i1(i1 addrspace(1)* %out, i32 addrspace(1)* %x.ptr, i1 addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @icmp_vgprX_k0_select_k1_vgprZ_i1(i1 addrspace(1)* %out, i32 addrspace(1)* %x.ptr, i1 addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds i32, i32 addrspace(1)* %x.ptr, i64 %tid.ext
@@ -314,14 +330,15 @@ define void @icmp_vgprX_k0_select_k1_vgprZ_i1(i1 addrspace(1)* %out, i32 addrspa
 
 ; Different types compared vs. selected
 ; GCN-LABEL: {{^}}fcmp_vgprX_k0_selectf64_k1_vgprZ_f32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dwordx2
+; SIVI-DAG: v_mov_b32_e32 [[K:v[0-9]+]], 0x3ff00000
+; GCN-DAG: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN-DAG: {{buffer|flat|global}}_load_dwordx2
 
-; GCN: v_mov_b32_e32 [[K:v[0-9]+]], 0x3ff00000
 ; GCN: v_cmp_le_f32_e32 vcc, 0, [[X]]
-; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, [[K]], v{{[0-9]+}}, vcc
+; SIVI-DAG:  v_cndmask_b32_e32 v{{[0-9]+}}, [[K]], v{{[0-9]+}}, vcc
+; GFX10-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 0x3ff00000, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 0, v{{[0-9]+}}, vcc
-define void @fcmp_vgprX_k0_selectf64_k1_vgprZ_f32(double addrspace(1)* %out, float addrspace(1)* %x.ptr, double addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @fcmp_vgprX_k0_selectf64_k1_vgprZ_f32(double addrspace(1)* %out, float addrspace(1)* %x.ptr, double addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -337,13 +354,13 @@ define void @fcmp_vgprX_k0_selectf64_k1_vgprZ_f32(double addrspace(1)* %out, flo
 
 ; Different types compared vs. selected
 ; GCN-LABEL: {{^}}fcmp_vgprX_k0_selecti64_k1_vgprZ_f32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dwordx2
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dwordx2
 
 ; GCN: v_cmp_nlg_f32_e32 vcc, 0, [[X]]
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 3, v{{[0-9]+}}, vcc
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 0, v{{[0-9]+}}, vcc
-define void @fcmp_vgprX_k0_selecti64_k1_vgprZ_f32(i64 addrspace(1)* %out, float addrspace(1)* %x.ptr, i64 addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @fcmp_vgprX_k0_selecti64_k1_vgprZ_f32(i64 addrspace(1)* %out, float addrspace(1)* %x.ptr, i64 addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -359,12 +376,12 @@ define void @fcmp_vgprX_k0_selecti64_k1_vgprZ_f32(i64 addrspace(1)* %out, float 
 
 ; Different types compared vs. selected
 ; GCN-LABEL: {{^}}icmp_vgprX_k0_selectf32_k1_vgprZ_i32:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
-; GCN: {{buffer|flat}}_load_dword [[Z:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dword [[Z:v[0-9]+]]
 
 ; GCN: v_cmp_gt_u32_e32 vcc, 2, [[X]]
 ; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, 4.0, [[Z]], vcc
-define void @icmp_vgprX_k0_selectf32_k1_vgprZ_i32(float addrspace(1)* %out, i32 addrspace(1)* %x.ptr, float addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @icmp_vgprX_k0_selectf32_k1_vgprZ_i32(float addrspace(1)* %out, i32 addrspace(1)* %x.ptr, float addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds i32, i32 addrspace(1)* %x.ptr, i64 %tid.ext
@@ -381,12 +398,12 @@ define void @icmp_vgprX_k0_selectf32_k1_vgprZ_i32(float addrspace(1)* %out, i32 
 ; FIXME: Should be able to handle multiple uses
 
 ; GCN-LABEL: {{^}}fcmp_k0_vgprX_select_k1_vgprZ_f32_cond_use_x2:
-; GCN: {{buffer|flat}}_load_dword [[X:v[0-9]+]]
+; GCN: {{buffer|flat|global}}_load_dword [[X:v[0-9]+]]
 
 ; GCN: v_cmp_nle_f32_e32 vcc, 4.0, [[X]]
 ; GCN-DAG: v_cndmask_b32_e64 v{{[0-9]+}}, v{{[0-9]+}}, -1.0, vcc
 ; GCN-DAG: v_cndmask_b32_e64 v{{[0-9]+}}, v{{[0-9]+}}, -2.0, vcc
-define void @fcmp_k0_vgprX_select_k1_vgprZ_f32_cond_use_x2(float addrspace(1)* %out, float addrspace(1)* %x.ptr, float addrspace(1)* %z.ptr) #0 {
+define amdgpu_kernel void @fcmp_k0_vgprX_select_k1_vgprZ_f32_cond_use_x2(float addrspace(1)* %out, float addrspace(1)* %x.ptr, float addrspace(1)* %z.ptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %tid.ext = sext i32 %tid to i64
   %x.gep = getelementptr inbounds float, float addrspace(1)* %x.ptr, i64 %tid.ext
@@ -399,6 +416,51 @@ define void @fcmp_k0_vgprX_select_k1_vgprZ_f32_cond_use_x2(float addrspace(1)* %
   %select1 = select i1 %setcc, float -2.0, float %z
   store volatile float %select0, float addrspace(1)* %out.gep
   store volatile float %select1, float addrspace(1)* %out.gep
+  ret void
+}
+
+; Source modifiers abs/neg only work for f32
+
+; GCN-LABEL: {{^}}v_cndmask_abs_neg_f16:
+; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}},
+define amdgpu_kernel void @v_cndmask_abs_neg_f16(half addrspace(1)* %out, i32 %c, half addrspace(1)* %fptr) #0 {
+  %idx = call i32 @llvm.amdgcn.workitem.id.x() #1
+  %f.gep = getelementptr half, half addrspace(1)* %fptr, i32 %idx
+  %f = load half, half addrspace(1)* %f.gep
+  %f.abs = call half @llvm.fabs.f16(half %f)
+  %f.neg = fneg half %f
+  %setcc = icmp ne i32 %c, 0
+  %select = select i1 %setcc, half %f.abs, half %f.neg
+  store half %select, half addrspace(1)* %out
+  ret void
+}
+
+; GCN-LABEL: {{^}}v_cndmask_abs_neg_f32:
+; GCN-DAG: v_cndmask_b32_e64 v{{[0-9]+}}, -v{{[0-9]+}}, |v{{[0-9]+}}|,
+define amdgpu_kernel void @v_cndmask_abs_neg_f32(float addrspace(1)* %out, i32 %c, float addrspace(1)* %fptr) #0 {
+  %idx = call i32 @llvm.amdgcn.workitem.id.x() #1
+  %f.gep = getelementptr float, float addrspace(1)* %fptr, i32 %idx
+  %f = load float, float addrspace(1)* %f.gep
+  %f.abs = call float @llvm.fabs.f32(float %f)
+  %f.neg = fneg float %f
+  %setcc = icmp ne i32 %c, 0
+  %select = select i1 %setcc, float %f.abs, float %f.neg
+  store float %select, float addrspace(1)* %out
+  ret void
+}
+
+; GCN-LABEL: {{^}}v_cndmask_abs_neg_f64:
+; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}},
+; GCN-DAG: v_cndmask_b32_e32 v{{[0-9]+}}, v{{[0-9]+}}, v{{[0-9]+}},
+define amdgpu_kernel void @v_cndmask_abs_neg_f64(double addrspace(1)* %out, i32 %c, double addrspace(1)* %fptr) #0 {
+  %idx = call i32 @llvm.amdgcn.workitem.id.x() #1
+  %f.gep = getelementptr double, double addrspace(1)* %fptr, i32 %idx
+  %f = load double, double addrspace(1)* %f.gep
+  %f.abs = call double @llvm.fabs.f64(double %f)
+  %f.neg = fneg double %f
+  %setcc = icmp ne i32 %c, 0
+  %select = select i1 %setcc, double %f.abs, double %f.neg
+  store double %select, double addrspace(1)* %out
   ret void
 }
 

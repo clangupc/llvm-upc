@@ -1,9 +1,8 @@
 //===- llvm/unittest/Support/AllocatorTest.cpp - BumpPtrAllocator tests ---===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,9 +16,9 @@ namespace {
 
 TEST(AllocatorTest, Basics) {
   BumpPtrAllocator Alloc;
-  int *a = (int*)Alloc.Allocate(sizeof(int), 1);
-  int *b = (int*)Alloc.Allocate(sizeof(int) * 10, 1);
-  int *c = (int*)Alloc.Allocate(sizeof(int), 1);
+  int *a = (int*)Alloc.Allocate(sizeof(int), alignof(int));
+  int *b = (int*)Alloc.Allocate(sizeof(int) * 10, alignof(int));
+  int *c = (int*)Alloc.Allocate(sizeof(int), alignof(int));
   *a = 1;
   b[0] = 2;
   b[9] = 2;
@@ -147,7 +146,7 @@ public:
     // Allocate space for the alignment, the slab, and a void* that goes right
     // before the slab.
     size_t Alignment = 4096;
-    void *MemBase = malloc(Size + Alignment - 1 + sizeof(void*));
+    void *MemBase = safe_malloc(Size + Alignment - 1 + sizeof(void*));
 
     // Find the slab start.
     void *Slab = (void *)alignAddr((char*)MemBase + sizeof(void *), Alignment);

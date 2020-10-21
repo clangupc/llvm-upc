@@ -1,14 +1,13 @@
 //===- unittests/IR/ModuleTest.cpp - Module unit tests --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/GlobalVariable.h"
 #include "llvm/Support/RandomNumberGenerator.h"
 #include "gtest/gtest.h"
 
@@ -63,7 +62,7 @@ TEST(ModuleTest, randomNumberGenerator) {
 
   std::array<int, NBCheck> RandomStreams[2];
   for (auto &RandomStream : RandomStreams) {
-    std::unique_ptr<RandomNumberGenerator> RNG{M.createRNG(&DP)};
+    std::unique_ptr<RandomNumberGenerator> RNG = M.createRNG(&DP);
     std::generate(RandomStream.begin(), RandomStream.end(),
                   [&]() { return dist(*RNG); });
   }

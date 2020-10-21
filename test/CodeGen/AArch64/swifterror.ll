@@ -1,5 +1,5 @@
-; RUN: llc -verify-machineinstrs -disable-fp-elim -enable-shrink-wrap=false < %s -mtriple=aarch64-apple-ios -disable-post-ra | FileCheck --check-prefix=CHECK-APPLE %s
-; RUN: llc -verify-machineinstrs -disable-fp-elim -O0 < %s -mtriple=aarch64-apple-ios -disable-post-ra | FileCheck --check-prefix=CHECK-O0 %s
+; RUN: llc -fast-isel-sink-local-values -verify-machineinstrs -frame-pointer=all -enable-shrink-wrap=false < %s -mtriple=aarch64-apple-ios -disable-post-ra | FileCheck -allow-deprecated-dag-overlap --check-prefix=CHECK-APPLE %s
+; RUN: llc -fast-isel-sink-local-values -verify-machineinstrs -frame-pointer=all -O0 -fast-isel < %s -mtriple=aarch64-apple-ios -disable-post-ra | FileCheck -allow-deprecated-dag-overlap --check-prefix=CHECK-O0 %s
 
 declare i8* @malloc(i64)
 declare void @free(i8*)
@@ -9,22 +9,30 @@ declare void @free(i8*)
 ; that takes a swifterror parameter and "caller" is the caller of "foo".
 define float @foo(%swift_error** swifterror %error_ptr_ref) {
 ; CHECK-APPLE-LABEL: foo:
-; CHECK-APPLE: orr w0, wzr, #0x10
+; CHECK-APPLE: mov w0, #16
 ; CHECK-APPLE: malloc
-; CHECK-APPLE: orr [[ID:w[0-9]+]], wzr, #0x1
+; CHECK-APPLE: mov [[ID:w[0-9]+]], #1
 ; CHECK-APPLE: strb [[ID]], [x0, #8]
 ; CHECK-APPLE: mov x21, x0
 ; CHECK-APPLE-NOT: x21
 
 ; CHECK-O0-LABEL: foo:
-; CHECK-O0: orr w{{.*}}, wzr, #0x10
+; CHECK-O0: mov w{{.*}}, #16
 ; CHECK-O0: malloc
+<<<<<<< HEAD
 ; CHECK-O0: mov x21, x0
 ; CHECK-O0-NOT: x21
 ; CHECK-O0: orr [[ID:w[0-9]+]], wzr, #0x1
 ; CHECK-O0-NOT: x21
 ; CHECK-O0: strb [[ID]], [x0, #8]
 ; CHECK-O0-NOT: x21
+=======
+; CHECK-O0: mov x1, x0
+; CHECK-O0-NOT: x1
+; CHECK-O0: mov [[ID:w[0-9]+]], #1
+; CHECK-O0: strb [[ID]], [x0, #8]
+; CHECK-O0: mov x21, x1
+>>>>>>> upstream/release_90
 entry:
   %call = call i8* @malloc(i64 16)
   %call.0 = bitcast i8* %call to %swift_error*
@@ -40,11 +48,19 @@ define float @caller(i8* %error_ref) {
 ; CHECK-APPLE: mov [[ID:x[0-9]+]], x0
 ; CHECK-APPLE: mov x21, xzr
 ; CHECK-APPLE: bl {{.*}}foo
+<<<<<<< HEAD
 ; CHECK-APPLE: cbnz x21
 ; Access part of the error object and save it to error_ref
 ; CHECK-APPLE: ldrb [[CODE:w[0-9]+]], [x21, #8]
 ; CHECK-APPLE: strb [[CODE]], [{{.*}}[[ID]]]
 ; CHECK-APPLE: mov x0, x21
+=======
+; CHECK-APPLE: mov x0, x21
+; CHECK-APPLE: cbnz x21
+; Access part of the error object and save it to error_ref
+; CHECK-APPLE: ldrb [[CODE:w[0-9]+]], [x0, #8]
+; CHECK-APPLE: strb [[CODE]], [{{.*}}[[ID]]]
+>>>>>>> upstream/release_90
 ; CHECK-APPLE: bl {{.*}}free
 
 ; CHECK-O0-LABEL: caller:
@@ -119,9 +135,9 @@ handler:
 define float @foo_if(%swift_error** swifterror %error_ptr_ref, i32 %cc) {
 ; CHECK-APPLE-LABEL: foo_if:
 ; CHECK-APPLE: cbz w0
-; CHECK-APPLE: orr w0, wzr, #0x10
+; CHECK-APPLE: mov w0, #16
 ; CHECK-APPLE: malloc
-; CHECK-APPLE: orr [[ID:w[0-9]+]], wzr, #0x1
+; CHECK-APPLE: mov [[ID:w[0-9]+]], #1
 ; CHECK-APPLE: strb [[ID]], [x0, #8]
 ; CHECK-APPLE: mov x21, x0
 ; CHECK-APPLE-NOT: x21
@@ -131,10 +147,10 @@ define float @foo_if(%swift_error** swifterror %error_ptr_ref, i32 %cc) {
 ; spill x21
 ; CHECK-O0: str x21, [sp, [[SLOT:#[0-9]+]]]
 ; CHECK-O0: cbz w0
-; CHECK-O0: orr w{{.*}}, wzr, #0x10
+; CHECK-O0: mov w{{.*}}, #16
 ; CHECK-O0: malloc
 ; CHECK-O0: mov [[ID:x[0-9]+]], x0
-; CHECK-O0: orr [[ID2:w[0-9]+]], wzr, #0x1
+; CHECK-O0: mov [[ID2:w[0-9]+]], #1
 ; CHECK-O0: strb [[ID2]], [x0, #8]
 ; CHECK-O0: mov x21, [[ID]]
 ; CHECK-O0: ret
@@ -164,7 +180,7 @@ define float @foo_loop(%swift_error** swifterror %error_ptr_ref, i32 %cc, float 
 ; CHECK-APPLE-LABEL: foo_loop:
 ; CHECK-APPLE: mov x0, x21
 ; CHECK-APPLE: cbz
-; CHECK-APPLE: orr w0, wzr, #0x10
+; CHECK-APPLE: mov w0, #16
 ; CHECK-APPLE: malloc
 ; CHECK-APPLE: strb w{{.*}}, [x0, #8]
 ; CHECK-APPLE: fcmp
@@ -180,7 +196,7 @@ define float @foo_loop(%swift_error** swifterror %error_ptr_ref, i32 %cc, float 
 ; CHECK-O0: ldr     x0, [sp, [[SLOT]]]
 ; CHECK-O0: str     x0, [sp, [[SLOT2:#[0-9]+]]]
 ; CHECK-O0: cbz {{.*}}, [[BB2:[A-Za-z0-9_]*]]
-; CHECK-O0: orr w{{.*}}, wzr, #0x10
+; CHECK-O0: mov w{{.*}}, #16
 ; CHECK-O0: malloc
 ; CHECK-O0: mov [[ID:x[0-9]+]], x0
 ; CHECK-O0: strb w{{.*}}, [{{.*}}[[ID]], #8]
@@ -224,22 +240,25 @@ bb_end:
 define void @foo_sret(%struct.S* sret %agg.result, i32 %val1, %swift_error** swifterror %error_ptr_ref) {
 ; CHECK-APPLE-LABEL: foo_sret:
 ; CHECK-APPLE: mov [[SRET:x[0-9]+]], x8
-; CHECK-APPLE: orr w0, wzr, #0x10
+; CHECK-APPLE: mov w0, #16
 ; CHECK-APPLE: malloc
-; CHECK-APPLE: orr [[ID:w[0-9]+]], wzr, #0x1
+; CHECK-APPLE: mov [[ID:w[0-9]+]], #1
 ; CHECK-APPLE: strb [[ID]], [x0, #8]
 ; CHECK-APPLE: str w{{.*}}, [{{.*}}[[SRET]], #4]
 ; CHECK-APPLE: mov x21, x0
 ; CHECK-APPLE-NOT: x21
 
 ; CHECK-O0-LABEL: foo_sret:
-; CHECK-O0: orr w{{.*}}, wzr, #0x10
+; CHECK-O0: mov w{{.*}}, #16
 ; spill x8
 ; CHECK-O0-DAG: str x8
+<<<<<<< HEAD
 ; spill x21
 ; CHECK-O0-DAG: str x21
+=======
+>>>>>>> upstream/release_90
 ; CHECK-O0: malloc
-; CHECK-O0: orr [[ID:w[0-9]+]], wzr, #0x1
+; CHECK-O0: mov [[ID:w[0-9]+]], #1
 ; CHECK-O0: strb [[ID]], [x0, #8]
 ; reload from stack
 ; CHECK-O0: ldr [[SRET:x[0-9]+]]
@@ -263,11 +282,19 @@ define float @caller3(i8* %error_ref) {
 ; CHECK-APPLE: mov [[ID:x[0-9]+]], x0
 ; CHECK-APPLE: mov x21, xzr
 ; CHECK-APPLE: bl {{.*}}foo_sret
+<<<<<<< HEAD
 ; CHECK-APPLE: cbnz x21
 ; Access part of the error object and save it to error_ref
 ; CHECK-APPLE: ldrb [[CODE:w[0-9]+]], [x21, #8]
 ; CHECK-APPLE: strb [[CODE]], [{{.*}}[[ID]]]
 ; CHECK-APPLE: mov x0, x21
+=======
+; CHECK-APPLE: mov x0, x21
+; CHECK-APPLE: cbnz x21
+; Access part of the error object and save it to error_ref
+; CHECK-APPLE: ldrb [[CODE:w[0-9]+]], [x0, #8]
+; CHECK-APPLE: strb [[CODE]], [{{.*}}[[ID]]]
+>>>>>>> upstream/release_90
 ; CHECK-APPLE: bl {{.*}}free
 
 ; CHECK-O0-LABEL: caller3:
@@ -307,21 +334,19 @@ handler:
 declare void @llvm.va_start(i8*) nounwind
 define float @foo_vararg(%swift_error** swifterror %error_ptr_ref, ...) {
 ; CHECK-APPLE-LABEL: foo_vararg:
-; CHECK-APPLE: orr w0, wzr, #0x10
+; CHECK-APPLE: mov w0, #16
 ; CHECK-APPLE: malloc
-; CHECK-APPLE: orr [[ID:w[0-9]+]], wzr, #0x1
-; CHECK-APPLE: add [[ARGS:x[0-9]+]], [[TMP:x[0-9]+]], #16
-; CHECK-APPLE: strb [[ID]], [x0, #8]
+; CHECK-APPLE-DAG: mov [[ID:w[0-9]+]], #1
+; CHECK-APPLE-DAG: add [[ARGS:x[0-9]+]], [[TMP:x[0-9]+]], #16
+; CHECK-APPLE-DAG: strb [[ID]], [x0, #8]
 
 ; First vararg
-; CHECK-APPLE-DAG: orr {{x[0-9]+}}, [[ARGS]], #0x8
 ; CHECK-APPLE-DAG: ldr {{w[0-9]+}}, [{{.*}}[[TMP]], #16]
-; CHECK-APPLE: add {{x[0-9]+}}, {{x[0-9]+}}, #8
 ; Second vararg
-; CHECK-APPLE: ldr {{w[0-9]+}}, [{{x[0-9]+}}]
-; CHECK-APPLE: add {{x[0-9]+}}, {{x[0-9]+}}, #8
+; CHECK-APPLE-DAG: ldr {{w[0-9]+}}, [{{.*}}[[TMP]], #24]
+; CHECK-APPLE-DAG: add {{x[0-9]+}}, {{x[0-9]+}}, #16
 ; Third vararg
-; CHECK-APPLE: ldr {{w[0-9]+}}, [{{x[0-9]+}}]
+; CHECK-APPLE-DAG: ldr {{w[0-9]+}}, [{{.*}}[[TMP]], #32]
 
 ; CHECK-APPLE: mov x21, x0
 ; CHECK-APPLE-NOT: x21
@@ -358,11 +383,19 @@ define float @caller4(i8* %error_ref) {
 
 ; CHECK-APPLE: mov x21, xzr
 ; CHECK-APPLE: bl {{.*}}foo_vararg
+<<<<<<< HEAD
 ; CHECK-APPLE: cbnz x21
 ; Access part of the error object and save it to error_ref
 ; CHECK-APPLE: ldrb [[CODE:w[0-9]+]], [x21, #8]
 ; CHECK-APPLE: strb [[CODE]], [{{.*}}[[ID]]]
 ; CHECK-APPLE: mov x0, x21
+=======
+; CHECK-APPLE: mov x0, x21
+; CHECK-APPLE: cbnz x21
+; Access part of the error object and save it to error_ref
+; CHECK-APPLE: ldrb [[CODE:w[0-9]+]], [x0, #8]
+; CHECK-APPLE: strb [[CODE]], [{{.*}}[[ID]]]
+>>>>>>> upstream/release_90
 ; CHECK-APPLE: bl {{.*}}free
 entry:
   %error_ptr_ref = alloca swifterror %swift_error*
@@ -442,14 +475,14 @@ define swiftcc void @swifterror_reg_clobber(%swift_error** nocapture %err) {
 ; CHECK-APPLE:  mov      x19, x1
 ; CHECK-APPLE:  mov      x22, x0
 ; Setup call.
-; CHECK-APPLE:  orr     w0, wzr, #0x1
-; CHECK-APPLE:  orr     w1, wzr, #0x2
-; CHECK-APPLE:  orr     w2, wzr, #0x3
-; CHECK-APPLE:  orr     w3, wzr, #0x4
+; CHECK-APPLE:  mov     w0, #1
+; CHECK-APPLE:  mov     w1, #2
+; CHECK-APPLE:  mov     w2, #3
+; CHECK-APPLE:  mov     w3, #4
 ; CHECK-APPLE:  mov     w4, #5
-; CHECK-APPLE:  orr     w5, wzr, #0x6
-; CHECK-APPLE:  orr     w6, wzr, #0x7
-; CHECK-APPLE:  orr     w7, wzr, #0x8
+; CHECK-APPLE:  mov     w5, #6
+; CHECK-APPLE:  mov     w6, #7
+; CHECK-APPLE:  mov     w7, #8
 ; CHECK-APPLE:  mov      x20, xzr
 ; CHECK-APPLE:  mov      x21, xzr
 ; CHECK-APPLE:  bl      _params_in_reg2
@@ -508,14 +541,14 @@ declare swiftcc void @params_in_reg2(i64, i64, i64, i64, i64, i64, i64, i64, i8*
 ; CHECK-APPLE:  mov      x19, x1
 ; CHECK-APPLE:  mov      x22, x0
 ; Setup call arguments.
-; CHECK-APPLE:  orr     w0, wzr, #0x1
-; CHECK-APPLE:  orr     w1, wzr, #0x2
-; CHECK-APPLE:  orr     w2, wzr, #0x3
-; CHECK-APPLE:  orr     w3, wzr, #0x4
+; CHECK-APPLE:  mov     w0, #1
+; CHECK-APPLE:  mov     w1, #2
+; CHECK-APPLE:  mov     w2, #3
+; CHECK-APPLE:  mov     w3, #4
 ; CHECK-APPLE:  mov     w4, #5
-; CHECK-APPLE:  orr     w5, wzr, #0x6
-; CHECK-APPLE:  orr     w6, wzr, #0x7
-; CHECK-APPLE:  orr     w7, wzr, #0x8
+; CHECK-APPLE:  mov     w5, #6
+; CHECK-APPLE:  mov     w6, #7
+; CHECK-APPLE:  mov     w7, #8
 ; CHECK-APPLE:  mov      x20, xzr
 ; CHECK-APPLE:  mov      x21, xzr
 ; CHECK-APPLE:  bl      _params_in_reg2
@@ -544,15 +577,15 @@ declare swiftcc void @params_in_reg2(i64, i64, i64, i64, i64, i64, i64, i64, i8*
 ; Save swifterror %err.
 ; CHECK-APPLE:  str     x21, [sp, #24]
 ; Setup call.
-; CHECK-APPLE:  orr     w0, wzr, #0x1
-; CHECK-APPLE:  orr     w1, wzr, #0x2
-; CHECK-APPLE:  orr     w2, wzr, #0x3
-; CHECK-APPLE:  orr     w3, wzr, #0x4
+; CHECK-APPLE:  mov     w0, #1
+; CHECK-APPLE:  mov     w1, #2
+; CHECK-APPLE:  mov     w2, #3
+; CHECK-APPLE:  mov     w3, #4
 ; CHECK-APPLE:  mov     w4, #5
-; CHECK-APPLE:  orr     w5, wzr, #0x6
-; CHECK-APPLE:  orr     w6, wzr, #0x7
-; CHECK-APPLE:  orr     w7, wzr, #0x8
-; CHECK-APPLE:  mov      x20, xzr
+; CHECK-APPLE:  mov     w5, #6
+; CHECK-APPLE:  mov     w6, #7
+; CHECK-APPLE:  mov     w7, #8
+; CHECK-APPLE:  mov     x20, xzr
 ; ... setup call with swiferror %error_ptr_ref.
 ; CHECK-APPLE:  ldr     x21, [sp, #8]
 ; CHECK-APPLE:  bl      _params_in_reg2
@@ -597,3 +630,33 @@ entry:
   tail call void @acallee(i8* null)
   ret void
 }
+<<<<<<< HEAD
+=======
+
+declare swiftcc void @foo2(%swift_error** swifterror)
+
+; Make sure we properly assign registers during fast-isel.
+; CHECK-O0-LABEL: testAssign
+; CHECK-O0: mov     [[TMP:x.*]], xzr
+; CHECK-O0: mov     x21, [[TMP]]
+; CHECK-O0: bl      _foo2
+; CHECK-O0: str     x21, [s[[STK:.*]]]
+; CHECK-O0: ldr     x0, [s[[STK]]]
+
+; CHECK-APPLE-LABEL: testAssign
+; CHECK-APPLE: mov      x21, xzr
+; CHECK-APPLE: bl      _foo2
+; CHECK-APPLE: mov      x0, x21
+
+define swiftcc %swift_error* @testAssign(i8* %error_ref) {
+entry:
+  %error_ptr = alloca swifterror %swift_error*
+  store %swift_error* null, %swift_error** %error_ptr
+  call swiftcc void @foo2(%swift_error** swifterror %error_ptr)
+  br label %a
+
+a:
+  %error = load %swift_error*, %swift_error** %error_ptr
+  ret %swift_error* %error
+}
+>>>>>>> upstream/release_90

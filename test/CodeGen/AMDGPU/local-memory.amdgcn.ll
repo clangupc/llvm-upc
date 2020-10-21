@@ -3,12 +3,6 @@
 
 @local_memory.local_mem = internal unnamed_addr addrspace(3) global [128 x i32] undef, align 4
 
-; Check that the LDS size emitted correctly
-; SI: .long 47180
-; SI-NEXT: .long 65668
-; CI: .long 47180
-; CI-NEXT: .long 32900
-
 ; GCN-LABEL: {{^}}local_memory:
 
 ; GCN-NOT: s_wqm_b64
@@ -17,7 +11,7 @@
 ; GCN: s_barrier
 
 ; GCN: ds_read_b32 {{v[0-9]+}},
-define void @local_memory(i32 addrspace(1)* %out) #0 {
+define amdgpu_kernel void @local_memory(i32 addrspace(1)* %out) #0 {
 entry:
   %y.i = call i32 @llvm.amdgcn.workitem.id.x() #1
   %arrayidx = getelementptr inbounds [128 x i32], [128 x i32] addrspace(3)* @local_memory.local_mem, i32 0, i32 %y.i
@@ -45,11 +39,7 @@ entry:
 ; GCN-LABEL: {{^}}local_memory_two_objects:
 ; GCN: v_lshlrev_b32_e32 [[ADDRW:v[0-9]+]], 2, v0
 ; CI-DAG: ds_write2_b32 [[ADDRW]], {{v[0-9]+}}, {{v[0-9]+}} offset1:4
-
-; SI: v_add_i32_e32 [[ADDRW_OFF:v[0-9]+]], vcc, 16, [[ADDRW]]
-
-; SI-DAG: ds_write_b32 [[ADDRW]],
-; SI-DAG: ds_write_b32 [[ADDRW_OFF]],
+; SI-DAG: ds_write2_b32 [[ADDRW]], {{v[0-9]+}}, {{v[0-9]+}} offset1:4
 
 ; GCN: s_barrier
 
@@ -61,7 +51,8 @@ entry:
 
 ; CI: v_sub_i32_e32 [[SUB:v[0-9]+]], vcc, 0, [[ADDRW]]
 ; CI: ds_read2_b32 {{v\[[0-9]+:[0-9]+\]}}, [[SUB]] offset0:3 offset1:7
-define void @local_memory_two_objects(i32 addrspace(1)* %out) #0 {
+
+define amdgpu_kernel void @local_memory_two_objects(i32 addrspace(1)* %out) #0 {
 entry:
   %x.i = call i32 @llvm.amdgcn.workitem.id.x()
   %arrayidx = getelementptr inbounds [4 x i32], [4 x i32] addrspace(3)* @local_memory_two_objects.local_mem0, i32 0, i32 %x.i

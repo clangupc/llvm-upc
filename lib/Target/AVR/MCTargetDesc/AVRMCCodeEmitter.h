@@ -1,9 +1,8 @@
 //===-- AVRMCCodeEmitter.h - Convert AVR Code to Machine Code -------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -63,13 +62,14 @@ private:
                        SmallVectorImpl<MCFixup> &Fixups,
                        const MCSubtargetInfo &STI) const;
 
-  /// Takes the compliment of a number (~0 - val).
+  /// Takes the complement of a number (~0 - val).
   unsigned encodeComplement(const MCInst &MI, unsigned OpNo,
                             SmallVectorImpl<MCFixup> &Fixups,
                             const MCSubtargetInfo &STI) const;
 
   /// Encodes an immediate value with a given fixup.
-  template <AVR::Fixups Fixup>
+  /// \tparam Offset The offset into the instruction for the fixup.
+  template <AVR::Fixups Fixup, unsigned Offset>
   unsigned encodeImm(const MCInst &MI, unsigned OpNo,
                      SmallVectorImpl<MCFixup> &Fixups,
                      const MCSubtargetInfo &STI) const;

@@ -6,7 +6,69 @@ _test:
 	xor	EAX, EAX
 	ret
 
-_main:
+.set  number, 8
+.global _foo
+
+.text
+  .global main
+main:
+
+// CHECK: leaq    _foo(%rbx,%rax,8), %rdx
+  lea RDX, [8 * RAX + RBX      + _foo]
+// CHECK: leaq _foo(%rbx,%rax,8), %rdx
+  lea RDX, [_foo + 8 * RAX + RBX]
+// CHECK: leaq 8(%rcx,%rax,8), %rdx
+  lea RDX, [8 + RAX * 8 + RCX]
+// CHECK: leaq 8(%rcx,%rax,8), %rdx
+  lea RDX, [number + 8 * RAX + RCX]
+// CHECK: leaq _foo(,%rax,8), %rdx
+  lea RDX, [_foo + RAX * 8]
+// CHECK:  leaq _foo(%rbx,%rax,8), %rdx
+  lea RDX, [_foo + RAX * 8 + RBX]
+// CHECK: leaq -8(%rax), %rdx
+  lea RDX, [RAX - number]
+// CHECK: leaq -8(%rax), %rdx
+  lea RDX, [RAX - 8]
+// CHECK: leaq    _foo(%rax), %rdx
+  lea RDX, [RAX + _foo]
+// CHECK: leaq    8(%rax), %rdx
+  lea RDX, [RAX + number]
+// CHECK: leaq    8(%rax), %rdx
+  lea RDX, [RAX + 8]
+// CHECK: leaq    _foo(%rbx,%rax,8), %rdx
+  lea RDX, [RAX * number + RBX + _foo]
+// CHECK: leaq    _foo(%rbx,%rax,8), %rdx
+  lea RDX, [_foo + RAX * number + RBX]
+// CHECK: leaq    8(%rcx,%rax,8), %rdx
+  lea RDX, [number + RAX * number + RCX]
+// CHECK: leaq    _foo(,%rax,8), %rdx
+  lea RDX, [_foo + RAX * number]
+// CHECK: leaq    _foo(%rbx,%rax,8), %rdx
+  lea RDX, [number * RAX + RBX + _foo]
+// CHECK: leaq    _foo(%rbx,%rax,8), %rdx
+  lea RDX, [_foo + number * RAX + RBX]
+// CHECK: leaq    8(%rcx,%rax,8), %rdx
+  lea RDX, [8 + number * RAX + RCX]
+// CHECK: leaq    _foo(%rax), %rdx
+  lea RDX, [_foo + RAX]
+// CHECK: leaq    8(%rax), %rdx
+  lea RDX, [number + RAX]
+// CHECK: leaq    8(%rax), %rdx
+  lea RDX, [8 + RAX]
+
+// CHECK: lcalll *(%rax)
+  call FWORD ptr [rax]
+// CHECK: lcalll *(%rax)
+  lcall [rax]
+// CHECK: ljmpl *(%rax)
+  jmp FWORD ptr [rax]
+// CHECK: ljmpq *(%rax)
+  ljmp [rax]
+// CHECK: jmp _foo
+  jmp short _foo
+// CHECK: jp _foo
+  jpe short _foo
+
 // CHECK:	movl	$257, -4(%rsp)
 	mov	DWORD PTR [RSP - 4], 257
 // CHECK:	movl	$258, 4(%rsp)
@@ -19,6 +81,8 @@ _main:
 	mov	EAX, DWORD PTR [RSP - 4]
 // CHECK:	movq    (%rsp), %rax
 	mov     RAX, QWORD PTR [RSP]
+// CHECK: movabsq $4294967289, %rax
+	mov     RAX, 4294967289
 // CHECK:	movl	$-4, -4(%rsp)
 	mov	DWORD PTR [RSP - 4], -4
 // CHECK:	movq	0, %rcx
@@ -472,14 +536,14 @@ xchg [ECX], EAX
 xchg AX, [ECX]
 xchg [ECX], AX
 
-// CHECK: testq (%ecx), %rax
-// CHECK: testq (%ecx), %rax
-// CHECK: testl (%ecx), %eax
-// CHECK: testl (%ecx), %eax
-// CHECK: testw (%ecx), %ax
-// CHECK: testw (%ecx), %ax
-// CHECK: testb (%ecx), %al
-// CHECK: testb (%ecx), %al
+// CHECK: testq %rax, (%ecx)
+// CHECK: testq %rax, (%ecx)
+// CHECK: testl %eax, (%ecx)
+// CHECK: testl %eax, (%ecx)
+// CHECK: testw %ax, (%ecx)
+// CHECK: testw %ax, (%ecx)
+// CHECK: testb %al, (%ecx)
+// CHECK: testb %al, (%ecx)
 test RAX, [ECX]
 test [ECX], RAX
 test EAX, [ECX]
@@ -491,21 +555,17 @@ test [ECX], AL
 
 // CHECK: fnstsw %ax
 // CHECK: fnstsw %ax
-// CHECK: fnstsw %ax
-// CHECK: fnstsw %ax
 // CHECK: fnstsw (%eax)
 fnstsw
 fnstsw AX
-fnstsw EAX
-fnstsw AL
 fnstsw WORD PTR [EAX]
 
-// CHECK: faddp %st(1)
-// CHECK: fmulp %st(1)
-// CHECK: fsubrp %st(1)
-// CHECK: fsubp %st(1)
-// CHECK: fdivrp %st(1)
-// CHECK: fdivp %st(1)
+// CHECK: faddp %st, %st(1)
+// CHECK: fmulp %st, %st(1)
+// CHECK: fsubrp %st, %st(1)
+// CHECK: fsubp %st, %st(1)
+// CHECK: fdivrp %st, %st(1)
+// CHECK: fdivp %st, %st(1)
 faddp ST(1), ST(0)
 fmulp ST(1), ST(0)
 fsubp ST(1), ST(0)
@@ -513,12 +573,12 @@ fsubrp ST(1), ST(0)
 fdivp ST(1), ST(0)
 fdivrp ST(1), ST(0)
 
-// CHECK: faddp %st(1)
-// CHECK: fmulp %st(1)
-// CHECK: fsubrp %st(1)
-// CHECK: fsubp %st(1)
-// CHECK: fdivrp %st(1)
-// CHECK: fdivp %st(1)
+// CHECK: faddp %st, %st(1)
+// CHECK: fmulp %st, %st(1)
+// CHECK: fsubrp %st, %st(1)
+// CHECK: fsubp %st, %st(1)
+// CHECK: fdivrp %st, %st(1)
+// CHECK: fdivp %st, %st(1)
 faddp ST(0), ST(1)
 fmulp ST(0), ST(1)
 fsubp ST(0), ST(1)
@@ -526,12 +586,12 @@ fsubrp ST(0), ST(1)
 fdivp ST(0), ST(1)
 fdivrp ST(0), ST(1)
 
-// CHECK: faddp %st(1)
-// CHECK: fmulp %st(1)
-// CHECK: fsubrp %st(1)
-// CHECK: fsubp %st(1)
-// CHECK: fdivrp %st(1)
-// CHECK: fdivp %st(1)
+// CHECK: faddp %st, %st(1)
+// CHECK: fmulp %st, %st(1)
+// CHECK: fsubrp %st, %st(1)
+// CHECK: fsubp %st, %st(1)
+// CHECK: fdivrp %st, %st(1)
+// CHECK: fdivp %st, %st(1)
 faddp ST(1)
 fmulp ST(1)
 fsubp ST(1)
@@ -540,12 +600,12 @@ fdivp ST(1)
 fdivrp ST(1)
 
 
-// CHECK: faddp %st(1)
-// CHECK: fmulp %st(1)
-// CHECK: fsubrp %st(1)
-// CHECK: fsubp %st(1)
-// CHECK: fdivrp %st(1)
-// CHECK: fdivp %st(1)
+// CHECK: faddp %st, %st(1)
+// CHECK: fmulp %st, %st(1)
+// CHECK: fsubrp %st, %st(1)
+// CHECK: fsubp %st, %st(1)
+// CHECK: fdivrp %st, %st(1)
+// CHECK: fdivp %st, %st(1)
 fadd 
 fmul
 fsub
@@ -553,12 +613,12 @@ fsubr
 fdiv
 fdivr
 
-// CHECK: faddp %st(1)
-// CHECK: fmulp %st(1)
-// CHECK: fsubrp %st(1)
-// CHECK: fsubp %st(1)
-// CHECK: fdivrp %st(1)
-// CHECK: fdivp %st(1)
+// CHECK: faddp %st, %st(1)
+// CHECK: fmulp %st, %st(1)
+// CHECK: fsubrp %st, %st(1)
+// CHECK: fsubp %st, %st(1)
+// CHECK: fdivrp %st, %st(1)
+// CHECK: fdivp %st, %st(1)
 faddp
 fmulp
 fsubp
@@ -566,12 +626,12 @@ fsubrp
 fdivp
 fdivrp
 
-// CHECK: fadd %st(1)
-// CHECK: fmul %st(1)
-// CHECK: fsub %st(1)
-// CHECK: fsubr %st(1)
-// CHECK: fdiv %st(1)
-// CHECK: fdivr %st(1)
+// CHECK: fadd %st(1), %st
+// CHECK: fmul %st(1), %st
+// CHECK: fsub %st(1), %st
+// CHECK: fsubr %st(1), %st
+// CHECK: fdiv %st(1), %st
+// CHECK: fdivr %st(1), %st
 fadd ST(0), ST(1)
 fmul ST(0), ST(1)
 fsub ST(0), ST(1)
@@ -579,12 +639,12 @@ fsubr ST(0), ST(1)
 fdiv ST(0), ST(1)
 fdivr ST(0), ST(1)
 
-// CHECK: fadd %st(0), %st(1)
-// CHECK: fmul %st(0), %st(1)
-// CHECK: fsubr %st(0), %st(1)
-// CHECK: fsub %st(0), %st(1)
-// CHECK: fdivr %st(0), %st(1)
-// CHECK: fdiv %st(0), %st(1)
+// CHECK: fadd %st, %st(1)
+// CHECK: fmul %st, %st(1)
+// CHECK: fsubr %st, %st(1)
+// CHECK: fsub %st, %st(1)
+// CHECK: fdivr %st, %st(1)
+// CHECK: fdiv %st, %st(1)
 fadd ST(1), ST(0)
 fmul ST(1), ST(0)
 fsub ST(1), ST(0)
@@ -592,12 +652,12 @@ fsubr ST(1), ST(0)
 fdiv ST(1), ST(0)
 fdivr ST(1), ST(0)
 
-// CHECK: fadd %st(1)
-// CHECK: fmul %st(1)
-// CHECK: fsub %st(1)
-// CHECK: fsubr %st(1)
-// CHECK: fdiv %st(1)
-// CHECK: fdivr %st(1)
+// CHECK: fadd %st(1), %st
+// CHECK: fmul %st(1), %st
+// CHECK: fsub %st(1), %st
+// CHECK: fsubr %st(1), %st
+// CHECK: fdiv %st(1), %st
+// CHECK: fdivr %st(1), %st
 fadd ST(1)
 fmul ST(1)
 fsub ST(1)
@@ -608,8 +668,8 @@ fdivr ST(1)
 
 // CHECK: fxsave64 (%rax)
 // CHECK: fxrstor64 (%rax)
-fxsave64 opaque ptr [rax]
-fxrstor64 opaque ptr [rax]
+fxsave64 [rax]
+fxrstor64 [rax]
 
 .bss
 .globl _g0
@@ -617,8 +677,12 @@ fxrstor64 opaque ptr [rax]
 
 // CHECK: movq _g0, %rbx
 // CHECK: movq _g0+8, %rcx
+// CHECK: movq _g0+18(%rbp), %rax
+// CHECK: movq _g0(,%rsi,4), %rax
 mov rbx, qword ptr [_g0]
 mov rcx, qword ptr [_g0 + 8]
+mov rax, QWORD PTR _g0[rbp + 1 + (2 * 5) - 3 + 1<<1]
+mov rax, QWORD PTR _g0[rsi*4]
 
 "?half@?0??bar@@YAXXZ@4NA":
 	.quad   4602678819172646912
@@ -629,10 +693,12 @@ fadd   dword ptr "?half@?0??bar@@YAXXZ@4NA"@IMGREL
 // CHECK: fadds   "?half@?0??bar@@YAXXZ@4NA"@IMGREL
 
 inc qword ptr [rax]
+inc long ptr [rax]
 inc dword ptr [rax]
 inc word ptr [rax]
 inc byte ptr [rax]
 // CHECK: incq (%rax)
+// CHECK: incl (%rax)
 // CHECK: incl (%rax)
 // CHECK: incw (%rax)
 // CHECK: incb (%rax)
@@ -743,6 +809,11 @@ fbstp tbyte ptr [eax]
 // CHECK: fbld (%eax)
 // CHECK: fbstp (%eax)
 
+fld float ptr [rax]
+fld double ptr [rax]
+// CHECK: flds (%rax)
+// CHECK: fldl (%rax)
+
 fcomip st, st(2)
 fucomip st, st(2)
 // CHECK: fcompi  %st(2)
@@ -796,3 +867,42 @@ movsd  qword ptr [rax], xmm0
 xlat byte ptr [eax]
 // CHECK: xlatb
 // CHECK-STDERR: memory operand is only for determining the size, (R|E)BX will be used for the location
+
+// CHECK:   punpcklbw
+punpcklbw mm0, dword ptr [rsp]
+// CHECK:   punpcklwd
+punpcklwd mm0, dword ptr [rsp]
+// CHECK:   punpckldq
+punpckldq mm0, dword ptr [rsp]
+
+// CHECK: lslq (%eax), %rbx
+lsl rbx, word ptr [eax]
+
+// CHECK: lsll (%eax), %ebx
+lsl ebx, word ptr [eax]
+
+// CHECK: lslw (%eax), %bx
+lsl bx, word ptr [eax]
+
+// CHECK: sysexitl
+sysexit
+// CHECK: sysexitq
+sysexitq
+// CHECK: sysretl
+sysret
+// CHECK: sysretq
+sysretq
+
+// CHECK: leaq (%rsp,%rax), %rax
+lea rax, [rax+rsp]
+// CHECK: leaq (%rsp,%rax), %rax
+lea rax, [rsp+rax]
+// CHECK: leal (%esp,%eax), %eax
+lea eax, [eax+esp]
+// CHECK: leal (%esp,%eax), %eax
+lea eax, [esp+eax]
+
+// CHECK: vpgatherdq      %ymm2, (%rdi,%xmm1), %ymm0
+vpgatherdq ymm0, [rdi+xmm1], ymm2
+// CHECK: vpgatherdq      %ymm2, (%rdi,%xmm1), %ymm0
+vpgatherdq ymm0, [xmm1+rdi], ymm2

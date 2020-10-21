@@ -1,9 +1,8 @@
 //===- unittest/Support/BranchProbabilityTest.cpp - BranchProbability tests -=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -113,6 +112,54 @@ TEST(BranchProbabilityTest, MoreOperators) {
   EXPECT_FALSE(BigZero > BigOne);
   EXPECT_TRUE(BigZero <= BigOne);
   EXPECT_FALSE(BigZero >= BigOne);
+}
+
+TEST(BranchProbabilityTest, ArithmeticOperators) {
+  BP Z(0, 1);
+  BP O(1, 1);
+  BP H(1, 2);
+  BP Q(1, 4);
+  BP Q3(3, 4);
+
+  EXPECT_EQ(Z + O, O);
+  EXPECT_EQ(H + Z, H);
+  EXPECT_EQ(H + H, O);
+  EXPECT_EQ(Q + H, Q3);
+  EXPECT_EQ(Q + Q3, O);
+  EXPECT_EQ(H + Q3, O);
+  EXPECT_EQ(Q3 + Q3, O);
+
+  EXPECT_EQ(Z - O, Z);
+  EXPECT_EQ(O - Z, O);
+  EXPECT_EQ(O - H, H);
+  EXPECT_EQ(O - Q, Q3);
+  EXPECT_EQ(Q3 - H, Q);
+  EXPECT_EQ(Q - H, Z);
+  EXPECT_EQ(Q - Q3, Z);
+
+  EXPECT_EQ(Z * O, Z);
+  EXPECT_EQ(H * H, Q);
+  EXPECT_EQ(Q * O, Q);
+  EXPECT_EQ(O * O, O);
+  EXPECT_EQ(Z * Z, Z);
+
+  EXPECT_EQ(Z * 3, Z);
+  EXPECT_EQ(Q * 3, Q3);
+  EXPECT_EQ(H * 3, O);
+  EXPECT_EQ(Q3 * 2, O);
+  EXPECT_EQ(O * UINT32_MAX, O);
+
+  EXPECT_EQ(Z / 4, Z);
+  EXPECT_EQ(O / 4, Q);
+  EXPECT_EQ(Q3 / 3, Q);
+  EXPECT_EQ(H / 2, Q);
+  EXPECT_EQ(O / 2, H);
+  EXPECT_EQ(H / UINT32_MAX, Z);
+
+  BP Min(1, 1u << 31);
+
+  EXPECT_EQ(O / UINT32_MAX, Z);
+  EXPECT_EQ(Min * UINT32_MAX, O);
 }
 
 TEST(BranchProbabilityTest, getCompl) {

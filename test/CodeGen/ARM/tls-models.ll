@@ -1,11 +1,11 @@
-; RUN: llc -march=arm -mtriple=arm-linux-gnueabi < %s \
+; RUN: llc -mtriple=arm-linux-gnueabi < %s \
 ; RUN:     | FileCheck -check-prefix=CHECK-NONPIC -check-prefix=COMMON %s
-; RUN: llc -march=arm -mtriple=arm-linux-gnueabi -relocation-model=pic < %s \
+; RUN: llc -mtriple=arm-linux-gnueabi -relocation-model=pic < %s \
 ; RUN:     | FileCheck -check-prefix=CHECK-PIC  -check-prefix=COMMON %s
-; RUN: llc -emulated-tls -march=arm -mtriple=arm-linux-gnueabi < %s \
-; RUN:     | FileCheck -check-prefix=EMUNONPIC -check-prefix=EMU -check-prefix=COMMON %s
-; RUN: llc -emulated-tls -march=arm -mtriple=arm-linux-gnueabi -relocation-model=pic < %s \
-; RUN:     | FileCheck -check-prefix=EMUPIC -check-prefix=EMU -check-prefix=COMMON %s
+; RUN: llc -emulated-tls -mtriple=arm-linux-gnueabi < %s \
+; RUN:     | FileCheck -check-prefix=EMU -check-prefix=COMMON %s
+; RUN: llc -emulated-tls -mtriple=arm-linux-gnueabi -relocation-model=pic < %s \
+; RUN:     | FileCheck -check-prefix=EMU -check-prefix=COMMON %s
 
 
 @external_gd = external thread_local global i32

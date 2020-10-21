@@ -1,6 +1,6 @@
 // RUN: llvm-mc -triple=aarch64-none-linux-gnu -show-encoding < %s | FileCheck %s
 // RUN: llvm-mc -triple=aarch64-none-linux-gnu -filetype=obj < %s -o - | \
-// RUN:   llvm-readobj -r -t | FileCheck --check-prefix=CHECK-ELF %s
+// RUN:   llvm-readobj -r --symbols | FileCheck --check-prefix=CHECK-ELF %s
 
         // TLS local-dynamic forms
         movz x1, #:dtprel_g2:var
@@ -392,8 +392,8 @@
 // CHECK: blr    x3                      // encoding: [0x60,0x00,0x3f,0xd6]
 
 // CHECK-ELF-NEXT:     0x104 R_AARCH64_TLSDESC_ADR_PAGE21 [[VARSYM]]
-// CHECK-ELF-NEXT:     0x108 R_AARCH64_TLSDESC_LD64_LO12_NC [[VARSYM]]
-// CHECK-ELF-NEXT:     0x10C R_AARCH64_TLSDESC_ADD_LO12_NC [[VARSYM]]
+// CHECK-ELF-NEXT:     0x108 R_AARCH64_TLSDESC_LD64_LO12 [[VARSYM]]
+// CHECK-ELF-NEXT:     0x10C R_AARCH64_TLSDESC_ADD_LO12 [[VARSYM]]
 // CHECK-ELF-NEXT:     0x110 R_AARCH64_TLSDESC_CALL [[VARSYM]]
 
 

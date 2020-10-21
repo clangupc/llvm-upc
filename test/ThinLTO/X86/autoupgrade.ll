@@ -9,10 +9,15 @@
 ; RUN:            -import=globalfunc1:%p/Inputs/autoupgrade.bc %t.bc \
 ; RUN:     | llvm-bcanalyzer -dump | FileCheck %s
 
+; CHECK: <STRTAB_BLOCK
+; CHECK-NEXT: blob data = 'mainglobalfunc1llvm.invariant.start.p0i8{{.*}}'
 
-; CHECK-NOT: 'llvm.invariant.start'
-; CHECK: record string = 'llvm.invariant.start.p0i8'
-; CHECK-NOT: 'llvm.invariant.start'
+; Check that the summary is able to print the names despite the lack of
+; string table in the legacy bitcode.
+; RUN: llvm-dis %p/Inputs/autoupgrade.bc -o - \
+; RUN:	   | FileCheck %s --check-prefix=SUMMARYNAMES
+; SUMMARYNAMES: ^2 = gv: (name: "globalfunc2",
+; SUMMARYNAMES: ^3 = gv: (name: "globalfunc1"
 
 target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-apple-macosx10.11.0"

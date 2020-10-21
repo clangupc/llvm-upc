@@ -1,21 +1,21 @@
 //===-- WebAssemblyMCTargetDesc.cpp - WebAssembly Target Descriptions -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// \brief This file provides WebAssembly-specific target descriptions.
+/// This file provides WebAssembly-specific target descriptions.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "WebAssemblyMCTargetDesc.h"
-#include "InstPrinter/WebAssemblyInstPrinter.h"
-#include "WebAssemblyMCAsmInfo.h"
-#include "WebAssemblyTargetStreamer.h"
+#include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "MCTargetDesc/WebAssemblyInstPrinter.h"
+#include "MCTargetDesc/WebAssemblyMCAsmInfo.h"
+#include "MCTargetDesc/WebAssemblyTargetStreamer.h"
+#include "TargetInfo/WebAssemblyTargetInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -39,23 +39,14 @@ static MCAsmInfo *createMCAsmInfo(const MCRegisterInfo & /*MRI*/,
   return new WebAssemblyMCAsmInfo(TT);
 }
 
-static void adjustCodeGenOpts(const Triple & /*TT*/, Reloc::Model /*RM*/,
-                              CodeModel::Model &CM) {
-  CodeModel::Model M = (CM == CodeModel::Default || CM == CodeModel::JITDefault)
-                           ? CodeModel::Large
-                           : CM;
-  if (M != CodeModel::Large)
-    report_fatal_error("Non-large code models are not supported yet");
-}
-
 static MCInstrInfo *createMCInstrInfo() {
-  MCInstrInfo *X = new MCInstrInfo();
+  auto *X = new MCInstrInfo();
   InitWebAssemblyMCInstrInfo(X);
   return X;
 }
 
 static MCRegisterInfo *createMCRegisterInfo(const Triple & /*T*/) {
-  MCRegisterInfo *X = new MCRegisterInfo();
+  auto *X = new MCRegisterInfo();
   InitWebAssemblyMCRegisterInfo(X, 0);
   return X;
 }
@@ -71,15 +62,15 @@ static MCInstPrinter *createMCInstPrinter(const Triple & /*T*/,
 
 static MCCodeEmitter *createCodeEmitter(const MCInstrInfo &MCII,
                                         const MCRegisterInfo & /*MRI*/,
-                                        MCContext & /*Ctx*/) {
+                                        MCContext &Ctx) {
   return createWebAssemblyMCCodeEmitter(MCII);
 }
 
 static MCAsmBackend *createAsmBackend(const Target & /*T*/,
+                                      const MCSubtargetInfo &STI,
                                       const MCRegisterInfo & /*MRI*/,
-                                      const Triple &TT, StringRef /*CPU*/,
                                       const MCTargetOptions & /*Options*/) {
-  return createWebAssemblyAsmBackend(TT);
+  return createWebAssemblyAsmBackend(STI.getTargetTriple());
 }
 
 static MCSubtargetInfo *createMCSubtargetInfo(const Triple &TT, StringRef CPU,
@@ -88,8 +79,8 @@ static MCSubtargetInfo *createMCSubtargetInfo(const Triple &TT, StringRef CPU,
 }
 
 static MCTargetStreamer *
-createObjectTargetStreamer(MCStreamer &S, const MCSubtargetInfo & /*STI*/) {
-  return new WebAssemblyTargetELFStreamer(S);
+createObjectTargetStreamer(MCStreamer &S, const MCSubtargetInfo &STI) {
+  return new WebAssemblyTargetWasmStreamer(S);
 }
 
 static MCTargetStreamer *createAsmTargetStreamer(MCStreamer &S,
@@ -97,6 +88,10 @@ static MCTargetStreamer *createAsmTargetStreamer(MCStreamer &S,
                                                  MCInstPrinter * /*InstPrint*/,
                                                  bool /*isVerboseAsm*/) {
   return new WebAssemblyTargetAsmStreamer(S, OS);
+}
+
+static MCTargetStreamer *createNullTargetStreamer(MCStreamer &S) {
+  return new WebAssemblyTargetNullStreamer(S);
 }
 
 // Force static initialization.
@@ -108,9 +103,6 @@ extern "C" void LLVMInitializeWebAssemblyTargetMC() {
 
     // Register the MC instruction info.
     TargetRegistry::RegisterMCInstrInfo(*T, createMCInstrInfo);
-
-    // Register the MC codegen info.
-    TargetRegistry::registerMCAdjustCodeGenOpts(*T, adjustCodeGenOpts);
 
     // Register the MC register info.
     TargetRegistry::RegisterMCRegInfo(*T, createMCRegisterInfo);
@@ -132,15 +124,31 @@ extern "C" void LLVMInitializeWebAssemblyTargetMC() {
                                                  createObjectTargetStreamer);
     // Register the asm target streamer.
     TargetRegistry::RegisterAsmTargetStreamer(*T, createAsmTargetStreamer);
+    // Register the null target streamer.
+    TargetRegistry::RegisterNullTargetStreamer(*T, createNullTargetStreamer);
   }
 }
 
-WebAssembly::ValType WebAssembly::toValType(const MVT &Ty) {
+wasm::ValType WebAssembly::toValType(const MVT &Ty) {
   switch (Ty.SimpleTy) {
-  case MVT::i32: return WebAssembly::ValType::I32;
-  case MVT::i64: return WebAssembly::ValType::I64;
-  case MVT::f32: return WebAssembly::ValType::F32;
-  case MVT::f64: return WebAssembly::ValType::F64;
-  default: llvm_unreachable("unexpected type");
+  case MVT::i32:
+    return wasm::ValType::I32;
+  case MVT::i64:
+    return wasm::ValType::I64;
+  case MVT::f32:
+    return wasm::ValType::F32;
+  case MVT::f64:
+    return wasm::ValType::F64;
+  case MVT::v16i8:
+  case MVT::v8i16:
+  case MVT::v4i32:
+  case MVT::v2i64:
+  case MVT::v4f32:
+  case MVT::v2f64:
+    return wasm::ValType::V128;
+  case MVT::exnref:
+    return wasm::ValType::EXNREF;
+  default:
+    llvm_unreachable("unexpected type");
   }
 }

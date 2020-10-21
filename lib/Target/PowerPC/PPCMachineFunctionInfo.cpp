@@ -1,21 +1,19 @@
 //===-- PPCMachineFunctionInfo.cpp - Private data used for PowerPC --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "PPCMachineFunctionInfo.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/MC/MCContext.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
-void PPCFunctionInfo::anchor() { }
+void PPCFunctionInfo::anchor() {}
 
 MCSymbol *PPCFunctionInfo::getPICOffsetSymbol() const {
   const DataLayout &DL = MF.getDataLayout();
@@ -43,4 +41,18 @@ MCSymbol *PPCFunctionInfo::getTOCOffsetSymbol() const {
   return MF.getContext().getOrCreateSymbol(Twine(DL.getPrivateGlobalPrefix()) +
                                            "func_toc" +
                                            Twine(MF.getFunctionNumber()));
+}
+
+bool PPCFunctionInfo::isLiveInSExt(unsigned VReg) const {
+  for (const std::pair<unsigned, ISD::ArgFlagsTy> &LiveIn : LiveInAttrs)
+    if (LiveIn.first == VReg)
+      return LiveIn.second.isSExt();
+  return false;
+}
+
+bool PPCFunctionInfo::isLiveInZExt(unsigned VReg) const {
+  for (const std::pair<unsigned, ISD::ArgFlagsTy> &LiveIn : LiveInAttrs)
+    if (LiveIn.first == VReg)
+      return LiveIn.second.isZExt();
+  return false;
 }

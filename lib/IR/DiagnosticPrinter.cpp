@@ -1,9 +1,8 @@
 //===- llvm/Support/DiagnosticInfo.cpp - Diagnostic Definitions -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,12 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/Twine.h"
 #include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 

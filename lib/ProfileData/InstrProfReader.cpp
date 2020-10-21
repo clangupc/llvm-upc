@@ -1,9 +1,8 @@
-//=-- InstrProfReader.cpp - Instrumented profiling reader -------------------=//
+//===- InstrProfReader.cpp - Instrumented profiling reader ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,8 +12,28 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ProfileData/InstrProfReader.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
-#include <cassert>
+#include "llvm/ADT/StringRef.h"
+#include "llvm/IR/ProfileSummary.h"
+#include "llvm/ProfileData/InstrProf.h"
+#include "llvm/ProfileData/ProfileCommon.h"
+#include "llvm/Support/Endian.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/SymbolRemappingReader.h"
+#include "llvm/Support/SwapByteOrder.h"
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <memory>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 using namespace llvm;
 
@@ -43,7 +62,7 @@ InstrProfReader::create(const Twine &Path) {
 Expected<std::unique_ptr<InstrProfReader>>
 InstrProfReader::create(std::unique_ptr<MemoryBuffer> Buffer) {
   // Sanity check the buffer.
-  if (Buffer->getBufferSize() > std::numeric_limits<unsigned>::max())
+  if (uint64_t(Buffer->getBufferSize()) > std::numeric_limits<uint64_t>::max())
     return make_error<InstrProfError>(instrprof_error::too_large);
 
   if (Buffer->getBufferSize() == 0)
@@ -70,25 +89,38 @@ InstrProfReader::create(std::unique_ptr<MemoryBuffer> Buffer) {
 }
 
 Expected<std::unique_ptr<IndexedInstrProfReader>>
-IndexedInstrProfReader::create(const Twine &Path) {
+IndexedInstrProfReader::create(const Twine &Path, const Twine &RemappingPath) {
   // Set up the buffer to read.
   auto BufferOrError = setupMemoryBuffer(Path);
   if (Error E = BufferOrError.takeError())
     return std::move(E);
-  return IndexedInstrProfReader::create(std::move(BufferOrError.get()));
+
+  // Set up the remapping buffer if requested.
+  std::unique_ptr<MemoryBuffer> RemappingBuffer;
+  std::string RemappingPathStr = RemappingPath.str();
+  if (!RemappingPathStr.empty()) {
+    auto RemappingBufferOrError = setupMemoryBuffer(RemappingPathStr);
+    if (Error E = RemappingBufferOrError.takeError())
+      return std::move(E);
+    RemappingBuffer = std::move(RemappingBufferOrError.get());
+  }
+
+  return IndexedInstrProfReader::create(std::move(BufferOrError.get()),
+                                        std::move(RemappingBuffer));
 }
 
-
 Expected<std::unique_ptr<IndexedInstrProfReader>>
-IndexedInstrProfReader::create(std::unique_ptr<MemoryBuffer> Buffer) {
+IndexedInstrProfReader::create(std::unique_ptr<MemoryBuffer> Buffer,
+                               std::unique_ptr<MemoryBuffer> RemappingBuffer) {
   // Sanity check the buffer.
-  if (Buffer->getBufferSize() > std::numeric_limits<unsigned>::max())
+  if (uint64_t(Buffer->getBufferSize()) > std::numeric_limits<uint64_t>::max())
     return make_error<InstrProfError>(instrprof_error::too_large);
 
   // Create the reader.
   if (!IndexedInstrProfReader::hasFormat(*Buffer))
     return make_error<InstrProfError>(instrprof_error::bad_magic);
-  auto Result = llvm::make_unique<IndexedInstrProfReader>(std::move(Buffer));
+  auto Result = llvm::make_unique<IndexedInstrProfReader>(
+      std::move(Buffer), std::move(RemappingBuffer));
 
   // Initialize the reader and return the result.
   if (Error E = initializeReader(*Result))
@@ -112,7 +144,7 @@ bool TextInstrProfReader::hasFormat(const MemoryBuffer &Buffer) {
   StringRef buffer = Buffer.getBufferStart();
   return count == 0 ||
          std::all_of(buffer.begin(), buffer.begin() + count,
-                     [](char c) { return ::isprint(c) || ::isspace(c); });
+                     [](char c) { return isPrint(c) || ::isspace(c); });
 }
 
 // Read the profile variant flag from the header: ":FE" means this is a FE
@@ -130,7 +162,10 @@ Error TextInstrProfReader::readHeader() {
     IsIRInstr = true;
   else if (Str.equals_lower("fe"))
     IsIRInstr = false;
-  else
+  else if (Str.equals_lower("csir")) {
+    IsIRInstr = true;
+    HasCSIRLevelProfile = true;
+  } else
     return error(instrprof_error::bad_header);
 
   ++Line;
@@ -182,9 +217,14 @@ TextInstrProfReader::readValueProfileData(InstrProfRecord &Record) {
         CHECK_LINE_END(Line);
         std::pair<StringRef, StringRef> VD = Line->rsplit(':');
         uint64_t TakenCount, Value;
-        if (VK == IPVK_IndirectCallTarget) {
-          Symtab->addFuncName(VD.first);
-          Value = IndexedInstrProf::ComputeHash(VD.first);
+        if (ValueKind == IPVK_IndirectCallTarget) {
+          if (InstrProfSymtab::isExternalSymbol(VD.first)) {
+            Value = 0;
+          } else {
+            if (Error E = Symtab->addFuncName(VD.first))
+              return E;
+            Value = IndexedInstrProf::ComputeHash(VD.first);
+          }
         } else {
           READ_NUM(VD.first, Value);
         }
@@ -192,7 +232,8 @@ TextInstrProfReader::readValueProfileData(InstrProfRecord &Record) {
         CurrentValues.push_back({Value, TakenCount});
         Line++;
       }
-      Record.addValueData(VK, S, CurrentValues.data(), NumValueData, nullptr);
+      Record.addValueData(ValueKind, S, CurrentValues.data(), NumValueData,
+                          nullptr);
     }
   }
   return success();
@@ -202,19 +243,19 @@ TextInstrProfReader::readValueProfileData(InstrProfRecord &Record) {
 #undef VP_READ_ADVANCE
 }
 
-Error TextInstrProfReader::readNextRecord(InstrProfRecord &Record) {
+Error TextInstrProfReader::readNextRecord(NamedInstrProfRecord &Record) {
   // Skip empty lines and comments.
   while (!Line.is_at_end() && (Line->empty() || Line->startswith("#")))
     ++Line;
   // If we hit EOF while looking for a name, we're done.
   if (Line.is_at_end()) {
-    Symtab->finalizeSymtab();
     return error(instrprof_error::eof);
   }
 
   // Read the function name.
   Record.Name = *Line++;
-  Symtab->addFuncName(Record.Name);
+  if (Error E = Symtab->addFuncName(Record.Name))
+    return error(std::move(E));
 
   // Read the function hash.
   if (Line.is_at_end())
@@ -232,7 +273,7 @@ Error TextInstrProfReader::readNextRecord(InstrProfRecord &Record) {
     return error(instrprof_error::malformed);
 
   // Read each counter and fill our internal storage with the values.
-  Record.Counts.clear();
+  Record.Clear();
   Record.Counts.reserve(NumCounters);
   for (uint64_t I = 0; I < NumCounters; ++I) {
     if (Line.is_at_end())
@@ -245,11 +286,8 @@ Error TextInstrProfReader::readNextRecord(InstrProfRecord &Record) {
 
   // Check if value profile data exists and read it if so.
   if (Error E = readValueProfileData(Record))
-    return E;
+    return error(std::move(E));
 
-  // This is needed to avoid two pass parsing because llvm-profdata
-  // does dumping while reading.
-  Symtab->finalizeSymtab();
   return success();
 }
 
@@ -311,7 +349,6 @@ Error RawInstrProfReader<IntPtrT>::createSymtab(InstrProfSymtab &Symtab) {
       continue;
     Symtab.mapAddress(FPtr, I->NameRef);
   }
-  Symtab.finalizeSymtab();
   return success();
 }
 
@@ -357,13 +394,13 @@ Error RawInstrProfReader<IntPtrT>::readHeader(
 }
 
 template <class IntPtrT>
-Error RawInstrProfReader<IntPtrT>::readName(InstrProfRecord &Record) {
+Error RawInstrProfReader<IntPtrT>::readName(NamedInstrProfRecord &Record) {
   Record.Name = getName(Data->NameRef);
   return success();
 }
 
 template <class IntPtrT>
-Error RawInstrProfReader<IntPtrT>::readFuncHash(InstrProfRecord &Record) {
+Error RawInstrProfReader<IntPtrT>::readFuncHash(NamedInstrProfRecord &Record) {
   Record.Hash = swap(Data->FuncHash);
   return success();
 }
@@ -398,7 +435,6 @@ Error RawInstrProfReader<IntPtrT>::readRawCounts(
 template <class IntPtrT>
 Error RawInstrProfReader<IntPtrT>::readValueProfilingData(
     InstrProfRecord &Record) {
-
   Record.clearValueData();
   CurValueDataSize = 0;
   // Need to match the logic in value profile dumper code in compiler-rt:
@@ -420,33 +456,33 @@ Error RawInstrProfReader<IntPtrT>::readValueProfilingData(
   // Note that besides deserialization, this also performs the conversion for
   // indirect call targets.  The function pointers from the raw profile are
   // remapped into function name hashes.
-  VDataPtrOrErr.get()->deserializeTo(Record, &Symtab->getAddrHashMap());
+  VDataPtrOrErr.get()->deserializeTo(Record, Symtab.get());
   CurValueDataSize = VDataPtrOrErr.get()->getSize();
   return success();
 }
 
 template <class IntPtrT>
-Error RawInstrProfReader<IntPtrT>::readNextRecord(InstrProfRecord &Record) {
+Error RawInstrProfReader<IntPtrT>::readNextRecord(NamedInstrProfRecord &Record) {
   if (atEnd())
     // At this point, ValueDataStart field points to the next header.
     if (Error E = readNextHeader(getNextHeaderPos()))
-      return E;
+      return error(std::move(E));
 
   // Read name ad set it in Record.
   if (Error E = readName(Record))
-    return E;
+    return error(std::move(E));
 
   // Read FuncHash and set it in Record.
   if (Error E = readFuncHash(Record))
-    return E;
+    return error(std::move(E));
 
   // Read raw counts and set Record.
   if (Error E = readRawCounts(Record))
-    return E;
+    return error(std::move(E));
 
   // Read value data and set Record.
   if (Error E = readValueProfilingData(Record))
-    return E;
+    return error(std::move(E));
 
   // Iterate.
   advanceData();
@@ -454,17 +490,19 @@ Error RawInstrProfReader<IntPtrT>::readNextRecord(InstrProfRecord &Record) {
 }
 
 namespace llvm {
+
 template class RawInstrProfReader<uint32_t>;
 template class RawInstrProfReader<uint64_t>;
-}
+
+} // end namespace llvm
 
 InstrProfLookupTrait::hash_value_type
 InstrProfLookupTrait::ComputeHash(StringRef K) {
   return IndexedInstrProf::ComputeHash(HashType, K);
 }
 
-typedef InstrProfLookupTrait::data_type data_type;
-typedef InstrProfLookupTrait::offset_type offset_type;
+using data_type = InstrProfLookupTrait::data_type;
+using offset_type = InstrProfLookupTrait::offset_type;
 
 bool InstrProfLookupTrait::readValueProfilingData(
     const unsigned char *&D, const unsigned char *const End) {
@@ -482,6 +520,8 @@ bool InstrProfLookupTrait::readValueProfilingData(
 
 data_type InstrProfLookupTrait::ReadData(StringRef K, const unsigned char *D,
                                          offset_type N) {
+  using namespace support;
+
   // Check if the data is corrupt. If so, don't try to read it.
   if (N % sizeof(uint64_t))
     return data_type();
@@ -489,7 +529,6 @@ data_type InstrProfLookupTrait::ReadData(StringRef K, const unsigned char *D,
   DataBuffer.clear();
   std::vector<uint64_t> CounterBuffer;
 
-  using namespace support;
   const unsigned char *End = D + N;
   while (D < End) {
     // Read hash.
@@ -528,7 +567,7 @@ data_type InstrProfLookupTrait::ReadData(StringRef K, const unsigned char *D,
 
 template <typename HashTableImpl>
 Error InstrProfReaderIndex<HashTableImpl>::getRecords(
-    StringRef FuncName, ArrayRef<InstrProfRecord> &Data) {
+    StringRef FuncName, ArrayRef<NamedInstrProfRecord> &Data) {
   auto Iter = HashTable->find(FuncName);
   if (Iter == HashTable->end())
     return make_error<InstrProfError>(instrprof_error::unknown_function);
@@ -542,7 +581,7 @@ Error InstrProfReaderIndex<HashTableImpl>::getRecords(
 
 template <typename HashTableImpl>
 Error InstrProfReaderIndex<HashTableImpl>::getRecords(
-    ArrayRef<InstrProfRecord> &Data) {
+    ArrayRef<NamedInstrProfRecord> &Data) {
   if (atEnd())
     return make_error<InstrProfError>(instrprof_error::eof);
 
@@ -566,10 +605,129 @@ InstrProfReaderIndex<HashTableImpl>::InstrProfReaderIndex(
   RecordIterator = HashTable->data_begin();
 }
 
+namespace {
+/// A remapper that does not apply any remappings.
+class InstrProfReaderNullRemapper : public InstrProfReaderRemapper {
+  InstrProfReaderIndexBase &Underlying;
+
+public:
+  InstrProfReaderNullRemapper(InstrProfReaderIndexBase &Underlying)
+      : Underlying(Underlying) {}
+
+  Error getRecords(StringRef FuncName,
+                   ArrayRef<NamedInstrProfRecord> &Data) override {
+    return Underlying.getRecords(FuncName, Data);
+  }
+};
+}
+
+/// A remapper that applies remappings based on a symbol remapping file.
+template <typename HashTableImpl>
+class llvm::InstrProfReaderItaniumRemapper
+    : public InstrProfReaderRemapper {
+public:
+  InstrProfReaderItaniumRemapper(
+      std::unique_ptr<MemoryBuffer> RemapBuffer,
+      InstrProfReaderIndex<HashTableImpl> &Underlying)
+      : RemapBuffer(std::move(RemapBuffer)), Underlying(Underlying) {
+  }
+
+  /// Extract the original function name from a PGO function name.
+  static StringRef extractName(StringRef Name) {
+    // We can have multiple :-separated pieces; there can be pieces both
+    // before and after the mangled name. Find the first part that starts
+    // with '_Z'; we'll assume that's the mangled name we want.
+    std::pair<StringRef, StringRef> Parts = {StringRef(), Name};
+    while (true) {
+      Parts = Parts.second.split(':');
+      if (Parts.first.startswith("_Z"))
+        return Parts.first;
+      if (Parts.second.empty())
+        return Name;
+    }
+  }
+
+  /// Given a mangled name extracted from a PGO function name, and a new
+  /// form for that mangled name, reconstitute the name.
+  static void reconstituteName(StringRef OrigName, StringRef ExtractedName,
+                               StringRef Replacement,
+                               SmallVectorImpl<char> &Out) {
+    Out.reserve(OrigName.size() + Replacement.size() - ExtractedName.size());
+    Out.insert(Out.end(), OrigName.begin(), ExtractedName.begin());
+    Out.insert(Out.end(), Replacement.begin(), Replacement.end());
+    Out.insert(Out.end(), ExtractedName.end(), OrigName.end());
+  }
+
+  Error populateRemappings() override {
+    if (Error E = Remappings.read(*RemapBuffer))
+      return E;
+    for (StringRef Name : Underlying.HashTable->keys()) {
+      StringRef RealName = extractName(Name);
+      if (auto Key = Remappings.insert(RealName)) {
+        // FIXME: We could theoretically map the same equivalence class to
+        // multiple names in the profile data. If that happens, we should
+        // return NamedInstrProfRecords from all of them.
+        MappedNames.insert({Key, RealName});
+      }
+    }
+    return Error::success();
+  }
+
+  Error getRecords(StringRef FuncName,
+                   ArrayRef<NamedInstrProfRecord> &Data) override {
+    StringRef RealName = extractName(FuncName);
+    if (auto Key = Remappings.lookup(RealName)) {
+      StringRef Remapped = MappedNames.lookup(Key);
+      if (!Remapped.empty()) {
+        if (RealName.begin() == FuncName.begin() &&
+            RealName.end() == FuncName.end())
+          FuncName = Remapped;
+        else {
+          // Try rebuilding the name from the given remapping.
+          SmallString<256> Reconstituted;
+          reconstituteName(FuncName, RealName, Remapped, Reconstituted);
+          Error E = Underlying.getRecords(Reconstituted, Data);
+          if (!E)
+            return E;
+
+          // If we failed because the name doesn't exist, fall back to asking
+          // about the original name.
+          if (Error Unhandled = handleErrors(
+                  std::move(E), [](std::unique_ptr<InstrProfError> Err) {
+                    return Err->get() == instrprof_error::unknown_function
+                               ? Error::success()
+                               : Error(std::move(Err));
+                  }))
+            return Unhandled;
+        }
+      }
+    }
+    return Underlying.getRecords(FuncName, Data);
+  }
+
+private:
+  /// The memory buffer containing the remapping configuration. Remappings
+  /// holds pointers into this buffer.
+  std::unique_ptr<MemoryBuffer> RemapBuffer;
+
+  /// The mangling remapper.
+  SymbolRemappingReader Remappings;
+
+  /// Mapping from mangled name keys to the name used for the key in the
+  /// profile data.
+  /// FIXME: Can we store a location within the on-disk hash table instead of
+  /// redoing lookup?
+  DenseMap<SymbolRemappingReader::Key, StringRef> MappedNames;
+
+  /// The real profile data reader.
+  InstrProfReaderIndex<HashTableImpl> &Underlying;
+};
+
 bool IndexedInstrProfReader::hasFormat(const MemoryBuffer &DataBuffer) {
+  using namespace support;
+
   if (DataBuffer.getBufferSize() < 8)
     return false;
-  using namespace support;
   uint64_t Magic =
       endian::read<uint64_t, little, aligned>(DataBuffer.getBufferStart());
   // Verify that it's magical.
@@ -578,9 +736,10 @@ bool IndexedInstrProfReader::hasFormat(const MemoryBuffer &DataBuffer) {
 
 const unsigned char *
 IndexedInstrProfReader::readSummary(IndexedInstrProf::ProfVersion Version,
-                                    const unsigned char *Cur) {
+                                    const unsigned char *Cur, bool UseCS) {
   using namespace IndexedInstrProf;
   using namespace support;
+
   if (Version >= IndexedInstrProf::Version4) {
     const IndexedInstrProf::Summary *SummaryInLE =
         reinterpret_cast<const IndexedInstrProf::Summary *>(Cur);
@@ -598,16 +757,19 @@ IndexedInstrProfReader::readSummary(IndexedInstrProf::ProfVersion Version,
     for (unsigned I = 0; I < SummarySize / sizeof(uint64_t); I++)
       Dst[I] = endian::byte_swap<uint64_t, little>(Src[I]);
 
-    llvm::SummaryEntryVector DetailedSummary;
+    SummaryEntryVector DetailedSummary;
     for (unsigned I = 0; I < SummaryData->NumCutoffEntries; I++) {
       const IndexedInstrProf::Summary::Entry &Ent = SummaryData->getEntry(I);
       DetailedSummary.emplace_back((uint32_t)Ent.Cutoff, Ent.MinBlockCount,
                                    Ent.NumBlocks);
     }
+    std::unique_ptr<llvm::ProfileSummary> &Summary =
+        UseCS ? this->CS_Summary : this->Summary;
+
     // initialize InstrProfSummary using the SummaryData from disk.
-    this->Summary = llvm::make_unique<ProfileSummary>(
-        ProfileSummary::PSK_Instr, DetailedSummary,
-        SummaryData->get(Summary::TotalBlockCount),
+    Summary = llvm::make_unique<ProfileSummary>(
+        UseCS ? ProfileSummary::PSK_CSInstr : ProfileSummary::PSK_Instr,
+        DetailedSummary, SummaryData->get(Summary::TotalBlockCount),
         SummaryData->get(Summary::MaxBlockCount),
         SummaryData->get(Summary::MaxInternalBlockCount),
         SummaryData->get(Summary::MaxFunctionCount),
@@ -617,22 +779,23 @@ IndexedInstrProfReader::readSummary(IndexedInstrProf::ProfVersion Version,
   } else {
     // For older version of profile data, we need to compute on the fly:
     using namespace IndexedInstrProf;
+
     InstrProfSummaryBuilder Builder(ProfileSummaryBuilder::DefaultCutoffs);
     // FIXME: This only computes an empty summary. Need to call addRecord for
-    // all InstrProfRecords to get the correct summary.
+    // all NamedInstrProfRecords to get the correct summary.
     this->Summary = Builder.getSummary();
     return Cur;
   }
 }
 
 Error IndexedInstrProfReader::readHeader() {
+  using namespace support;
+
   const unsigned char *Start =
       (const unsigned char *)DataBuffer->getBufferStart();
   const unsigned char *Cur = Start;
   if ((const unsigned char *)DataBuffer->getBufferEnd() - Cur < 24)
     return error(instrprof_error::truncated);
-
-  using namespace support;
 
   auto *Header = reinterpret_cast<const IndexedInstrProf::Header *>(Cur);
   Cur += sizeof(IndexedInstrProf::Header);
@@ -648,7 +811,11 @@ Error IndexedInstrProfReader::readHeader() {
       IndexedInstrProf::ProfVersion::CurrentVersion)
     return error(instrprof_error::unsupported_version);
 
-  Cur = readSummary((IndexedInstrProf::ProfVersion)FormatVersion, Cur);
+  Cur = readSummary((IndexedInstrProf::ProfVersion)FormatVersion, Cur,
+                    /* UseCS */ false);
+  if (FormatVersion & VARIANT_MASK_CSIR_PROF)
+    Cur = readSummary((IndexedInstrProf::ProfVersion)FormatVersion, Cur,
+                      /* UseCS */ true);
 
   // Read the hash type and start offset.
   IndexedInstrProf::HashT HashType = static_cast<IndexedInstrProf::HashT>(
@@ -659,10 +826,22 @@ Error IndexedInstrProfReader::readHeader() {
   uint64_t HashOffset = endian::byte_swap<uint64_t, little>(Header->HashOffset);
 
   // The rest of the file is an on disk hash table.
-  InstrProfReaderIndexBase *IndexPtr = nullptr;
-  IndexPtr = new InstrProfReaderIndex<OnDiskHashTableImplV3>(
-      Start + HashOffset, Cur, Start, HashType, FormatVersion);
-  Index.reset(IndexPtr);
+  auto IndexPtr =
+      llvm::make_unique<InstrProfReaderIndex<OnDiskHashTableImplV3>>(
+          Start + HashOffset, Cur, Start, HashType, FormatVersion);
+
+  // Load the remapping table now if requested.
+  if (RemappingBuffer) {
+    Remapper = llvm::make_unique<
+        InstrProfReaderItaniumRemapper<OnDiskHashTableImplV3>>(
+        std::move(RemappingBuffer), *IndexPtr);
+    if (Error E = Remapper->populateRemappings())
+      return E;
+  } else {
+    Remapper = llvm::make_unique<InstrProfReaderNullRemapper>(*IndexPtr);
+  }
+  Index = std::move(IndexPtr);
+
   return success();
 }
 
@@ -671,7 +850,9 @@ InstrProfSymtab &IndexedInstrProfReader::getSymtab() {
     return *Symtab.get();
 
   std::unique_ptr<InstrProfSymtab> NewSymtab = make_unique<InstrProfSymtab>();
-  Index->populateSymtab(*NewSymtab.get());
+  if (Error E = Index->populateSymtab(*NewSymtab.get())) {
+    consumeError(error(InstrProfError::take(std::move(E))));
+  }
 
   Symtab = std::move(NewSymtab);
   return *Symtab.get();
@@ -680,8 +861,8 @@ InstrProfSymtab &IndexedInstrProfReader::getSymtab() {
 Expected<InstrProfRecord>
 IndexedInstrProfReader::getInstrProfRecord(StringRef FuncName,
                                            uint64_t FuncHash) {
-  ArrayRef<InstrProfRecord> Data;
-  Error Err = Index->getRecords(FuncName, Data);
+  ArrayRef<NamedInstrProfRecord> Data;
+  Error Err = Remapper->getRecords(FuncName, Data);
   if (Err)
     return std::move(Err);
   // Found it. Look for counters with the right hash.
@@ -705,10 +886,8 @@ Error IndexedInstrProfReader::getFunctionCounts(StringRef FuncName,
   return success();
 }
 
-Error IndexedInstrProfReader::readNextRecord(InstrProfRecord &Record) {
-  static unsigned RecordIndex = 0;
-
-  ArrayRef<InstrProfRecord> Data;
+Error IndexedInstrProfReader::readNextRecord(NamedInstrProfRecord &Record) {
+  ArrayRef<NamedInstrProfRecord> Data;
 
   Error E = Index->getRecords(Data);
   if (E)
@@ -720,4 +899,18 @@ Error IndexedInstrProfReader::readNextRecord(InstrProfRecord &Record) {
     RecordIndex = 0;
   }
   return success();
+}
+
+void InstrProfReader::accumuateCounts(CountSumOrPercent &Sum, bool IsCS) {
+  uint64_t NumFuncs = 0;
+  for (const auto &Func : *this) {
+    if (isIRLevelProfile()) {
+      bool FuncIsCS = NamedInstrProfRecord::hasCSFlagInHash(Func.Hash);
+      if (FuncIsCS != IsCS)
+        continue;
+    }
+    Func.accumuateCounts(Sum);
+    ++NumFuncs;
+  }
+  Sum.NumEntries = NumFuncs;
 }

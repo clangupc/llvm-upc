@@ -10,7 +10,7 @@ Loop:
   %j = phi i32 [ 0, %Entry ], [ %Next, %Loop ]
   %addr = getelementptr i32, i32* %array, i32 %j
   %a = load i32, i32* %addr
-; CHECK: remark: /tmp/kk.c:2:20: hosting load
+; CHECK: remark: /tmp/kk.c:2:20: hoisting load
   %b = load i32, i32* %p, !dbg !8
   %a2 = add i32 %a, %b
   store i32 %a2, i32* %addr
@@ -74,7 +74,7 @@ Out:
 !3 = !{i32 2, !"Debug Info Version", i32 3}
 !4 = !{i32 1, !"PIC Level", i32 2}
 !5 = !{!"clang version 3.9.0 "}
-!6 = distinct !DISubprogram(name: "success", scope: !1, file: !1, line: 1, type: !7, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: true, unit: !0, variables: !2)
+!6 = distinct !DISubprogram(name: "success", scope: !1, file: !1, line: 1, type: !7, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: true, unit: !0, retainedNodes: !2)
 !7 = !DISubroutineType(types: !2)
 !8 = !DILocation(line: 2, column: 20, scope: !6)
 !9 = !DILocation(line: 2, column: 21, scope: !6)

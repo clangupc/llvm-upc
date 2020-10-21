@@ -1,9 +1,8 @@
 //===- PriorityWorklist.h - Worklist with insertion priority ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -18,12 +17,13 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Compiler.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <iterator>
+#include <type_traits>
 #include <vector>
 
 namespace llvm {
@@ -55,11 +55,11 @@ template <typename T, typename VectorT = std::vector<T>,
           typename MapT = DenseMap<T, ptrdiff_t>>
 class PriorityWorklist {
 public:
-  typedef T value_type;
-  typedef T key_type;
-  typedef T& reference;
-  typedef const T& const_reference;
-  typedef typename MapT::size_type size_type;
+  using value_type = T;
+  using key_type = T;
+  using reference = T&;
+  using const_reference = const T&;
+  using size_type = typename MapT::size_type;
 
   /// Construct an empty PriorityWorklist
   PriorityWorklist() = default;

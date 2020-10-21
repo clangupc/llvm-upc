@@ -1,9 +1,8 @@
 //===- SymbolDeserializer.h -------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,8 +14,8 @@
 #include "llvm/DebugInfo/CodeView/SymbolRecordMapping.h"
 #include "llvm/DebugInfo/CodeView/SymbolVisitorCallbacks.h"
 #include "llvm/DebugInfo/CodeView/SymbolVisitorDelegate.h"
-#include "llvm/DebugInfo/MSF/ByteStream.h"
-#include "llvm/DebugInfo/MSF/StreamReader.h"
+#include "llvm/Support/BinaryByteStream.h"
+#include "llvm/Support/BinaryStreamReader.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
@@ -24,21 +23,46 @@ namespace codeview {
 class SymbolVisitorDelegate;
 class SymbolDeserializer : public SymbolVisitorCallbacks {
   struct MappingInfo {
-    explicit MappingInfo(ArrayRef<uint8_t> RecordData)
-        : Stream(RecordData), Reader(Stream), Mapping(Reader) {}
+    MappingInfo(ArrayRef<uint8_t> RecordData, CodeViewContainer Container)
+        : Stream(RecordData, llvm::support::little), Reader(Stream),
+          Mapping(Reader, Container) {}
 
-    msf::ByteStream Stream;
-    msf::StreamReader Reader;
+    BinaryByteStream Stream;
+    BinaryStreamReader Reader;
     SymbolRecordMapping Mapping;
   };
 
 public:
-  explicit SymbolDeserializer(SymbolVisitorDelegate *Delegate)
-      : Delegate(Delegate) {}
+  template <typename T> static Error deserializeAs(CVSymbol Symbol, T &Record) {
+    // If we're just deserializing one record, then don't worry about alignment
+    // as there's nothing that comes after.
+    SymbolDeserializer S(nullptr, CodeViewContainer::ObjectFile);
+    if (auto EC = S.visitSymbolBegin(Symbol))
+      return EC;
+    if (auto EC = S.visitKnownRecord(Symbol, Record))
+      return EC;
+    if (auto EC = S.visitSymbolEnd(Symbol))
+      return EC;
+    return Error::success();
+  }
+  template <typename T> static Expected<T> deserializeAs(CVSymbol Symbol) {
+    T Record(static_cast<SymbolRecordKind>(Symbol.kind()));
+    if (auto EC = deserializeAs<T>(Symbol, Record))
+      return std::move(EC);
+    return Record;
+  }
+
+  explicit SymbolDeserializer(SymbolVisitorDelegate *Delegate,
+                              CodeViewContainer Container)
+      : Delegate(Delegate), Container(Container) {}
+
+  Error visitSymbolBegin(CVSymbol &Record, uint32_t Offset) override {
+    return visitSymbolBegin(Record);
+  }
 
   Error visitSymbolBegin(CVSymbol &Record) override {
     assert(!Mapping && "Already in a symbol mapping!");
-    Mapping = llvm::make_unique<MappingInfo>(Record.content());
+    Mapping = llvm::make_unique<MappingInfo>(Record.content(), Container);
     return Mapping->Mapping.visitSymbolBegin(Record);
   }
   Error visitSymbolEnd(CVSymbol &Record) override {
@@ -53,7 +77,7 @@ public:
     return visitKnownRecordImpl(CVR, Record);                                  \
   }
 #define SYMBOL_RECORD_ALIAS(EnumName, EnumVal, Name, AliasName)
-#include "CVSymbolTypes.def"
+#include "llvm/DebugInfo/CodeView/CodeViewSymbols.def"
 
 private:
   template <typename T> Error visitKnownRecordImpl(CVSymbol &CVR, T &Record) {
@@ -66,6 +90,7 @@ private:
   }
 
   SymbolVisitorDelegate *Delegate;
+  CodeViewContainer Container;
   std::unique_ptr<MappingInfo> Mapping;
 };
 }

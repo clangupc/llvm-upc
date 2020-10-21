@@ -1,4 +1,4 @@
-// RUN: llvm-mc -triple x86_64-pc-win32 -filetype=obj %s | llvm-readobj -sections -section-symbols | FileCheck %s
+// RUN: llvm-mc -triple x86_64-pc-win32 -filetype=obj %s | llvm-readobj --sections --section-symbols | FileCheck %s
 
         .text
         .def     weak_func;
@@ -11,7 +11,7 @@
 weak_func:                              # @weak_func
 .Ltmp0:
 .seh_proc weak_func
-# BB#0:                                 # %entry
+# %bb.0:                                # %entry
         pushq   %rbp
 .Ltmp1:
         .seh_pushreg 5

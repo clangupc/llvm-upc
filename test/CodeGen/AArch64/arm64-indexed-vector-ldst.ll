@@ -413,7 +413,7 @@ define i8* @test_v16i8_post_imm_st1_lane(<16 x i8> %in, i8* %addr) {
 
 define i8* @test_v16i8_post_reg_st1_lane(<16 x i8> %in, i8* %addr) {
 ; CHECK-LABEL: test_v16i8_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x2
+; CHECK: mov w[[OFFSET:[0-9]+]], #2
 ; CHECK: st1.b { v0 }[3], [x0], x[[OFFSET]]
   %elt = extractelement <16 x i8> %in, i32 3
   store i8 %elt, i8* %addr
@@ -435,7 +435,7 @@ define i16* @test_v8i16_post_imm_st1_lane(<8 x i16> %in, i16* %addr) {
 
 define i16* @test_v8i16_post_reg_st1_lane(<8 x i16> %in, i16* %addr) {
 ; CHECK-LABEL: test_v8i16_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x4
+; CHECK: mov w[[OFFSET:[0-9]+]], #4
 ; CHECK: st1.h { v0 }[3], [x0], x[[OFFSET]]
   %elt = extractelement <8 x i16> %in, i32 3
   store i16 %elt, i16* %addr
@@ -456,7 +456,7 @@ define i32* @test_v4i32_post_imm_st1_lane(<4 x i32> %in, i32* %addr) {
 
 define i32* @test_v4i32_post_reg_st1_lane(<4 x i32> %in, i32* %addr) {
 ; CHECK-LABEL: test_v4i32_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x8
+; CHECK: mov w[[OFFSET:[0-9]+]], #8
 ; CHECK: st1.s { v0 }[3], [x0], x[[OFFSET]]
   %elt = extractelement <4 x i32> %in, i32 3
   store i32 %elt, i32* %addr
@@ -477,7 +477,7 @@ define float* @test_v4f32_post_imm_st1_lane(<4 x float> %in, float* %addr) {
 
 define float* @test_v4f32_post_reg_st1_lane(<4 x float> %in, float* %addr) {
 ; CHECK-LABEL: test_v4f32_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x8
+; CHECK: mov w[[OFFSET:[0-9]+]], #8
 ; CHECK: st1.s { v0 }[3], [x0], x[[OFFSET]]
   %elt = extractelement <4 x float> %in, i32 3
   store float %elt, float* %addr
@@ -498,7 +498,7 @@ define i64* @test_v2i64_post_imm_st1_lane(<2 x i64> %in, i64* %addr) {
 
 define i64* @test_v2i64_post_reg_st1_lane(<2 x i64> %in, i64* %addr) {
 ; CHECK-LABEL: test_v2i64_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x10
+; CHECK: mov w[[OFFSET:[0-9]+]], #16
 ; CHECK: st1.d { v0 }[1], [x0], x[[OFFSET]]
   %elt = extractelement <2 x i64> %in, i64 1
   store i64 %elt, i64* %addr
@@ -519,7 +519,7 @@ define double* @test_v2f64_post_imm_st1_lane(<2 x double> %in, double* %addr) {
 
 define double* @test_v2f64_post_reg_st1_lane(<2 x double> %in, double* %addr) {
 ; CHECK-LABEL: test_v2f64_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x10
+; CHECK: mov w[[OFFSET:[0-9]+]], #16
 ; CHECK: st1.d { v0 }[1], [x0], x[[OFFSET]]
   %elt = extractelement <2 x double> %in, i32 1
   store double %elt, double* %addr
@@ -540,7 +540,7 @@ define i8* @test_v8i8_post_imm_st1_lane(<8 x i8> %in, i8* %addr) {
 
 define i8* @test_v8i8_post_reg_st1_lane(<8 x i8> %in, i8* %addr) {
 ; CHECK-LABEL: test_v8i8_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x2
+; CHECK: mov w[[OFFSET:[0-9]+]], #2
 ; CHECK: st1.b { v0 }[3], [x0], x[[OFFSET]]
   %elt = extractelement <8 x i8> %in, i32 3
   store i8 %elt, i8* %addr
@@ -561,7 +561,7 @@ define i16* @test_v4i16_post_imm_st1_lane(<4 x i16> %in, i16* %addr) {
 
 define i16* @test_v4i16_post_reg_st1_lane(<4 x i16> %in, i16* %addr) {
 ; CHECK-LABEL: test_v4i16_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x4
+; CHECK: mov w[[OFFSET:[0-9]+]], #4
 ; CHECK: st1.h { v0 }[3], [x0], x[[OFFSET]]
   %elt = extractelement <4 x i16> %in, i32 3
   store i16 %elt, i16* %addr
@@ -582,7 +582,7 @@ define i32* @test_v2i32_post_imm_st1_lane(<2 x i32> %in, i32* %addr) {
 
 define i32* @test_v2i32_post_reg_st1_lane(<2 x i32> %in, i32* %addr) {
 ; CHECK-LABEL: test_v2i32_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x8
+; CHECK: mov w[[OFFSET:[0-9]+]], #8
 ; CHECK: st1.s { v0 }[1], [x0], x[[OFFSET]]
   %elt = extractelement <2 x i32> %in, i32 1
   store i32 %elt, i32* %addr
@@ -603,7 +603,7 @@ define float* @test_v2f32_post_imm_st1_lane(<2 x float> %in, float* %addr) {
 
 define float* @test_v2f32_post_reg_st1_lane(<2 x float> %in, float* %addr) {
 ; CHECK-LABEL: test_v2f32_post_reg_st1_lane:
-; CHECK: orr w[[OFFSET:[0-9]+]], wzr, #0x8
+; CHECK: mov w[[OFFSET:[0-9]+]], #8
 ; CHECK: st1.s { v0 }[1], [x0], x[[OFFSET]]
   %elt = extractelement <2 x float> %in, i32 1
   store float %elt, float* %addr
@@ -6176,11 +6176,11 @@ define <2 x double> @test_v2f64_post_reg_ld1lane(double* %bar, double** %ptr, i6
 ; Check for dependencies between the vector and the scalar load.
 define <4 x float> @test_v4f32_post_reg_ld1lane_dep_vec_on_load(float* %bar, float** %ptr, i64 %inc, <4 x float>* %dep_ptr_1, <4 x float>* %dep_ptr_2, <4 x float> %vec) {
 ; CHECK-LABEL: test_v4f32_post_reg_ld1lane_dep_vec_on_load:
-; CHECK: BB#0:
+; CHECK: %bb.0:
 ; CHECK-NEXT: ldr s[[LD:[0-9]+]], [x0]
 ; CHECK-NEXT: str q0, [x3]
 ; CHECK-NEXT: ldr q0, [x4]
-; CHECK-NEXT: ins.s v0[1], v[[LD]][0]
+; CHECK-NEXT: mov.s v0[1], v[[LD]][0]
 ; CHECK-NEXT: add [[POST:x[0-9]]], x0, x2, lsl #2
 ; CHECK-NEXT: str [[POST]], [x1]
 ; CHECK-NEXT: ret
@@ -6216,11 +6216,11 @@ define <4 x i16> @test_v4i16_post_reg_ld1lane_forced_narrow(i16* %bar, i16** %pt
 declare <2 x i32> @llvm.ctpop.v2i32(<2 x i32>)
 
 ; CHECK-LABEL: test_ld1lane_build:
-; CHECK-DAG: ld1.s { [[REG0:v[0-9]+]] }[0], [x0]
-; CHECK-DAG: ld1.s { [[REG0:v[0-9]+]] }[1], [x1]
-; CHECK-DAG: ld1.s { [[REG1:v[0-9]+]] }[0], [x2]
-; CHECK-DAG: ld1.s { [[REG1:v[0-9]+]] }[1], [x3]
-; CHECK: sub.2s v[[REGNUM2:[0-9]+]], [[REG0]], [[REG1]]
+; CHECK-DAG: ldr s[[REGNUM0:[0-9]+]], [x0]
+; CHECK-DAG: ld1.s { v[[REGNUM0:[0-9]+]] }[1], [x1]
+; CHECK-DAG: ldr s[[REGNUM1:[0-9]+]], [x2]
+; CHECK-DAG: ld1.s { v[[REGNUM1:[0-9]+]] }[1], [x3]
+; CHECK: sub.2s v[[REGNUM2:[0-9]+]], v[[REGNUM0]], v[[REGNUM1]]
 ; CHECK-NEXT: str d[[REGNUM2]], [x4]
 ; CHECK-NEXT: ret
 define void @test_ld1lane_build(i32* %ptr0, i32* %ptr1, i32* %ptr2, i32* %ptr3, <2 x i32>* %out) {
@@ -6238,3 +6238,103 @@ define void @test_ld1lane_build(i32* %ptr0, i32* %ptr1, i32* %ptr2, i32* %ptr3, 
   store <2 x i32> %sub, <2 x i32>* %out, align 16
   ret void
 }
+
+; CHECK-LABEL: test_ld1lane_build_i16:
+; CHECK-DAG:  ldr h[[REGNUM1:[0-9]+]], [x0]
+; CHECK-DAG:  ld1.h { v[[REGNUM1]] }[1], [x1]
+; CHECK-DAG:  ld1.h { v[[REGNUM1]] }[2], [x2]
+; CHECK-DAG:  ld1.h { v[[REGNUM1]] }[3], [x3]
+; CHECK:      sub.4h v[[REGNUM2:[0-9]+]], v[[REGNUM1]], v0
+; CHECK-NEXT: str d[[REGNUM2]], [x4]
+; CHECK-NEXT: ret
+define void  @test_ld1lane_build_i16(i16* %a, i16* %b, i16* %c, i16* %d, <4 x i16> %e, <4 x i16>* %p) {
+  %ld.a = load i16, i16* %a
+  %ld.b = load i16, i16* %b
+  %ld.c = load i16, i16* %c
+  %ld.d = load i16, i16* %d
+  %v.a = insertelement <4 x i16> undef, i16 %ld.a, i64 0
+  %v.b = insertelement <4 x i16> %v.a, i16 %ld.b, i64 1
+  %v.c = insertelement <4 x i16> %v.b, i16 %ld.c, i64 2
+  %v = insertelement <4 x i16> %v.c, i16 %ld.d, i64 3
+  %sub = sub nsw <4 x i16> %v, %e
+  store <4 x i16> %sub, <4 x i16>* %p
+  ret void
+}
+
+; CHECK-LABEL: test_ld1lane_build_half:
+; CHECK-DAG:  ldr h[[REGNUM1:[0-9]+]], [x0]
+; CHECK-DAG:  ld1.h { v[[REGNUM1]] }[1], [x1]
+; CHECK-DAG:  ld1.h { v[[REGNUM1]] }[2], [x2]
+; CHECK-DAG:  ld1.h { v[[REGNUM1]] }[3], [x3]
+; CHECK-DAG:  fcvtl v[[REGNUM01:[0-9]+]].4s, v0.4h
+; CHECK-DAG:  fcvtl v[[REGNUM11:[0-9]+]].4s, v[[REGNUM1]].4h
+; CHECK:      fsub.4s v[[REGNUM2:[0-9]+]], v[[REGNUM11]], v[[REGNUM01]]
+; CHECK-DAG:  fcvtn v[[REGNUM3:[0-9]+]].4h, v[[REGNUM2]].4s
+; CHECK-NEXT: str d[[REGNUM2]], [x4]
+; CHECK-NEXT: ret
+define void  @test_ld1lane_build_half(half* %a, half* %b, half* %c, half* %d, <4 x half> %e, <4 x half>* %p) {
+  %ld.a = load half, half* %a
+  %ld.b = load half, half* %b
+  %ld.c = load half, half* %c
+  %ld.d = load half, half* %d
+  %v.a = insertelement <4 x half> undef, half %ld.a, i64 0
+  %v.b = insertelement <4 x half> %v.a, half %ld.b, i64 1
+  %v.c = insertelement <4 x half> %v.b, half %ld.c, i64 2
+  %v = insertelement <4 x half> %v.c, half %ld.d, i64 3
+  %sub = fsub <4 x half> %v, %e
+  store <4 x half> %sub, <4 x half>* %p
+  ret void
+}
+
+; CHECK-LABEL: test_ld1lane_build_i8:
+; CHECK-DAG:  ldr b[[REGNUM1:[0-9]+]], [x0]
+; CHECK-DAG:  ld1.b { v[[REGNUM1]] }[1], [x1]
+; CHECK-DAG:  ld1.b { v[[REGNUM1]] }[2], [x2]
+; CHECK-DAG:  ld1.b { v[[REGNUM1]] }[3], [x3]
+; CHECK-DAG:  ld1.b { v[[REGNUM1]] }[4], [x4]
+; CHECK-DAG:  ld1.b { v[[REGNUM1]] }[5], [x5]
+; CHECK-DAG:  ld1.b { v[[REGNUM1]] }[6], [x6]
+; CHECK-DAG:  ld1.b { v[[REGNUM1]] }[7], [x7]
+; CHECK:      sub.8b v[[REGNUM2:[0-9]+]], v[[REGNUM1]], v0
+; CHECK-NEXT: str d[[REGNUM2]], [x
+; CHECK-NEXT: ret
+define void  @test_ld1lane_build_i8(i8* %a, i8* %b, i8* %c, i8* %d, i8* %e, i8* %f, i8* %g, i8* %h, <8 x i8> %v, <8 x i8>* %p) {
+  %ld.a = load i8, i8* %a
+  %ld.b = load i8, i8* %b
+  %ld.c = load i8, i8* %c
+  %ld.d = load i8, i8* %d
+  %ld.e = load i8, i8* %e
+  %ld.f = load i8, i8* %f
+  %ld.g = load i8, i8* %g
+  %ld.h = load i8, i8* %h
+  %v.a = insertelement <8 x i8> undef, i8 %ld.a, i64 0
+  %v.b = insertelement <8 x i8> %v.a,  i8 %ld.b, i64 1
+  %v.c = insertelement <8 x i8> %v.b,  i8 %ld.c, i64 2
+  %v.d = insertelement <8 x i8> %v.c,  i8 %ld.d, i64 3
+  %v.e = insertelement <8 x i8> %v.d,  i8 %ld.e, i64 4
+  %v.f = insertelement <8 x i8> %v.e,  i8 %ld.f, i64 5
+  %v.g = insertelement <8 x i8> %v.f,  i8 %ld.g, i64 6
+  %v1 = insertelement <8 x i8> %v.g,  i8 %ld.h, i64 7
+  %sub = sub nsw <8 x i8> %v1, %v
+  store <8 x i8> %sub, <8 x i8>* %p
+  ret void
+}
+
+define <4 x i32> @test_inc_cycle(<4 x i32> %vec, i32* %in) {
+; CHECK-LABEL: test_inc_cycle:
+; CHECK: ld1.s { v0 }[0], [x0]{{$}}
+
+  %elt = load i32, i32* %in
+  %newvec = insertelement <4 x i32> %vec, i32 %elt, i32 0
+
+  ; %inc cannot be %elt directly because we check that the load is only
+  ; used by the insert before trying to form post-inc.
+  %inc.vec = bitcast <4 x i32> %newvec to <2 x i64>
+  %inc = extractelement <2 x i64> %inc.vec, i32 0
+  %newaddr = getelementptr i32, i32* %in, i64 %inc
+  store i32* %newaddr, i32** @var
+
+  ret <4 x i32> %newvec
+}
+
+@var = global i32* null

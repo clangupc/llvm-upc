@@ -1,4 +1,4 @@
-RUN: llvm-readobj -file-headers %p/Inputs/nop.exe.coff-x86-64 | FileCheck %s
+RUN: llvm-readobj --file-headers %p/Inputs/nop.exe.coff-x86-64 | FileCheck %s
 
 CHECK: Format: COFF-x86-64
 CHECK: Arch: x86_64
@@ -16,6 +16,7 @@ CHECK:     IMAGE_FILE_LARGE_ADDRESS_AWARE (0x20)
 CHECK:   ]
 CHECK: }
 CHECK: ImageOptionalHeader {
+CHECK:   Magic: 0x20B
 CHECK:   MajorLinkerVersion: 11
 CHECK:   MinorLinkerVersion: 0
 CHECK:   SizeOfCode: 512

@@ -1,5 +1,5 @@
-; RUN: llc < %s -mtriple=s390x-linux-gnu| FileCheck %s
-; RUN: llc < %s -O0 -mtriple=s390x-linux-gnu | FileCheck --check-prefix=CHECK-O0 %s
+; RUN: llc < %s -mtriple=s390x-linux-gnu -disable-block-placement | FileCheck %s
+; RUN: llc < %s -O0 -mtriple=s390x-linux-gnu -disable-block-placement | FileCheck --check-prefix=CHECK-O0 %s
 
 declare i8* @malloc(i64)
 declare void @free(i8*)
@@ -16,7 +16,7 @@ define float @foo(%swift_error** swifterror %error_ptr_ref) {
 ; CHECK-O0-LABEL: foo:
 ; CHECK-O0: lghi %r2, 16
 ; CHECK-O0: brasl %r14, malloc
-; CHECK-O0: lgr %r9, %r2
+; CHECK-O0: lgr %r0, %r2
 ; CHECK-O0: mvi 8(%r2), 1
 entry:
   %call = call i8* @malloc(i64 16)
@@ -34,11 +34,11 @@ define float @caller(i8* %error_ref) {
 ; CHECK: lgr %r[[REG1:[0-9]+]], %r2
 ; CHECK: lghi %r9, 0
 ; CHECK: brasl %r14, foo
-; CHECK: cgijlh %r9, 0,
+; CHECK: %r2, %r9
+; CHECK: jlh
 ; Access part of the error object and save it to error_ref
-; CHECK: lb %r[[REG2:[0-9]+]], 8(%r9)
+; CHECK: lb %r[[REG2:[0-9]+]], 8(%r2)
 ; CHECK: stc %r[[REG2]], 0(%r[[REG1]])
-; CHECK: lgr %r2, %r9
 ; CHECK: brasl %r14, free
 ; CHECK-O0-LABEL: caller:
 ; CHECK-O0: lghi %r9, 0
@@ -246,11 +246,10 @@ define float @caller3(i8* %error_ref) {
 ; CHECK: lhi %r3, 1
 ; CHECK: lghi %r9, 0
 ; CHECK: brasl %r14, foo_sret
-; CHECK: cgijlh %r9, 0,
+; CHECK: jlh
 ; Access part of the error object and save it to error_ref
-; CHECK: lb %r0, 8(%r9)
+; CHECK: lb %r0, 8(%r2)
 ; CHECK: stc %r0, 0(%r[[REG1]])
-; CHECK: lgr %r2, %r9
 ; CHECK: brasl %r14, free
 
 ; CHECK-O0-LABEL: caller3:
@@ -296,21 +295,21 @@ define float @caller_with_multiple_swifterror_values(i8* %error_ref, i8* %error_
 ; The first swifterror value:
 ; CHECK: lghi %r9, 0
 ; CHECK: brasl %r14, foo
-; CHECK: cgijlh %r9, 0,
+; CHECK: ltgr %r2, %r9
+; CHECK: jlh
 ; Access part of the error object and save it to error_ref
-; CHECK: lb %r0, 8(%r9)
+; CHECK: lb %r0, 8(%r2)
 ; CHECK: stc %r0, 0(%r[[REG1]])
-; CHECK: lgr %r2, %r9
 ; CHECK: brasl %r14, free
 
 ; The second swifterror value:
 ; CHECK: lghi %r9, 0
 ; CHECK: brasl %r14, foo
-; CHECK: cgijlh %r9, 0,
+; CHECK: ltgr %r2, %r9
+; CHECK: jlh
 ; Access part of the error object and save it to error_ref
-; CHECK: lb %r0, 8(%r9)
+; CHECK: lb %r0, 8(%r2)
 ; CHECK: stc %r0, 0(%r[[REG2]])
-; CHECK: lgr %r2, %r9
 ; CHECK: brasl %r14, free
 
 ; CHECK-O0-LABEL: caller_with_multiple_swifterror_values:

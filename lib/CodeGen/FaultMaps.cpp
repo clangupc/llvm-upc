@@ -1,20 +1,22 @@
-//===---------------------------- FaultMaps.cpp ---------------------------===//
+//===- FaultMaps.cpp ------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/FaultMaps.h"
-
+#include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Format.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
@@ -59,17 +61,17 @@ void FaultMaps::serializeToFaultMapSection() {
   // Emit a dummy symbol to force section inclusion.
   OS.EmitLabel(OutContext.getOrCreateSymbol(Twine("__LLVM_FaultMaps")));
 
-  DEBUG(dbgs() << "********** Fault Map Output **********\n");
+  LLVM_DEBUG(dbgs() << "********** Fault Map Output **********\n");
 
   // Header
   OS.EmitIntValue(FaultMapVersion, 1); // Version.
   OS.EmitIntValue(0, 1);               // Reserved.
   OS.EmitIntValue(0, 2);               // Reserved.
 
-  DEBUG(dbgs() << WFMP << "#functions = " << FunctionInfos.size() << "\n");
+  LLVM_DEBUG(dbgs() << WFMP << "#functions = " << FunctionInfos.size() << "\n");
   OS.EmitIntValue(FunctionInfos.size(), 4);
 
-  DEBUG(dbgs() << WFMP << "functions:\n");
+  LLVM_DEBUG(dbgs() << WFMP << "functions:\n");
 
   for (const auto &FFI : FunctionInfos)
     emitFunctionInfo(FFI.first, FFI.second);
@@ -79,37 +81,39 @@ void FaultMaps::emitFunctionInfo(const MCSymbol *FnLabel,
                                  const FunctionFaultInfos &FFI) {
   MCStreamer &OS = *AP.OutStreamer;
 
-  DEBUG(dbgs() << WFMP << "  function addr: " << *FnLabel << "\n");
+  LLVM_DEBUG(dbgs() << WFMP << "  function addr: " << *FnLabel << "\n");
   OS.EmitSymbolValue(FnLabel, 8);
 
-  DEBUG(dbgs() << WFMP << "  #faulting PCs: " << FFI.size() << "\n");
+  LLVM_DEBUG(dbgs() << WFMP << "  #faulting PCs: " << FFI.size() << "\n");
   OS.EmitIntValue(FFI.size(), 4);
 
   OS.EmitIntValue(0, 4); // Reserved
 
   for (auto &Fault : FFI) {
-    DEBUG(dbgs() << WFMP << "    fault type: "
-          << faultTypeToString(Fault.Kind) << "\n");
+    LLVM_DEBUG(dbgs() << WFMP << "    fault type: "
+                      << faultTypeToString(Fault.Kind) << "\n");
     OS.EmitIntValue(Fault.Kind, 4);
 
-    DEBUG(dbgs() << WFMP << "    faulting PC offset: "
-          << *Fault.FaultingOffsetExpr << "\n");
+    LLVM_DEBUG(dbgs() << WFMP << "    faulting PC offset: "
+                      << *Fault.FaultingOffsetExpr << "\n");
     OS.EmitValue(Fault.FaultingOffsetExpr, 4);
 
-    DEBUG(dbgs() << WFMP << "    fault handler PC offset: "
-          << *Fault.HandlerOffsetExpr << "\n");
+    LLVM_DEBUG(dbgs() << WFMP << "    fault handler PC offset: "
+                      << *Fault.HandlerOffsetExpr << "\n");
     OS.EmitValue(Fault.HandlerOffsetExpr, 4);
   }
 }
-
 
 const char *FaultMaps::faultTypeToString(FaultMaps::FaultKind FT) {
   switch (FT) {
   default:
     llvm_unreachable("unhandled fault type!");
-
   case FaultMaps::FaultingLoad:
     return "FaultingLoad";
+  case FaultMaps::FaultingLoadStore:
+    return "FaultingLoadStore";
+  case FaultMaps::FaultingStore:
+    return "FaultingStore";
   }
 }
 

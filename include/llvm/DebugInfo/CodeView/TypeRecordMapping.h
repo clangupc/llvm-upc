@@ -1,9 +1,8 @@
 //===- TypeRecordMapping.h --------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,17 +15,19 @@
 #include "llvm/Support/Error.h"
 
 namespace llvm {
-namespace msf {
-class StreamReader;
-class StreamWriter;
-}
+class BinaryStreamReader;
+class BinaryStreamWriter;
+
 namespace codeview {
 class TypeRecordMapping : public TypeVisitorCallbacks {
 public:
-  explicit TypeRecordMapping(msf::StreamReader &Reader) : IO(Reader) {}
-  explicit TypeRecordMapping(msf::StreamWriter &Writer) : IO(Writer) {}
+  explicit TypeRecordMapping(BinaryStreamReader &Reader) : IO(Reader) {}
+  explicit TypeRecordMapping(BinaryStreamWriter &Writer) : IO(Writer) {}
+  explicit TypeRecordMapping(CodeViewRecordStreamer &Streamer) : IO(Streamer) {}
 
+  using TypeVisitorCallbacks::visitTypeBegin;
   Error visitTypeBegin(CVType &Record) override;
+  Error visitTypeBegin(CVType &Record, TypeIndex Index) override;
   Error visitTypeEnd(CVType &Record) override;
 
   Error visitMemberBegin(CVMemberRecord &Record) override;
@@ -38,7 +39,7 @@ public:
   Error visitKnownMember(CVMemberRecord &CVR, Name##Record &Record) override;
 #define TYPE_RECORD_ALIAS(EnumName, EnumVal, Name, AliasName)
 #define MEMBER_RECORD_ALIAS(EnumName, EnumVal, Name, AliasName)
-#include "TypeRecords.def"
+#include "llvm/DebugInfo/CodeView/CodeViewTypes.def"
 
 private:
   Optional<TypeLeafKind> TypeKind;

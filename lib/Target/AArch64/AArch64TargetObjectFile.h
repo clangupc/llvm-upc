@@ -1,9 +1,8 @@
 //===-- AArch64TargetObjectFile.h - AArch64 Object Info -*- C++ ---------*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -40,7 +39,13 @@ public:
                                           const MCValue &MV, int64_t Offset,
                                           MachineModuleInfo *MMI,
                                           MCStreamer &Streamer) const override;
+
+  void getNameWithPrefix(SmallVectorImpl<char> &OutName, const GlobalValue *GV,
+                         const TargetMachine &TM) const override;
 };
+
+/// This implementation is used for AArch64 COFF targets.
+class AArch64_COFFTargetObjectFile : public TargetLoweringObjectFileCOFF {};
 
 } // end namespace llvm
 

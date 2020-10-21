@@ -1,9 +1,8 @@
 //===- TestingSupport.cpp - Convert objects files into test files --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -33,7 +32,7 @@ int convertForTestingMain(int argc, const char *argv[]) {
   if (!ObjErr) {
     std::string Buf;
     raw_string_ostream OS(Buf);
-    logAllUnhandledErrors(ObjErr.takeError(), OS, "");
+    logAllUnhandledErrors(ObjErr.takeError(), OS);
     OS.flush();
     errs() << "error: " << Buf;
     return 1;
@@ -48,13 +47,16 @@ int convertForTestingMain(int argc, const char *argv[]) {
   // Look for the sections that we are interested in.
   int FoundSectionCount = 0;
   SectionRef ProfileNames, CoverageMapping;
+  auto ObjFormat = OF->getTripleObjectFormat();
   for (const auto &Section : OF->sections()) {
     StringRef Name;
     if (Section.getName(Name))
       return 1;
-    if (Name == llvm::getInstrProfNameSectionName(false)) {
+    if (Name == llvm::getInstrProfSectionName(IPSK_name, ObjFormat,
+                                              /*AddSegmentInfo=*/false)) {
       ProfileNames = Section;
-    } else if (Name == llvm::getInstrProfCoverageSectionName(false)) {
+    } else if (Name == llvm::getInstrProfSectionName(
+                           IPSK_covmap, ObjFormat, /*AddSegmentInfo=*/false)) {
       CoverageMapping = Section;
     } else
       continue;
@@ -67,13 +69,21 @@ int convertForTestingMain(int argc, const char *argv[]) {
   uint64_t ProfileNamesAddress = ProfileNames.getAddress();
   StringRef CoverageMappingData;
   StringRef ProfileNamesData;
-  if (CoverageMapping.getContents(CoverageMappingData) ||
-      ProfileNames.getContents(ProfileNamesData))
+  if (Expected<StringRef> E = CoverageMapping.getContents())
+    CoverageMappingData = *E;
+  else {
+    consumeError(E.takeError());
     return 1;
+  }
+  if (Expected<StringRef> E = ProfileNames.getContents())
+    ProfileNamesData = *E;
+  else {
+    consumeError(E.takeError());
+    return 1;
+  }
 
   int FD;
-  if (auto Err =
-          sys::fs::openFileForWrite(OutputFilename, FD, sys::fs::F_None)) {
+  if (auto Err = sys::fs::openFileForWrite(OutputFilename, FD)) {
     errs() << "error: " << Err.message() << "\n";
     return 1;
   }

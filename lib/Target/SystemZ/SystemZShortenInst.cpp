@@ -1,9 +1,8 @@
 //===-- SystemZShortenInst.cpp - Instruction-shortening pass --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,10 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "SystemZTargetMachine.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/LivePhysRegs.h"
-#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 using namespace llvm;
 
@@ -47,6 +46,7 @@ private:
   bool shortenOn001(MachineInstr &MI, unsigned Opcode);
   bool shortenOn001AddCC(MachineInstr &MI, unsigned Opcode);
   bool shortenFPConv(MachineInstr &MI, unsigned Opcode);
+  bool shortenSelect(MachineInstr &MI, unsigned Opcode);
 
   const SystemZInstrInfo *TII;
   const TargetRegisterInfo *TRI;
@@ -167,10 +167,27 @@ bool SystemZShortenInst::shortenFPConv(MachineInstr &MI, unsigned Opcode) {
     MI.RemoveOperand(0);
     MI.setDesc(TII->get(Opcode));
     MachineInstrBuilder(*MI.getParent()->getParent(), &MI)
-      .addOperand(Dest)
-      .addOperand(Mode)
-      .addOperand(Src)
-      .addOperand(Suppress);
+        .add(Dest)
+        .add(Mode)
+        .add(Src)
+        .add(Suppress);
+    return true;
+  }
+  return false;
+}
+
+// MI is a three-operand select instruction.  If one of the sources match
+// the destination, convert to the equivalent load-on-condition.
+bool SystemZShortenInst::shortenSelect(MachineInstr &MI, unsigned Opcode) {
+  if (MI.getOperand(0).getReg() == MI.getOperand(1).getReg()) {
+    MI.setDesc(TII->get(Opcode));
+    MI.tieOperands(0, 1);
+    return true;
+  }
+  if (MI.getOperand(0).getReg() == MI.getOperand(2).getReg()) {
+    TII->commuteInstruction(MI, false, 1, 2);
+    MI.setDesc(TII->get(Opcode));
+    MI.tieOperands(0, 1);
     return true;
   }
   return false;
@@ -196,16 +213,40 @@ bool SystemZShortenInst::processBlock(MachineBasicBlock &MBB) {
       Changed |= shortenIIF(MI, SystemZ::LLIHL, SystemZ::LLIHH);
       break;
 
+    case SystemZ::SELR:
+      Changed |= shortenSelect(MI, SystemZ::LOCR);
+      break;
+
+    case SystemZ::SELFHR:
+      Changed |= shortenSelect(MI, SystemZ::LOCFHR);
+      break;
+
+    case SystemZ::SELGR:
+      Changed |= shortenSelect(MI, SystemZ::LOCGR);
+      break;
+
     case SystemZ::WFADB:
       Changed |= shortenOn001AddCC(MI, SystemZ::ADBR);
+      break;
+
+    case SystemZ::WFASB:
+      Changed |= shortenOn001AddCC(MI, SystemZ::AEBR);
       break;
 
     case SystemZ::WFDDB:
       Changed |= shortenOn001(MI, SystemZ::DDBR);
       break;
 
+    case SystemZ::WFDSB:
+      Changed |= shortenOn001(MI, SystemZ::DEBR);
+      break;
+
     case SystemZ::WFIDB:
       Changed |= shortenFPConv(MI, SystemZ::FIDBRA);
+      break;
+
+    case SystemZ::WFISB:
+      Changed |= shortenFPConv(MI, SystemZ::FIEBRA);
       break;
 
     case SystemZ::WLDEB:
@@ -220,28 +261,56 @@ bool SystemZShortenInst::processBlock(MachineBasicBlock &MBB) {
       Changed |= shortenOn001(MI, SystemZ::MDBR);
       break;
 
+    case SystemZ::WFMSB:
+      Changed |= shortenOn001(MI, SystemZ::MEEBR);
+      break;
+
     case SystemZ::WFLCDB:
       Changed |= shortenOn01(MI, SystemZ::LCDFR);
+      break;
+
+    case SystemZ::WFLCSB:
+      Changed |= shortenOn01(MI, SystemZ::LCDFR_32);
       break;
 
     case SystemZ::WFLNDB:
       Changed |= shortenOn01(MI, SystemZ::LNDFR);
       break;
 
+    case SystemZ::WFLNSB:
+      Changed |= shortenOn01(MI, SystemZ::LNDFR_32);
+      break;
+
     case SystemZ::WFLPDB:
       Changed |= shortenOn01(MI, SystemZ::LPDFR);
+      break;
+
+    case SystemZ::WFLPSB:
+      Changed |= shortenOn01(MI, SystemZ::LPDFR_32);
       break;
 
     case SystemZ::WFSQDB:
       Changed |= shortenOn01(MI, SystemZ::SQDBR);
       break;
 
+    case SystemZ::WFSQSB:
+      Changed |= shortenOn01(MI, SystemZ::SQEBR);
+      break;
+
     case SystemZ::WFSDB:
       Changed |= shortenOn001AddCC(MI, SystemZ::SDBR);
       break;
 
+    case SystemZ::WFSSB:
+      Changed |= shortenOn001AddCC(MI, SystemZ::SEBR);
+      break;
+
     case SystemZ::WFCDB:
       Changed |= shortenOn01(MI, SystemZ::CDBR);
+      break;
+
+    case SystemZ::WFCSB:
+      Changed |= shortenOn01(MI, SystemZ::CEBR);
       break;
 
     case SystemZ::VL32:
@@ -260,6 +329,31 @@ bool SystemZShortenInst::processBlock(MachineBasicBlock &MBB) {
     case SystemZ::VST64:
       Changed |= shortenOn0(MI, SystemZ::STD);
       break;
+
+    default: {
+      int TwoOperandOpcode = SystemZ::getTwoOperandOpcode(MI.getOpcode());
+      if (TwoOperandOpcode == -1)
+        break;
+
+      if ((MI.getOperand(0).getReg() != MI.getOperand(1).getReg()) &&
+          (!MI.isCommutable() ||
+           MI.getOperand(0).getReg() != MI.getOperand(2).getReg() ||
+           !TII->commuteInstruction(MI, false, 1, 2)))
+          break;
+
+      MI.setDesc(TII->get(TwoOperandOpcode));
+      MI.tieOperands(0, 1);
+      if (TwoOperandOpcode == SystemZ::SLL ||
+          TwoOperandOpcode == SystemZ::SLA ||
+          TwoOperandOpcode == SystemZ::SRL ||
+          TwoOperandOpcode == SystemZ::SRA) {
+        // These shifts only use the low 6 bits of the shift count.
+        MachineOperand &ImmMO = MI.getOperand(3);
+        ImmMO.setImm(ImmMO.getImm() & 0xfff);
+      }
+      Changed = true;
+      break;
+    }
     }
 
     LiveRegs.stepBackward(MI);
@@ -269,7 +363,7 @@ bool SystemZShortenInst::processBlock(MachineBasicBlock &MBB) {
 }
 
 bool SystemZShortenInst::runOnMachineFunction(MachineFunction &F) {
-  if (skipFunction(*F.getFunction()))
+  if (skipFunction(F.getFunction()))
     return false;
 
   const SystemZSubtarget &ST = F.getSubtarget<SystemZSubtarget>();

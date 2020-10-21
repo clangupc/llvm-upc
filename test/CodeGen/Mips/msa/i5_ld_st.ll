@@ -1,8 +1,8 @@
 ; Test the MSA intrinsics that are encoded with the I5 instruction format and
 ; are loads or stores.
 
-; RUN: llc -march=mips -mattr=+msa,+fp64 < %s | FileCheck %s
-; RUN: llc -march=mipsel -mattr=+msa,+fp64 < %s | FileCheck %s
+; RUN: llc -march=mips -mattr=+msa,+fp64,+mips32r2 < %s | FileCheck %s
+; RUN: llc -march=mipsel -mattr=+msa,+fp64,+mips32r2 < %s | FileCheck %s
 
 @llvm_mips_ld_b_ARG = global <16 x i8> <i8 0, i8 1, i8 2, i8 3, i8 4, i8 5, i8 6, i8 7, i8 8, i8 9, i8 10, i8 11, i8 12, i8 13, i8 14, i8 15>, align 16
 @llvm_mips_ld_b_RES = global <16 x i8> <i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0, i8 0>, align 16
@@ -336,8 +336,8 @@ entry:
 
 ; CHECK: llvm_mips_st_b_valid_range_tests:
 ; CHECK: ld.b
-; CHECK: st.b [[R1:\$w[0-9]+]], -512(
-; CHECK: st.b [[R1:\$w[0-9]+]], 511(
+; CHECK-DAG: st.b [[R1:\$w[0-9]+]], -512(
+; CHECK-DAG: st.b [[R1:\$w[0-9]+]], 511(
 ; CHECK: .size llvm_mips_st_b_valid_range_tests
 ;
 
@@ -351,10 +351,10 @@ entry:
 }
 
 ; CHECK: llvm_mips_st_b_invalid_range_tests:
-; CHECK: addiu $2, $1, -513
+; CHECK: addiu $2, $1, 512
 ; CHECK: ld.b
 ; CHECK: st.b [[R1:\$w[0-9]+]], 0(
-; CHECK: addiu $1, $1, 512
+; CHECK: addiu $1, $1, -513
 ; CHECK: st.b [[R1:\$w[0-9]+]], 0(
 ; CHECK: .size llvm_mips_st_b_invalid_range_tests
 ;
@@ -404,8 +404,8 @@ entry:
 
 ; CHECK: llvm_mips_st_h_valid_range_tests:
 ; CHECK: ld.h
-; CHECK: st.h [[R1:\$w[0-9]+]], -1024(
-; CHECK: st.h [[R1:\$w[0-9]+]], 1022(
+; CHECK-DAG: st.h [[R1:\$w[0-9]+]], -1024(
+; CHECK-DAG: st.h [[R1:\$w[0-9]+]], 1022(
 ; CHECK: .size llvm_mips_st_h_valid_range_tests
 ;
 
@@ -419,10 +419,10 @@ entry:
 }
 
 ; CHECK: llvm_mips_st_h_invalid_range_tests:
-; CHECK: addiu $2, $1, -1026
+; CHECK: addiu $2, $1, 1024
 ; CHECK: ld.h
 ; CHECK: st.h [[R1:\$w[0-9]+]], 0(
-; CHECK: addiu $1, $1, 1024
+; CHECK: addiu $1, $1, -1026
 ; CHECK: st.h [[R1:\$w[0-9]+]], 0(
 ; CHECK: .size llvm_mips_st_h_invalid_range_tests
 ;
@@ -472,8 +472,8 @@ entry:
 
 ; CHECK: llvm_mips_st_w_valid_range_tests:
 ; CHECK: ld.w
-; CHECK: st.w [[R1:\$w[0-9]+]], -2048(
-; CHECK: st.w [[R1:\$w[0-9]+]], 2044(
+; CHECK-DAG: st.w [[R1:\$w[0-9]+]], -2048(
+; CHECK-DAG: st.w [[R1:\$w[0-9]+]], 2044(
 ; CHECK: .size llvm_mips_st_w_valid_range_tests
 ;
 
@@ -487,10 +487,10 @@ entry:
 }
 
 ; CHECK: llvm_mips_st_w_invalid_range_tests:
-; CHECK: addiu $2, $1, -2052
+; CHECK: addiu $2, $1, 2048
 ; CHECK: ld.w
 ; CHECK: st.w [[R1:\$w[0-9]+]], 0(
-; CHECK: addiu $1, $1, 2048
+; CHECK: addiu $1, $1, -2052
 ; CHECK: st.w [[R1:\$w[0-9]+]], 0(
 ; CHECK: .size llvm_mips_st_w_invalid_range_tests
 ;
@@ -540,8 +540,8 @@ entry:
 
 ; CHECK: llvm_mips_st_d_valid_range_tests:
 ; CHECK: ld.d
-; CHECK: st.d [[R1:\$w[0-9]+]], -4096(
-; CHECK: st.d [[R1:\$w[0-9]+]], 4088(
+; CHECK-DAG: st.d [[R1:\$w[0-9]+]], -4096(
+; CHECK-DAG: st.d [[R1:\$w[0-9]+]], 4088(
 ; CHECK: .size llvm_mips_st_d_valid_range_tests
 ;
 
@@ -555,10 +555,10 @@ entry:
 }
 
 ; CHECK: llvm_mips_st_d_invalid_range_tests:
-; CHECK: addiu $2, $1, -4104
+; CHECK: addiu $2, $1, 4096
 ; CHECK: ld.d
 ; CHECK: st.d [[R1:\$w[0-9]+]], 0(
-; CHECK: addiu $1, $1, 4096
+; CHECK: addiu $1, $1, -4104
 ; CHECK: st.d [[R1:\$w[0-9]+]], 0(
 ; CHECK: .size llvm_mips_st_d_invalid_range_tests
 ;

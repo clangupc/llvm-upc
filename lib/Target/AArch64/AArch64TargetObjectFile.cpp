@@ -1,20 +1,19 @@
 //===-- AArch64TargetObjectFile.cpp - AArch64 Object Info -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "AArch64TargetObjectFile.h"
 #include "AArch64TargetMachine.h"
+#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/Support/Dwarf.h"
 using namespace llvm;
 using namespace dwarf;
 
@@ -22,6 +21,9 @@ void AArch64_ELFTargetObjectFile::Initialize(MCContext &Ctx,
                                              const TargetMachine &TM) {
   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
   InitializeELF(TM.Options.UseInitArray);
+  // AARCH64 ELF ABI does not define static relocation type for TLS offset
+  // within a module.  Do not generate AT_location for TLS variables.
+  SupportDebugThreadLocalLocation = false;
 }
 
 AArch64_MachoTargetObjectFile::AArch64_MachoTargetObjectFile()
@@ -69,4 +71,12 @@ const MCExpr *AArch64_MachoTargetObjectFile::getIndirectSymViaGOTPCRel(
   Streamer.EmitLabel(PCSym);
   const MCExpr *PC = MCSymbolRefExpr::create(PCSym, getContext());
   return MCBinaryExpr::createSub(Res, PC, getContext());
+}
+
+void AArch64_MachoTargetObjectFile::getNameWithPrefix(
+    SmallVectorImpl<char> &OutName, const GlobalValue *GV,
+    const TargetMachine &TM) const {
+  // AArch64 does not use section-relative relocations so any global symbol must
+  // be accessed via at least a linker-private symbol.
+  getMangler().getNameWithPrefix(OutName, GV, /* CannotUsePrivateLabel */ true);
 }

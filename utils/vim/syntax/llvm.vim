@@ -23,10 +23,10 @@ syn match   llvmType /\<i\d\+\>/
 " The true and false tokens can be used for comparison opcodes, but it's
 " much more common for these tokens to be used for boolean constants.
 syn keyword llvmStatement add addrspacecast alloca and arcp ashr atomicrmw
-syn keyword llvmStatement bitcast br catchpad catchswitch catchret call
+syn keyword llvmStatement bitcast br catchpad catchswitch catchret call callbr
 syn keyword llvmStatement cleanuppad cleanupret cmpxchg eq exact extractelement
 syn keyword llvmStatement extractvalue fadd fast fcmp fdiv fence fmul fpext
-syn keyword llvmStatement fptosi fptoui fptrunc free frem fsub getelementptr
+syn keyword llvmStatement fptosi fptoui fptrunc free frem fsub fneg getelementptr
 syn keyword llvmStatement icmp inbounds indirectbr insertelement insertvalue
 syn keyword llvmStatement inttoptr invoke landingpad load lshr malloc max min
 syn keyword llvmStatement mul nand ne ninf nnan nsw nsz nuw oeq oge ogt ole
@@ -54,6 +54,7 @@ syn keyword llvmKeyword
       \ atomic
       \ available_externally
       \ blockaddress
+      \ builtin
       \ byval
       \ c
       \ catch
@@ -74,6 +75,8 @@ syn keyword llvmKeyword
       \ distinct
       \ dllexport
       \ dllimport
+      \ dso_local
+      \ dso_preemptable
       \ except
       \ external
       \ externally_initialized
@@ -105,10 +108,12 @@ syn keyword llvmKeyword
       \ naked
       \ nest
       \ noalias
+      \ nobuiltin
       \ nocapture
       \ noimplicitfloat
       \ noinline
       \ nonlazybind
+      \ nonnull
       \ norecurse
       \ noredzone
       \ noreturn
@@ -123,6 +128,7 @@ syn keyword llvmKeyword
       \ readnone
       \ readonly
       \ release
+      \ returned
       \ returns_twice
       \ sanitize_address
       \ sanitize_memory
@@ -131,15 +137,18 @@ syn keyword llvmKeyword
       \ seq_cst
       \ sideeffect
       \ signext
-      \ singlethread
+      \ syncscope
       \ source_filename
+      \ speculatable
       \ spir_func
       \ spir_kernel
       \ sret
       \ ssp
       \ sspreq
       \ sspstrong
+      \ strictfp
       \ swiftcc
+      \ swiftself
       \ tail
       \ target
       \ thread_local
@@ -156,7 +165,7 @@ syn keyword llvmKeyword
       \ within
       \ writeonly
       \ x86_64_sysvcc
-      \ x86_64_win64cc
+      \ win64cc
       \ x86_fastcallcc
       \ x86_stdcallcc
       \ x86_thiscallcc
@@ -193,6 +202,7 @@ syn match  llvmSpecialComment /;\s*PR\d*\s*$/
 syn match  llvmSpecialComment /;\s*REQUIRES:.*$/
 syn match  llvmSpecialComment /;\s*RUN:.*$/
 syn match  llvmSpecialComment /;\s*CHECK:.*$/
+syn match  llvmSpecialComment "\v;\s*CHECK-(NEXT|NOT|DAG|SAME|LABEL):.*$"
 syn match  llvmSpecialComment /;\s*XFAIL:.*$/
 
 if version >= 508 || !exists("did_c_syn_inits")

@@ -1,9 +1,8 @@
 //===-- GlobalDCE.h - DCE unreachable internal functions ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,6 +17,8 @@
 #ifndef LLVM_TRANSFORMS_IPO_GLOBALDCE_H
 #define LLVM_TRANSFORMS_IPO_GLOBALDCE_H
 
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 #include <unordered_map>
@@ -31,14 +32,23 @@ public:
 
 private:
   SmallPtrSet<GlobalValue*, 32> AliveGlobals;
-  SmallPtrSet<Constant *, 8> SeenConstants;
+
+  /// Global -> Global that uses this global.
+  DenseMap<GlobalValue *, SmallPtrSet<GlobalValue *, 4>> GVDependencies;
+
+  /// Constant -> Globals that use this global cache.
+  std::unordered_map<Constant *, SmallPtrSet<GlobalValue *, 8>>
+      ConstantDependenciesCache;
+
+  /// Comdat -> Globals in that Comdat section.
   std::unordered_multimap<Comdat *, GlobalValue *> ComdatMembers;
 
-  /// Mark the specific global value as needed, and
-  /// recursively mark anything that it uses as also needed.
-  void GlobalIsNeeded(GlobalValue *GV);
-  void MarkUsedGlobalsAsNeeded(Constant *C);
+  void UpdateGVDependencies(GlobalValue &GV);
+  void MarkLive(GlobalValue &GV,
+                SmallVectorImpl<GlobalValue *> *Updates = nullptr);
   bool RemoveUnusedGlobalValue(GlobalValue &GV);
+
+  void ComputeDependencies(Value *V, SmallPtrSetImpl<GlobalValue *> &U);
 };
 
 }

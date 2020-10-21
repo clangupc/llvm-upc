@@ -1,16 +1,15 @@
 //===- unittest/Support/ProcessTest.cpp -----------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Process.h"
 #include "gtest/gtest.h"
 
-#ifdef LLVM_ON_WIN32
+#ifdef _WIN32
 #include <windows.h>
 #endif
 
@@ -45,7 +44,15 @@ TEST(ProcessTest, None) {
 }
 #endif
 
-#ifdef LLVM_ON_WIN32
+#ifdef _WIN32
+
+TEST(ProcessTest, EmptyVal) {
+  SetEnvironmentVariableA("__LLVM_TEST_ENVIRON_VAR__", "");
+  Optional<std::string> val(Process::GetEnv("__LLVM_TEST_ENVIRON_VAR__"));
+  EXPECT_TRUE(val.hasValue());
+  EXPECT_STREQ("", val->c_str());
+}
+
 TEST(ProcessTest, Wchar) {
   SetEnvironmentVariableW(L"__LLVM_TEST_ENVIRON_VAR__", L"abcdefghijklmnopqrs");
   Optional<std::string> val(Process::GetEnv("__LLVM_TEST_ENVIRON_VAR__"));

@@ -2,8 +2,8 @@
 // (@foo:  alias <type> @bar) generate the correct entries in the symbol table.
 // They should be identical except for the name.
 
-// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | llvm-readobj -t | FileCheck %s
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | llvm-readobj -t | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | llvm-readobj --symbols | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | llvm-readobj --symbols | FileCheck %s
 
 	.def	 _foo;
 	.scl	2;
@@ -13,7 +13,7 @@
 	.globl	_foo
 	.align	16, 0x90
 _foo:                                   # @foo
-# BB#0:                                 # %entry
+# %bb.0:                                # %entry
 	ret
 
 	.data

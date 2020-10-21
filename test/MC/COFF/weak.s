@@ -1,8 +1,8 @@
 // This tests that default-null weak symbols (a GNU extension) are created
 // properly via the .weak directive.
 
-// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | llvm-readobj -t | FileCheck %s
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | llvm-readobj -t | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple i686-pc-win32 %s | llvm-readobj --symbols | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | llvm-readobj --symbols | FileCheck %s
 
     .def    _main;
     .scl    2;
@@ -12,12 +12,12 @@
     .globl  _main
     .align  16, 0x90
 _main:                                  # @main
-# BB#0:                                 # %entry
+# %bb.0:                                # %entry
     subl    $4, %esp
     movl    $_test_weak, %eax
     testl   %eax, %eax
     je      LBB0_2
-# BB#1:                                 # %if.then
+# %bb.1:                                # %if.then
     call    _test_weak
     movl    $1, %eax
     addl    $4, %esp
@@ -54,7 +54,7 @@ LBB0_2:                                 # %return
 // CHECK-NEXT:   AuxSymbolCount: 1
 // CHECK-NEXT:   AuxWeakExternal {
 // CHECK-NEXT:     Linked: .weak._test_weak.default
-// CHECK-NEXT:      Search: Library
+// CHECK-NEXT:      Search: Alias
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 
@@ -78,7 +78,7 @@ LBB0_2:                                 # %return
 // CHECK-NEXT:   AuxSymbolCount: 1
 // CHECK-NEXT:   AuxWeakExternal {
 // CHECK-NEXT:     Linked: .weak._test_weak_alias.default
-// CHECK-NEXT:      Search: Library
+// CHECK-NEXT:      Search: Alias
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 

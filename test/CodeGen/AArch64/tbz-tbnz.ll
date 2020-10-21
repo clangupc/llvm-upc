@@ -1,4 +1,4 @@
-; RUN: llc < %s -O1 -mtriple=aarch64-eabi | FileCheck %s
+; RUN: llc < %s -O1 -mtriple=aarch64-eabi -aarch64-enable-cond-br-tune=false | FileCheck %s
 
 declare void @t()
 
@@ -10,7 +10,7 @@ entry:
   br i1 %cmp, label %if.then, label %if.end
 
 ; CHECK: sub [[CMP:w[0-9]+]], w0, #12
-; CHECK: tbz [[CMP]], #31
+; CHECK: tbnz [[CMP]], #31
 
 if.then:
   call void @t()
@@ -28,7 +28,7 @@ entry:
   br i1 %cmp, label %if.then, label %if.end
 
 ; CHECK: sub [[CMP:x[0-9]+]], x0, #12
-; CHECK: tbz [[CMP]], #63
+; CHECK: tbnz [[CMP]], #63
 
 if.then:
   call void @t()
@@ -118,7 +118,7 @@ entry:
   br i1 %cmp, label %if.then, label %if.end
 
 ; CHECK: sub [[CMP:w[0-9]+]], w0, #12
-; CHECK: tbz [[CMP]], #31
+; CHECK: tbnz [[CMP]], #31
 
 if.then:
   call void @t()
@@ -178,7 +178,7 @@ define void @test9(i64 %val1) {
   br i1 %tst, label %if.then, label %if.end
 
 ; CHECK-NOT: cmp
-; CHECK: tbz x0, #63
+; CHECK: tbnz x0, #63
 
 if.then:
   call void @t()
@@ -194,7 +194,7 @@ define void @test10(i64 %val1) {
   br i1 %tst, label %if.then, label %if.end
 
 ; CHECK-NOT: cmp
-; CHECK: tbz x0, #63
+; CHECK: tbnz x0, #63
 
 if.then:
   call void @t()
@@ -209,7 +209,7 @@ define void @test11(i64 %val1, i64* %ptr) {
 
 ; CHECK: ldr [[CMP:x[0-9]+]], [x1]
 ; CHECK-NOT: cmp
-; CHECK: tbz [[CMP]], #63
+; CHECK: tbnz [[CMP]], #63
 
   %val = load i64, i64* %ptr
   %tst = icmp slt i64 %val, 0
@@ -229,7 +229,7 @@ define void @test12(i64 %val1) {
   br i1 %tst, label %if.then, label %if.end
 
 ; CHECK-NOT: cmp
-; CHECK: tbz x0, #63
+; CHECK: tbnz x0, #63
 
 if.then:
   call void @t()
@@ -247,7 +247,7 @@ define void @test13(i64 %val1, i64 %val2) {
 
 ; CHECK: orr [[CMP:x[0-9]+]], x0, x1
 ; CHECK-NOT: cmp
-; CHECK: tbz [[CMP]], #63
+; CHECK: tbnz [[CMP]], #63
 
 if.then:
   call void @t()
@@ -359,3 +359,29 @@ then:
 end:
   ret void
 }
+
+define void @test20(i32 %in) nounwind {
+; CHECK-LABEL: test20:
+; CHECK:       // %bb.0:
+; CHECK-NEXT:    tbnz w0, #2, .LBB19_2
+; CHECK-NEXT:  // %bb.1: // %then
+; CHECK-NEXT:    str x30, [sp, #-16]! // 8-byte Folded Spill
+; CHECK-NEXT:    bl t
+; CHECK-NEXT:    ldr x30, [sp], #16 // 8-byte Folded Reload
+; CHECK-NEXT:  .LBB19_2: // %end
+; CHECK-NEXT:    ret
+  %shl = shl i32 %in, 3
+  %zext = zext i32 %shl to i64
+  %and = and i64 %zext, 32
+  %cond = icmp eq i64 %and, 0
+  br i1 %cond, label %then, label %end
+
+
+then:
+  call void @t()
+  br label %end
+
+end:
+  ret void
+}
+

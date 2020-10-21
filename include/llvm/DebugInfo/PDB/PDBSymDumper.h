@@ -1,9 +1,8 @@
 //===- PDBSymDumper.h - base interface for PDB symbol dumper *- C++ -----*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -53,6 +52,22 @@ public:
   virtual void dump(const PDBSymbolTypeVTableShape &Symbol);
   virtual void dump(const PDBSymbolUnknown &Symbol);
   virtual void dump(const PDBSymbolUsingNamespace &Symbol);
+
+  virtual void dumpRight(const PDBSymbolTypeArray &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeBaseClass &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeBuiltin &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeCustom &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeDimension &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeEnum &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeFriend &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeFunctionArg &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeFunctionSig &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeManaged &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypePointer &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeTypedef &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeUDT &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeVTable &Symbol) {}
+  virtual void dumpRight(const PDBSymbolTypeVTableShape &Symbol) {}
 
 private:
   bool RequireImpl;

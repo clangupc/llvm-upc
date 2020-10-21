@@ -1,4 +1,4 @@
-// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -s | FileCheck %s
+// RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - | llvm-readobj -S | FileCheck %s
 
 // Test that we don't regress on the size of the line info section. We used
 // to handle negative line diffs incorrectly which manifested as very
@@ -15,7 +15,7 @@
 // CHECK-NEXT:     ]
 // CHECK-NEXT:     Address: 0x0
 // CHECK-NEXT:     Offset:
-// CHECK-NEXT:     Size: 61
+// CHECK-NEXT:     Size: 62
 // CHECK-NEXT:     Link: 0
 // CHECK-NEXT:     Info: 0
 // CHECK-NEXT:     AddressAlignment: 1

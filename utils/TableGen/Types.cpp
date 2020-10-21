@@ -1,9 +1,8 @@
 //===- Types.cpp - Helper for the selection of C++ data types. ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -40,5 +39,6 @@ const char *llvm::getMinimalTypeForEnumBitfield(uint64_t Size) {
   uint64_t MaxIndex = Size;
   if (MaxIndex > 0)
     MaxIndex--;
+  assert(MaxIndex <= 64 && "Too many bits");
   return getMinimalTypeForRange(1ULL << MaxIndex);
 }

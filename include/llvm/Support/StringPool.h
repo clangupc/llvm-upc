@@ -1,9 +1,8 @@
-//===-- StringPool.h - Interned string pool ---------------------*- C++ -*-===//
+//===- StringPool.h - Interned string pool ----------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -30,6 +29,7 @@
 #define LLVM_SUPPORT_STRINGPOOL_H
 
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringRef.h"
 #include <cassert>
 
 namespace llvm {
@@ -43,17 +43,17 @@ namespace llvm {
     /// PooledString - This is the value of an entry in the pool's interning
     /// table.
     struct PooledString {
-      StringPool *Pool;  ///< So the string can remove itself.
-      unsigned Refcount; ///< Number of referencing PooledStringPtrs.
+      StringPool *Pool = nullptr;  ///< So the string can remove itself.
+      unsigned Refcount = 0;       ///< Number of referencing PooledStringPtrs.
 
     public:
-      PooledString() : Pool(nullptr), Refcount(0) { }
+      PooledString() = default;
     };
 
     friend class PooledStringPtr;
 
-    typedef StringMap<PooledString> table_t;
-    typedef StringMapEntry<PooledString> entry_t;
+    using table_t = StringMap<PooledString>;
+    using entry_t = StringMapEntry<PooledString>;
     table_t InternTable;
 
   public:
@@ -76,11 +76,12 @@ namespace llvm {
   /// a single pointer, but it does have reference-counting overhead when
   /// copied.
   class PooledStringPtr {
-    typedef StringPool::entry_t entry_t;
-    entry_t *S;
+    using entry_t = StringPool::entry_t;
+
+    entry_t *S = nullptr;
 
   public:
-    PooledStringPtr() : S(nullptr) {}
+    PooledStringPtr() = default;
 
     explicit PooledStringPtr(entry_t *E) : S(E) {
       if (S) ++S->getValue().Refcount;
@@ -133,6 +134,6 @@ namespace llvm {
     inline bool operator!=(const PooledStringPtr &That) const { return S != That.S; }
   };
 
-} // End llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_SUPPORT_STRINGPOOL_H

@@ -1,27 +1,29 @@
 //===- lib/MC/MCSection.cpp - Machine Code Section Representation ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCSection.h"
-#include "llvm/MC/MCAssembler.h"
-#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCFragment.h"
 #include "llvm/MC/MCSymbol.h"
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-using namespace llvm;
+#include <algorithm>
+#include <utility>
 
-//===----------------------------------------------------------------------===//
-// MCSection
-//===----------------------------------------------------------------------===//
+using namespace llvm;
 
 MCSection::MCSection(SectionVariant V, SectionKind K, MCSymbol *Begin)
     : Begin(Begin), BundleGroupBeforeFirstInst(false), HasInstructions(false),
-      IsRegistered(false), DummyFragment(this), Variant(V), Kind(K) {}
+      HasData(false), IsRegistered(false), DummyFragment(this), Variant(V),
+      Kind(K) {}
 
 MCSymbol *MCSection::getEndSymbol(MCContext &Ctx) {
   if (!End)
@@ -31,8 +33,7 @@ MCSymbol *MCSection::getEndSymbol(MCContext &Ctx) {
 
 bool MCSection::hasEnded() const { return End && End->isInSection(); }
 
-MCSection::~MCSection() {
-}
+MCSection::~MCSection() = default;
 
 void MCSection::setBundleLockState(BundleLockStateType NewState) {
   if (NewState == NotBundleLocked) {
@@ -85,8 +86,9 @@ MCSection::getSubsectionInsertionPoint(unsigned Subsection) {
   return IP;
 }
 
-LLVM_DUMP_METHOD void MCSection::dump() {
-  raw_ostream &OS = llvm::errs();
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void MCSection::dump() const {
+  raw_ostream &OS = errs();
 
   OS << "<MCSection";
   OS << " Fragments:[\n      ";
@@ -97,3 +99,4 @@ LLVM_DUMP_METHOD void MCSection::dump() {
   }
   OS << "]>";
 }
+#endif

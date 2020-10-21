@@ -1,9 +1,8 @@
 //===- CoroCleanup.cpp - Coroutine Cleanup Pass ---------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 // This pass lowers all remaining coroutine intrinsics.
@@ -50,7 +49,7 @@ static void lowerSubFn(IRBuilder<> &Builder, CoroSubFnInst *SubFn) {
   Builder.SetInsertPoint(SubFn);
   auto *FramePtr = Builder.CreateBitCast(FrameRaw, FramePtrTy);
   auto *Gep = Builder.CreateConstInBoundsGEP2_32(FrameTy, FramePtr, 0, Index);
-  auto *Load = Builder.CreateLoad(Gep);
+  auto *Load = Builder.CreateLoad(FrameTy->getElementType(Index), Gep);
 
   SubFn->replaceAllUsesWith(Load);
 }
@@ -101,7 +100,9 @@ namespace {
 struct CoroCleanup : FunctionPass {
   static char ID; // Pass identification, replacement for typeid
 
-  CoroCleanup() : FunctionPass(ID) {}
+  CoroCleanup() : FunctionPass(ID) {
+    initializeCoroCleanupPass(*PassRegistry::getPassRegistry());
+  }
 
   std::unique_ptr<Lowerer> L;
 
@@ -124,6 +125,7 @@ struct CoroCleanup : FunctionPass {
     if (!L)
       AU.setPreservesAll();
   }
+  StringRef getPassName() const override { return "Coroutine Cleanup"; }
 };
 }
 

@@ -1,9 +1,8 @@
 //===- MachOUniversal.h - Mach-O universal binaries -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,10 +15,10 @@
 
 #include "llvm/ADT/Triple.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/MachO.h"
-#include "llvm/Support/MachO.h"
 
 namespace llvm {
 class StringRef;
@@ -34,9 +33,9 @@ class MachOUniversalBinary : public Binary {
 public:
   class ObjectForArch {
     const MachOUniversalBinary *Parent;
-    /// \brief Index of object in the universal binary.
+    /// Index of object in the universal binary.
     uint32_t Index;
-    /// \brief Descriptor of the object.
+    /// Descriptor of the object.
     MachO::fat_arch Header;
     MachO::fat_arch_64 Header64;
 
@@ -154,7 +153,7 @@ public:
   uint32_t getNumberOfObjects() const { return NumberOfObjects; }
 
   // Cast methods.
-  static inline bool classof(Binary const *V) {
+  static bool classof(Binary const *V) {
     return V->isMachOUniversalBinary();
   }
 

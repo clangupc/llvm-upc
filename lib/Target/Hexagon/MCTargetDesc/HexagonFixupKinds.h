@@ -1,9 +1,8 @@
 //===-- HexagonFixupKinds.h - Hexagon Specific Fixup Entries --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -111,6 +110,11 @@ enum Fixups {
   fixup_Hexagon_TPREL_16_X,
   fixup_Hexagon_TPREL_11_X,
   fixup_Hexagon_23_REG,
+  fixup_Hexagon_27_REG,
+  fixup_Hexagon_GD_PLT_B22_PCREL_X,
+  fixup_Hexagon_GD_PLT_B32_PCREL_X,
+  fixup_Hexagon_LD_PLT_B22_PCREL_X,
+  fixup_Hexagon_LD_PLT_B32_PCREL_X,
 
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind

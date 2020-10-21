@@ -1,9 +1,8 @@
 //===-- llvm-lto2: test harness for the resolution-based LTO interface ----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,17 +15,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/LTO/Caching.h"
-#include "llvm/CodeGen/CommandFlags.h"
+#include "llvm/Bitcode/BitcodeReader.h"
+#include "llvm/CodeGen/CommandFlags.inc"
 #include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/LTO/Caching.h"
 #include "llvm/LTO/LTO.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/Threading.h"
 
 using namespace llvm;
 using namespace lto;
-using namespace object;
 
 static cl::opt<char>
     OptLevel("O", cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] "
@@ -90,11 +91,57 @@ static cl::opt<std::string> DefaultTriple(
     cl::desc(
         "Replace unspecified target triples in input files with this triple"));
 
+static cl::opt<bool> RemarksWithHotness(
+    "pass-remarks-with-hotness",
+    cl::desc("With PGO, include profile count in optimization remarks"),
+    cl::Hidden);
+
+static cl::opt<std::string>
+    RemarksFilename("pass-remarks-output",
+                    cl::desc("Output filename for pass remarks"),
+                    cl::value_desc("filename"));
+
+static cl::opt<std::string>
+    RemarksPasses("pass-remarks-filter",
+                  cl::desc("Only record optimization remarks from passes whose "
+                           "names match the given regular expression"),
+                  cl::value_desc("regex"));
+
+static cl::opt<std::string> RemarksFormat(
+    "pass-remarks-format",
+    cl::desc("The format used for serializing remarks (default: YAML)"),
+    cl::value_desc("format"), cl::init("yaml"));
+
+static cl::opt<std::string>
+    SamplePGOFile("lto-sample-profile-file",
+                  cl::desc("Specify a SamplePGO profile file"));
+
+static cl::opt<std::string>
+    CSPGOFile("lto-cspgo-profile-file",
+              cl::desc("Specify a context sensitive PGO profile file"));
+
+static cl::opt<bool>
+    RunCSIRInstr("lto-cspgo-gen",
+                 cl::desc("Run PGO context sensitive IR instrumentation"),
+                 cl::init(false), cl::Hidden);
+
+static cl::opt<bool>
+    UseNewPM("use-new-pm",
+             cl::desc("Run LTO passes using the new pass manager"),
+             cl::init(false), cl::Hidden);
+
+static cl::opt<bool>
+    DebugPassManager("debug-pass-manager", cl::init(false), cl::Hidden,
+                     cl::desc("Print pass management debugging information"));
+
+static cl::opt<std::string>
+    StatsFile("stats-file", cl::desc("Filename to write statistics to"));
+
 static void check(Error E, std::string Msg) {
   if (!E)
     return;
   handleAllErrors(std::move(E), [&](ErrorInfoBase &EIB) {
-    errs() << "llvm-lto: " << Msg << ": " << EIB.message().c_str() << '\n';
+    errs() << "llvm-lto2: " << Msg << ": " << EIB.message().c_str() << '\n';
   });
   exit(1);
 }
@@ -117,12 +164,12 @@ template <typename T> static T check(ErrorOr<T> E, std::string Msg) {
   return T();
 }
 
-int main(int argc, char **argv) {
-  InitializeAllTargets();
-  InitializeAllTargetMCs();
-  InitializeAllAsmPrinters();
-  InitializeAllAsmParsers();
+static int usage() {
+  errs() << "Available subcommands: dump-symtab run\n";
+  return 1;
+}
 
+static int run(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv, "Resolution-based LTO test harness");
 
   // FIXME: Workaround PR30396 which means that a symbol can appear
@@ -148,9 +195,13 @@ int main(int argc, char **argv) {
         Res.FinalDefinitionInLinkageUnit = true;
       else if (C == 'x')
         Res.VisibleToRegularObj = true;
-      else
+      else if (C == 'r')
+        Res.LinkerRedefined = true;
+      else {
         llvm::errs() << "invalid character " << C << " in resolution: " << R
                      << '\n';
+        return 1;
+      }
     }
     CommandLineResolutions[{FileName, SymbolName}].push_back(Res);
   }
@@ -162,7 +213,8 @@ int main(int argc, char **argv) {
     DiagnosticPrinterRawOStream DP(errs());
     DI.print(DP);
     errs() << '\n';
-    exit(1);
+    if (DI.getSeverity() == DS_Error)
+      exit(1);
   };
 
   Conf.CPU = MCPU;
@@ -170,17 +222,30 @@ int main(int argc, char **argv) {
   Conf.MAttrs = MAttrs;
   if (auto RM = getRelocModel())
     Conf.RelocModel = *RM;
-  Conf.CodeModel = CMModel;
+  Conf.CodeModel = getCodeModel();
+
+  Conf.DebugPassManager = DebugPassManager;
 
   if (SaveTemps)
     check(Conf.addSaveTemps(OutputFilename + "."),
           "Config::addSaveTemps failed");
+
+  // Optimization remarks.
+  Conf.RemarksFilename = RemarksFilename;
+  Conf.RemarksPasses = RemarksPasses;
+  Conf.RemarksWithHotness = RemarksWithHotness;
+  Conf.RemarksFormat = RemarksFormat;
+
+  Conf.SampleProfile = SamplePGOFile;
+  Conf.CSIRProfile = CSPGOFile;
+  Conf.RunCSIRInstr = RunCSIRInstr;
 
   // Run a custom pipeline, if asked for.
   Conf.OptPipeline = OptPipeline;
   Conf.AAPipeline = AAPipeline;
 
   Conf.OptLevel = OptLevel - '0';
+  Conf.UseNewPM = UseNewPM;
   switch (CGOptLevel) {
   case '0':
     Conf.CGOptLevel = CodeGenOpt::None;
@@ -199,12 +264,20 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  if (FileType.getNumOccurrences())
+    Conf.CGFileType = FileType;
+
   Conf.OverrideTriple = OverrideTriple;
   Conf.DefaultTriple = DefaultTriple;
+  Conf.StatsFile = StatsFile;
 
   ThinBackend Backend;
   if (ThinLTODistributedIndexes)
-    Backend = createWriteIndexesThinBackend("", "", true, "");
+    Backend = createWriteIndexesThinBackend(/* OldPrefix */ "",
+                                            /* NewPrefix */ "",
+                                            /* ShouldEmitImportsFiles */ true,
+                                            /* LinkedObjectsFile */ nullptr,
+                                            /* OnWrite */ {});
   else
     Backend = createInProcessThinBackend(Threads);
   LTO Lto(std::move(Conf), std::move(Backend));
@@ -257,18 +330,114 @@ int main(int argc, char **argv) {
     return llvm::make_unique<lto::NativeObjectStream>(std::move(S));
   };
 
-  auto AddFile = [&](size_t Task, StringRef Path) {
-    auto ReloadedBufferOrErr = MemoryBuffer::getFile(Path);
-    if (auto EC = ReloadedBufferOrErr.getError())
-      report_fatal_error(Twine("Can't reload cached file '") + Path + "': " +
-                         EC.message() + "\n");
-
-    *AddStream(Task)->OS << (*ReloadedBufferOrErr)->getBuffer();
+  auto AddBuffer = [&](size_t Task, std::unique_ptr<MemoryBuffer> MB) {
+    *AddStream(Task)->OS << MB->getBuffer();
   };
 
   NativeObjectCache Cache;
   if (!CacheDir.empty())
-    Cache = localCache(CacheDir, AddFile);
+    Cache = check(localCache(CacheDir, AddBuffer), "failed to create cache");
 
   check(Lto.run(AddStream, Cache), "LTO::run failed");
+  return 0;
+}
+
+static int dumpSymtab(int argc, char **argv) {
+  for (StringRef F : make_range(argv + 1, argv + argc)) {
+    std::unique_ptr<MemoryBuffer> MB = check(MemoryBuffer::getFile(F), F);
+    BitcodeFileContents BFC = check(getBitcodeFileContents(*MB), F);
+
+    if (BFC.Symtab.size() >= sizeof(irsymtab::storage::Header)) {
+      auto *Hdr = reinterpret_cast<const irsymtab::storage::Header *>(
+          BFC.Symtab.data());
+      outs() << "version: " << Hdr->Version << '\n';
+      if (Hdr->Version == irsymtab::storage::Header::kCurrentVersion)
+        outs() << "producer: " << Hdr->Producer.get(BFC.StrtabForSymtab)
+               << '\n';
+    }
+
+    std::unique_ptr<InputFile> Input =
+        check(InputFile::create(MB->getMemBufferRef()), F);
+
+    outs() << "target triple: " << Input->getTargetTriple() << '\n';
+    Triple TT(Input->getTargetTriple());
+
+    outs() << "source filename: " << Input->getSourceFileName() << '\n';
+
+    if (TT.isOSBinFormatCOFF())
+      outs() << "linker opts: " << Input->getCOFFLinkerOpts() << '\n';
+
+    if (TT.isOSBinFormatELF()) {
+      outs() << "dependent libraries:";
+      for (auto L : Input->getDependentLibraries())
+        outs() << " \"" << L << "\"";
+      outs() << '\n';
+    }
+
+    std::vector<StringRef> ComdatTable = Input->getComdatTable();
+    for (const InputFile::Symbol &Sym : Input->symbols()) {
+      switch (Sym.getVisibility()) {
+      case GlobalValue::HiddenVisibility:
+        outs() << 'H';
+        break;
+      case GlobalValue::ProtectedVisibility:
+        outs() << 'P';
+        break;
+      case GlobalValue::DefaultVisibility:
+        outs() << 'D';
+        break;
+      }
+
+      auto PrintBool = [&](char C, bool B) { outs() << (B ? C : '-'); };
+      PrintBool('U', Sym.isUndefined());
+      PrintBool('C', Sym.isCommon());
+      PrintBool('W', Sym.isWeak());
+      PrintBool('I', Sym.isIndirect());
+      PrintBool('O', Sym.canBeOmittedFromSymbolTable());
+      PrintBool('T', Sym.isTLS());
+      PrintBool('X', Sym.isExecutable());
+      outs() << ' ' << Sym.getName() << '\n';
+
+      if (Sym.isCommon())
+        outs() << "         size " << Sym.getCommonSize() << " align "
+               << Sym.getCommonAlignment() << '\n';
+
+      int Comdat = Sym.getComdatIndex();
+      if (Comdat != -1)
+        outs() << "         comdat " << ComdatTable[Comdat] << '\n';
+
+      if (TT.isOSBinFormatCOFF() && Sym.isWeak() && Sym.isIndirect())
+        outs() << "         fallback " << Sym.getCOFFWeakExternalFallback() << '\n';
+
+      if (!Sym.getSectionName().empty())
+        outs() << "         section " << Sym.getSectionName() << "\n";
+    }
+
+    outs() << '\n';
+  }
+
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  InitLLVM X(argc, argv);
+  InitializeAllTargets();
+  InitializeAllTargetMCs();
+  InitializeAllAsmPrinters();
+  InitializeAllAsmParsers();
+
+  // FIXME: This should use llvm::cl subcommands, but it isn't currently
+  // possible to pass an argument not associated with a subcommand to a
+  // subcommand (e.g. -use-new-pm).
+  if (argc < 2)
+    return usage();
+
+  StringRef Subcommand = argv[1];
+  // Ensure that argv[0] is correct after adjusting argv/argc.
+  argv[1] = argv[0];
+  if (Subcommand == "dump-symtab")
+    return dumpSymtab(argc - 1, argv + 1);
+  if (Subcommand == "run")
+    return run(argc - 1, argv + 1);
+  return usage();
 }

@@ -1,42 +1,61 @@
 //===- llvm/unittest/Support/LEB128Test.cpp - LEB128 function tests -------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#include "gtest/gtest.h"
-#include "llvm/Support/DataTypes.h"
 #include "llvm/Support/LEB128.h"
+#include "llvm/Support/DataTypes.h"
 #include "llvm/Support/raw_ostream.h"
+#include "gtest/gtest.h"
 #include <string>
 using namespace llvm;
 
 namespace {
 
 TEST(LEB128Test, EncodeSLEB128) {
-#define EXPECT_SLEB128_EQ(EXPECTED, VALUE) \
+#define EXPECT_SLEB128_EQ(EXPECTED, VALUE, PAD) \
   do { \
-    /* encodeSLEB128(uint64_t, raw_ostream &) */ \
     std::string Expected(EXPECTED, sizeof(EXPECTED) - 1); \
-    std::string Actual; \
-    raw_string_ostream Stream(Actual); \
-    encodeSLEB128(VALUE, Stream); \
+    \
+    /* encodeSLEB128(uint64_t, raw_ostream &, unsigned) */ \
+    std::string Actual1; \
+    raw_string_ostream Stream(Actual1); \
+    encodeSLEB128(VALUE, Stream, PAD); \
     Stream.flush(); \
-    EXPECT_EQ(Expected, Actual); \
+    EXPECT_EQ(Expected, Actual1); \
+    \
+    /* encodeSLEB128(uint64_t, uint8_t *, unsigned) */ \
+    uint8_t Buffer[32]; \
+    unsigned Size = encodeSLEB128(VALUE, Buffer, PAD); \
+    std::string Actual2(reinterpret_cast<const char *>(Buffer), Size); \
+    EXPECT_EQ(Expected, Actual2); \
   } while (0)
 
   // Encode SLEB128
-  EXPECT_SLEB128_EQ("\x00", 0);
-  EXPECT_SLEB128_EQ("\x01", 1);
-  EXPECT_SLEB128_EQ("\x7f", -1);
-  EXPECT_SLEB128_EQ("\x3f", 63);
-  EXPECT_SLEB128_EQ("\x41", -63);
-  EXPECT_SLEB128_EQ("\x40", -64);
-  EXPECT_SLEB128_EQ("\xbf\x7f", -65);
-  EXPECT_SLEB128_EQ("\xc0\x00", 64);
+  EXPECT_SLEB128_EQ("\x00", 0, 0);
+  EXPECT_SLEB128_EQ("\x01", 1, 0);
+  EXPECT_SLEB128_EQ("\x7f", -1, 0);
+  EXPECT_SLEB128_EQ("\x3f", 63, 0);
+  EXPECT_SLEB128_EQ("\x41", -63, 0);
+  EXPECT_SLEB128_EQ("\x40", -64, 0);
+  EXPECT_SLEB128_EQ("\xbf\x7f", -65, 0);
+  EXPECT_SLEB128_EQ("\xc0\x00", 64, 0);
+
+  // Encode SLEB128 with some extra padding bytes
+  EXPECT_SLEB128_EQ("\x80\x00", 0, 2);
+  EXPECT_SLEB128_EQ("\x80\x80\x00", 0, 3);
+  EXPECT_SLEB128_EQ("\xff\x80\x00", 0x7f, 3);
+  EXPECT_SLEB128_EQ("\xff\x80\x80\x00", 0x7f, 4);
+  EXPECT_SLEB128_EQ("\x80\x81\x00", 0x80, 3);
+  EXPECT_SLEB128_EQ("\x80\x81\x80\x00", 0x80, 4);
+  EXPECT_SLEB128_EQ("\xc0\x7f", -0x40, 2);
+
+  EXPECT_SLEB128_EQ("\xc0\xff\x7f", -0x40, 3);
+  EXPECT_SLEB128_EQ("\x80\xff\x7f", -0x80, 3);
+  EXPECT_SLEB128_EQ("\x80\xff\xff\x7f", -0x80, 4);
 
 #undef EXPECT_SLEB128_EQ
 }
@@ -74,12 +93,12 @@ TEST(LEB128Test, EncodeULEB128) {
   EXPECT_ULEB128_EQ("\x81\x02", 0x101, 0);
 
   // Encode ULEB128 with some extra padding bytes
-  EXPECT_ULEB128_EQ("\x80\x00", 0, 1);
-  EXPECT_ULEB128_EQ("\x80\x80\x00", 0, 2);
-  EXPECT_ULEB128_EQ("\xff\x00", 0x7f, 1);
-  EXPECT_ULEB128_EQ("\xff\x80\x00", 0x7f, 2);
-  EXPECT_ULEB128_EQ("\x80\x81\x00", 0x80, 1);
-  EXPECT_ULEB128_EQ("\x80\x81\x80\x00", 0x80, 2);
+  EXPECT_ULEB128_EQ("\x80\x00", 0, 2);
+  EXPECT_ULEB128_EQ("\x80\x80\x00", 0, 3);
+  EXPECT_ULEB128_EQ("\xff\x00", 0x7f, 2);
+  EXPECT_ULEB128_EQ("\xff\x80\x00", 0x7f, 3);
+  EXPECT_ULEB128_EQ("\x80\x81\x00", 0x80, 3);
+  EXPECT_ULEB128_EQ("\x80\x81\x80\x00", 0x80, 4);
 
 #undef EXPECT_ULEB128_EQ
 }

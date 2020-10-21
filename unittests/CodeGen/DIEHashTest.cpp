@@ -1,18 +1,17 @@
 //===- llvm/unittest/CodeGen/DIEHashTest.cpp ------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/DIE.h"
 #include "../lib/CodeGen/AsmPrinter/DIEHash.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/CodeGen/DIE.h"
 #include "llvm/CodeGen/DwarfStringPoolEntry.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Dwarf.h"
 #include "llvm/Support/Format.h"
 #include "gtest/gtest.h"
 
@@ -31,8 +30,8 @@ private:
 public:
   DIEString getString(StringRef S) {
     DwarfStringPoolEntry Entry = {nullptr, 1, 1};
-    return DIEString(
-        DwarfStringPoolEntryRef(*Pool.insert(std::make_pair(S, Entry)).first));
+    return DIEString(DwarfStringPoolEntryRef(
+        *Pool.insert(std::make_pair(S, Entry)).first, Entry.isIndexed()));
   }
 };
 

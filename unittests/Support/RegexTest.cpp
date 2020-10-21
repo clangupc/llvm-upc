@@ -1,9 +1,8 @@
 //===- llvm/unittest/Support/RegexTest.cpp - Regex tests --===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -169,6 +168,14 @@ TEST_F(RegexTest, MatchInvalid) {
   std::string Error;
   EXPECT_FALSE(r1.isValid(Error));
   EXPECT_FALSE(r1.match("X"));
+}
+
+// https://bugs.chromium.org/p/oss-fuzz/issues/detail?id=3727
+TEST_F(RegexTest, OssFuzz3727Regression) {
+  // Wrap in a StringRef so the NUL byte doesn't terminate the string
+  Regex r(StringRef("[[[=GS\x00[=][", 10));
+  std::string Error;
+  EXPECT_FALSE(r.isValid(Error));
 }
 
 }

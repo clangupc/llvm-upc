@@ -1,9 +1,8 @@
 //===-------------- PPCVSXCopy.cpp - VSX Copy Legalization ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PPC.h"
 #include "MCTargetDesc/PPCPredicates.h"
+#include "PPC.h"
 #include "PPCHazardRecognizers.h"
 #include "PPCInstrBuilder.h"
 #include "PPCInstrInfo.h"
@@ -36,10 +35,6 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "ppc-vsx-copy"
-
-namespace llvm {
-  void initializePPCVSXCopyPass(PassRegistry&);
-}
 
 namespace {
   // PPCVSXCopy pass - For copies between VSX registers and non-VSX registers
@@ -112,7 +107,7 @@ protected:
                   TII->get(TargetOpcode::SUBREG_TO_REG), NewVReg)
               .addImm(1) // add 1, not 0, because there is no implicit clearing
                          // of the high bits.
-              .addOperand(SrcMO)
+              .add(SrcMO)
               .addImm(PPC::sub_64);
 
           // The source of the original copy is now the new virtual register.
@@ -132,7 +127,7 @@ protected:
           unsigned NewVReg = MRI.createVirtualRegister(DstRC);
           BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(TargetOpcode::COPY),
                   NewVReg)
-              .addOperand(SrcMO);
+              .add(SrcMO);
 
           // Transform the original copy into a subregister extraction copy.
           SrcMO.setReg(NewVReg);

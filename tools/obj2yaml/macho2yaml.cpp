@@ -1,9 +1,8 @@
 //===------ macho2yaml.cpp - obj2yaml conversion tool -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -35,9 +34,9 @@ class MachODumper {
                        ArrayRef<uint8_t> OpcodeBuffer, bool Lazy = false);
   void dumpExportTrie(std::unique_ptr<MachOYAML::Object> &Y);
   void dumpSymbols(std::unique_ptr<MachOYAML::Object> &Y);
-  void dumpDebugAbbrev(DWARFContextInMemory &DCtx,
+  void dumpDebugAbbrev(DWARFContext &DCtx,
                        std::unique_ptr<MachOYAML::Object> &Y);
-  void dumpDebugStrings(DWARFContextInMemory &DCtx,
+  void dumpDebugStrings(DWARFContext &DCtx,
                         std::unique_ptr<MachOYAML::Object> &Y);
 
 public:
@@ -163,6 +162,23 @@ const char *MachODumper::processLoadCommandData<MachO::rpath_command>(
   return readString<MachO::rpath_command>(LC, LoadCmd);
 }
 
+template <>
+const char *MachODumper::processLoadCommandData<MachO::build_version_command>(
+    MachOYAML::LoadCommand &LC,
+    const llvm::object::MachOObjectFile::LoadCommandInfo &LoadCmd) {
+  auto Start = LoadCmd.Ptr + sizeof(MachO::build_version_command);
+  auto NTools = LC.Data.build_version_command_data.ntools;
+  for (unsigned i = 0; i < NTools; ++i) {
+    auto Curr = Start + i * sizeof(MachO::build_tool_version);
+    MachO::build_tool_version BV;
+    memcpy((void *)&BV, Curr, sizeof(MachO::build_tool_version));
+    if (Obj.isLittleEndian() != sys::IsLittleEndianHost)
+      MachO::swapStruct(BV);
+    LC.Tools.push_back(BV);
+  }
+  return Start + NTools * sizeof(MachO::build_tool_version);
+}
+
 Expected<std::unique_ptr<MachOYAML::Object>> MachODumper::dump() {
   auto Y = make_unique<MachOYAML::Object>();
   Y->IsLittleEndian = Obj.isLittleEndian();
@@ -170,8 +186,8 @@ Expected<std::unique_ptr<MachOYAML::Object>> MachODumper::dump() {
   dumpLoadCommands(Y);
   dumpLinkEdit(Y);
 
-  DWARFContextInMemory DICtx(Obj);
-  if (auto Err = dwarf2yaml(DICtx, Y->DWARF))
+  std::unique_ptr<DWARFContext> DICtx = DWARFContext::create(Obj);
+  if (auto Err = dwarf2yaml(*DICtx, Y->DWARF))
     return errorCodeToError(Err);
   return std::move(Y);
 }
@@ -199,7 +215,7 @@ void MachODumper::dumpLoadCommands(std::unique_ptr<MachOYAML::Object> &Y) {
         MachO::swapStruct(LC.Data.load_command_data);
       EndPtr = processLoadCommandData<MachO::load_command>(LC, LoadCmd);
       break;
-#include "llvm/Support/MachO.def"
+#include "llvm/BinaryFormat/MachO.def"
     }
     auto RemainingBytes = LoadCmd.C.cmdsize - (EndPtr - LoadCmd.Ptr);
     if (!std::all_of(EndPtr, &EndPtr[RemainingBytes],
@@ -244,6 +260,7 @@ void MachODumper::dumpRebaseOpcodes(std::unique_ptr<MachOYAML::Object> &Y) {
       ULEB = decodeULEB128(OpCode + 1, &Count);
       RebaseOp.ExtraData.push_back(ULEB);
       OpCode += Count;
+      LLVM_FALLTHROUGH;
     // Intentionally no break here -- This opcode has two ULEB values
     case MachO::REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB:
     case MachO::REBASE_OPCODE_ADD_ADDR_ULEB:
@@ -291,6 +308,7 @@ void MachODumper::dumpBindOpcodes(
       ULEB = decodeULEB128(OpCode + 1, &Count);
       BindOp.ULEBExtraData.push_back(ULEB);
       OpCode += Count;
+      LLVM_FALLTHROUGH;
     // Intentionally no break here -- this opcode has two ULEB values
 
     case MachO::BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB:

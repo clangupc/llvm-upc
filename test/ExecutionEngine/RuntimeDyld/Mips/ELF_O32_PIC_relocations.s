@@ -1,10 +1,11 @@
-# RUN: llvm-mc -triple=mipsel-unknown-linux -code-model=small -filetype=obj -o %T/test_ELF_O32.o %s
-# RUN: llc -mtriple=mipsel-unknown-linux -filetype=obj -o %T/test_ELF_ExternalFunction_O32.o %S/Inputs/ExternalFunction.ll
-# RUN: llvm-rtdyld -triple=mipsel-unknown-linux -verify -map-section test_ELF_O32.o,"<common symbols>"=0x7FF8 -map-section test_ELF_O32.o,.text=0x1000 -map-section test_ELF_ExternalFunction_O32.o,.text=0x10000 -check=%s %T/test_ELF_O32.o %T/test_ELF_ExternalFunction_O32.o
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: llvm-mc -triple=mipsel-unknown-linux -filetype=obj -o %t/test_ELF_O32.o %s
+# RUN: llc -mtriple=mipsel-unknown-linux -filetype=obj -o %t/test_ELF_ExternalFunction_O32.o %S/Inputs/ExternalFunction.ll
+# RUN: llvm-rtdyld -triple=mipsel-unknown-linux -verify -map-section test_ELF_O32.o,"<common symbols>"=0x7FF8 -map-section test_ELF_O32.o,.text=0x1000 -map-section test_ELF_ExternalFunction_O32.o,.text=0x10000 -check=%s %t/test_ELF_O32.o %t/test_ELF_ExternalFunction_O32.o
 
-# RUN: llvm-mc -triple=mips-unknown-linux -code-model=small -filetype=obj -o %T/test_ELF_O32.o %s
-# RUN: llc -mtriple=mips-unknown-linux -filetype=obj -o %/T/test_ELF_ExternalFunction_O32.o %S/Inputs/ExternalFunction.ll
-# RUN: llvm-rtdyld -triple=mips-unknown-linux -verify -map-section test_ELF_O32.o,"<common symbols>"=0x7FF8 -map-section test_ELF_O32.o,.text=0x1000 -map-section test_ELF_ExternalFunction_O32.o,.text=0x10000 -check=%s %T/test_ELF_O32.o %T/test_ELF_ExternalFunction_O32.o
+# RUN: llvm-mc -triple=mips-unknown-linux -filetype=obj -o %t/test_ELF_O32.o %s
+# RUN: llc -mtriple=mips-unknown-linux -filetype=obj -o %t/test_ELF_ExternalFunction_O32.o %S/Inputs/ExternalFunction.ll
+# RUN: llvm-rtdyld -triple=mips-unknown-linux -verify -map-section test_ELF_O32.o,"<common symbols>"=0x7FF8 -map-section test_ELF_O32.o,.text=0x1000 -map-section test_ELF_ExternalFunction_O32.o,.text=0x10000 -check=%s %t/test_ELF_O32.o %t/test_ELF_ExternalFunction_O32.o
 
         .data
 # rtdyld-check: *{4}R_MIPS_32 = foo[31:0]
@@ -33,7 +34,7 @@ tmp1:
 	.globl	bar
 	.type	bar,@function
 bar:
-# rtdyld-check:  decode_operand(R_MIPS_26, 0)[27:0] = stub_addr(test_ELF_O32.o, .text, foo)[27:0]
+# rtdyld-check:  decode_operand(R_MIPS_26, 0)[27:0] = stub_addr(test_ELF_O32.o/.text, foo)[27:0]
 # rtdyld-check:  decode_operand(R_MIPS_26, 0)[1:0] = 0
 R_MIPS_26:
 	j   foo

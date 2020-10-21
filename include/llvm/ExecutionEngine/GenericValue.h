@@ -1,9 +1,8 @@
-//===-- GenericValue.h - Represent any type of LLVM value -------*- C++ -*-===//
+//===- GenericValue.h - Represent any type of LLVM value --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,18 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #ifndef LLVM_EXECUTIONENGINE_GENERICVALUE_H
 #define LLVM_EXECUTIONENGINE_GENERICVALUE_H
 
 #include "llvm/ADT/APInt.h"
-#include "llvm/Support/DataTypes.h"
 #include <vector>
 
 namespace llvm {
 
-typedef void* PointerTy;
-class APInt;
+using PointerTy = void *;
 
 struct GenericValue {
   struct IntPair {
@@ -30,25 +26,29 @@ struct GenericValue {
     unsigned int second;
   };
   union {
-    double          DoubleVal;
-    float           FloatVal;
-    PointerTy       PointerVal;
-    struct IntPair  UIntPairVal;
-    unsigned char   Untyped[8];
+    double DoubleVal;
+    float FloatVal;
+    PointerTy PointerVal;
+    struct IntPair UIntPairVal;
+    unsigned char Untyped[8];
   };
-  APInt IntVal;   // also used for long doubles.
+  APInt IntVal; // also used for long doubles.
   // For aggregate data types.
   std::vector<GenericValue> AggregateVal;
 
   // to make code faster, set GenericValue to zero could be omitted, but it is
   // potentially can cause problems, since GenericValue to store garbage
   // instead of zero.
-  GenericValue() : IntVal(1,0) {UIntPairVal.first = 0; UIntPairVal.second = 0;}
-  explicit GenericValue(void *V) : PointerVal(V), IntVal(1,0) { }
+  GenericValue() : IntVal(1, 0) {
+    UIntPairVal.first = 0;
+    UIntPairVal.second = 0;
+  }
+  explicit GenericValue(void *V) : PointerVal(V), IntVal(1, 0) {}
 };
 
 inline GenericValue PTOGV(void *P) { return GenericValue(P); }
-inline void* GVTOP(const GenericValue &GV) { return GV.PointerVal; }
+inline void *GVTOP(const GenericValue &GV) { return GV.PointerVal; }
 
-} // End llvm namespace.
-#endif
+} // end namespace llvm
+
+#endif // LLVM_EXECUTIONENGINE_GENERICVALUE_H

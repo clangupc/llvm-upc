@@ -1,9 +1,8 @@
-//===- MachineBlockFrequencyInfo.h - MBB Frequency Analysis -*- C++ -*-----===//
+//===- MachineBlockFrequencyInfo.h - MBB Frequency Analysis -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,30 +16,38 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/Support/BlockFrequency.h"
-#include <climits>
+#include <cstdint>
+#include <memory>
 
 namespace llvm {
 
+template <class BlockT> class BlockFrequencyInfoImpl;
 class MachineBasicBlock;
 class MachineBranchProbabilityInfo;
-template <class BlockT> class BlockFrequencyInfoImpl;
+class MachineFunction;
+class MachineLoopInfo;
+class raw_ostream;
 
 /// MachineBlockFrequencyInfo pass uses BlockFrequencyInfoImpl implementation
 /// to estimate machine basic block frequencies.
 class MachineBlockFrequencyInfo : public MachineFunctionPass {
-  typedef BlockFrequencyInfoImpl<MachineBasicBlock> ImplType;
+  using ImplType = BlockFrequencyInfoImpl<MachineBasicBlock>;
   std::unique_ptr<ImplType> MBFI;
 
 public:
   static char ID;
 
   MachineBlockFrequencyInfo();
-
   ~MachineBlockFrequencyInfo() override;
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 
   bool runOnMachineFunction(MachineFunction &F) override;
+
+  /// calculate - compute block frequency info for the given function.
+  void calculate(const MachineFunction &F,
+                 const MachineBranchProbabilityInfo &MBPI,
+                 const MachineLoopInfo &MLI);
 
   void releaseMemory() override;
 
@@ -54,9 +61,11 @@ public:
   Optional<uint64_t> getBlockProfileCount(const MachineBasicBlock *MBB) const;
   Optional<uint64_t> getProfileCountFromFreq(uint64_t Freq) const;
 
+  bool isIrrLoopHeader(const MachineBasicBlock *MBB);
+
   const MachineFunction *getFunction() const;
   const MachineBranchProbabilityInfo *getMBPI() const;
-  void view() const;
+  void view(const Twine &Name, bool isSimple = true) const;
 
   // Print the block frequency Freq to OS using the current functions entry
   // frequency to convert freq into a relative decimal form.
@@ -68,9 +77,8 @@ public:
                               const MachineBasicBlock *MBB) const;
 
   uint64_t getEntryFreq() const;
-
 };
 
-}
+} // end namespace llvm
 
-#endif
+#endif // LLVM_CODEGEN_MACHINEBLOCKFREQUENCYINFO_H

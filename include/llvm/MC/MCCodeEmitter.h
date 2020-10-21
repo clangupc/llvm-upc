@@ -1,18 +1,16 @@
-//===-- llvm/MC/MCCodeEmitter.h - Instruction Encoding ----------*- C++ -*-===//
+//===- llvm/MC/MCCodeEmitter.h - Instruction Encoding -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_MC_MCCODEEMITTER_H
 #define LLVM_MC_MCCODEEMITTER_H
 
-#include "llvm/Support/Compiler.h"
-
 namespace llvm {
+
 class MCFixup;
 class MCInst;
 class MCSubtargetInfo;
@@ -21,14 +19,12 @@ template<typename T> class SmallVectorImpl;
 
 /// MCCodeEmitter - Generic instruction encoding interface.
 class MCCodeEmitter {
-private:
-  MCCodeEmitter(const MCCodeEmitter &) = delete;
-  void operator=(const MCCodeEmitter &) = delete;
-
 protected: // Can only create subclasses.
   MCCodeEmitter();
 
 public:
+  MCCodeEmitter(const MCCodeEmitter &) = delete;
+  MCCodeEmitter &operator=(const MCCodeEmitter &) = delete;
   virtual ~MCCodeEmitter();
 
   /// Lifetime management
@@ -41,6 +37,6 @@ public:
                                  const MCSubtargetInfo &STI) const = 0;
 };
 
-} // End llvm namespace
+} // end namespace llvm
 
-#endif
+#endif // LLVM_MC_MCCODEEMITTER_H

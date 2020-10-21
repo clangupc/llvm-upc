@@ -1,9 +1,8 @@
 //===-- ExtractGV.cpp - Global Value extraction pass ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,13 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/IPO.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Transforms/IPO.h"
 #include <algorithm>
 using namespace llvm;
 
@@ -53,18 +50,18 @@ static void makeVisible(GlobalValue &GV, bool Delete) {
 }
 
 namespace {
-  /// @brief A pass to extract specific functions and their dependencies.
+  /// A pass to extract specific global values and their dependencies.
   class GVExtractorPass : public ModulePass {
     SetVector<GlobalValue *> Named;
     bool deleteStuff;
   public:
     static char ID; // Pass identification, replacement for typeid
 
-    /// FunctionExtractorPass - If deleteFn is true, this pass deletes as the
-    /// specified function. Otherwise, it deletes as much of the module as
-    /// possible, except for the function specified.
-    ///
-    explicit GVExtractorPass(std::vector<GlobalValue*>& GVs, bool deleteS = true)
+    /// If deleteS is true, this pass deletes the specified global values.
+    /// Otherwise, it deletes as much of the module as possible, except for the
+    /// global values specified.
+    explicit GVExtractorPass(std::vector<GlobalValue*> &GVs,
+                             bool deleteS = true)
       : ModulePass(ID), Named(GVs.begin(), GVs.end()), deleteStuff(deleteS) {}
 
     bool runOnModule(Module &M) override {
@@ -137,6 +134,7 @@ namespace {
           llvm::Value *Declaration;
           if (FunctionType *FTy = dyn_cast<FunctionType>(Ty)) {
             Declaration = Function::Create(FTy, GlobalValue::ExternalLinkage,
+                                           CurI->getAddressSpace(),
                                            CurI->getName(), &M);
 
           } else {

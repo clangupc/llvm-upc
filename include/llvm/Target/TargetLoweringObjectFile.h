@@ -1,9 +1,8 @@
 //===-- llvm/Target/TargetLoweringObjectFile.h - Object Info ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,57 +11,63 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TARGET_TARGETLOWERINGOBJECTFILE_H
-#define LLVM_TARGET_TARGETLOWERINGOBJECTFILE_H
+#ifndef LLVM_CODEGEN_TARGETLOWERINGOBJECTFILE_H
+#define LLVM_CODEGEN_TARGETLOWERINGOBJECTFILE_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/SectionKind.h"
+#include <cstdint>
 
 namespace llvm {
-  class MachineModuleInfo;
-  class Mangler;
-  class MCContext;
-  class MCExpr;
-  class MCSection;
-  class MCSymbol;
-  class MCSymbolRefExpr;
-  class MCStreamer;
-  class MCValue;
-  class ConstantExpr;
-  class GlobalValue;
-  class TargetMachine;
+
+class GlobalValue;
+class MachineModuleInfo;
+class Mangler;
+class MCContext;
+class MCExpr;
+class MCSection;
+class MCSymbol;
+class MCSymbolRefExpr;
+class MCStreamer;
+class MCValue;
+class TargetMachine;
 
 class TargetLoweringObjectFile : public MCObjectFileInfo {
-  MCContext *Ctx;
+  MCContext *Ctx = nullptr;
 
   /// Name-mangler for global names.
   Mangler *Mang = nullptr;
 
-  TargetLoweringObjectFile(
-    const TargetLoweringObjectFile&) = delete;
-  void operator=(const TargetLoweringObjectFile&) = delete;
-
 protected:
-  bool SupportIndirectSymViaGOTPCRel;
-  bool SupportGOTPCRelWithOffset;
+  bool SupportIndirectSymViaGOTPCRel = false;
+  bool SupportGOTPCRelWithOffset = true;
+  bool SupportDebugThreadLocalLocation = true;
+
+  /// PersonalityEncoding, LSDAEncoding, TTypeEncoding - Some encoding values
+  /// for EH.
+  unsigned PersonalityEncoding = 0;
+  unsigned LSDAEncoding = 0;
+  unsigned TTypeEncoding = 0;
+  unsigned CallSiteEncoding = 0;
 
   /// This section contains the static constructor pointer list.
-  MCSection *StaticCtorSection;
+  MCSection *StaticCtorSection = nullptr;
 
   /// This section contains the static destructor pointer list.
-  MCSection *StaticDtorSection;
+  MCSection *StaticDtorSection = nullptr;
 
 public:
+  TargetLoweringObjectFile() = default;
+  TargetLoweringObjectFile(const TargetLoweringObjectFile &) = delete;
+  TargetLoweringObjectFile &
+  operator=(const TargetLoweringObjectFile &) = delete;
+  virtual ~TargetLoweringObjectFile();
+
   MCContext &getContext() const { return *Ctx; }
   Mangler &getMangler() const { return *Mang; }
-
-  TargetLoweringObjectFile()
-      : MCObjectFileInfo(), Ctx(nullptr), Mang(nullptr),
-        SupportIndirectSymViaGOTPCRel(false), SupportGOTPCRelWithOffset(true) {}
-
-  virtual ~TargetLoweringObjectFile();
 
   /// This method must be called before any actual lowering is done.  This
   /// specifies the current context for codegen, and gives the lowering
@@ -72,10 +77,11 @@ public:
   virtual void emitPersonalityValue(MCStreamer &Streamer, const DataLayout &TM,
                                     const MCSymbol *Sym) const;
 
-  /// Emit the module flags that the platform cares about.
-  virtual void emitModuleFlags(MCStreamer &Streamer,
-                               ArrayRef<Module::ModuleFlagEntry> Flags,
-                               const TargetMachine &TM) const {}
+  /// Emit the module-level metadata that the platform cares about.
+  virtual void emitModuleMetadata(MCStreamer &Streamer, Module &M) const {}
+
+  /// Get the module-level metadata that the platform cares about.
+  virtual void getModuleMetadata(Module &M) {}
 
   /// Given a constant with the SectionKind, return a section that it should be
   /// placed in.
@@ -139,6 +145,11 @@ public:
                                             const TargetMachine &TM,
                                             MachineModuleInfo *MMI) const;
 
+  unsigned getPersonalityEncoding() const { return PersonalityEncoding; }
+  unsigned getLSDAEncoding() const { return LSDAEncoding; }
+  unsigned getTTypeEncoding() const { return TTypeEncoding; }
+  unsigned getCallSiteEncoding() const { return CallSiteEncoding; }
+
   const MCExpr *getTTypeReference(const MCSymbolRefExpr *Sym, unsigned Encoding,
                                   MCStreamer &Streamer) const;
 
@@ -152,7 +163,7 @@ public:
     return StaticDtorSection;
   }
 
-  /// \brief Create a symbol reference to describe the given TLS variable when
+  /// Create a symbol reference to describe the given TLS variable when
   /// emitting the address in debug info.
   virtual const MCExpr *getDebugThreadLocalSymbol(const MCSymbol *Sym) const;
 
@@ -162,19 +173,24 @@ public:
     return nullptr;
   }
 
-  /// \brief Target supports replacing a data "PC"-relative access to a symbol
+  /// Target supports replacing a data "PC"-relative access to a symbol
   /// through another symbol, by accessing the later via a GOT entry instead?
   bool supportIndirectSymViaGOTPCRel() const {
     return SupportIndirectSymViaGOTPCRel;
   }
 
-  /// \brief Target GOT "PC"-relative relocation supports encoding an additional
+  /// Target GOT "PC"-relative relocation supports encoding an additional
   /// binary expression with an offset?
   bool supportGOTPCRelWithOffset() const {
     return SupportGOTPCRelWithOffset;
   }
 
-  /// \brief Get the target specific PC relative GOT entry relocation
+  /// Target supports TLS offset relocation in debug section?
+  bool supportDebugThreadLocalLocation() const {
+    return SupportDebugThreadLocalLocation;
+  }
+
+  /// Get the target specific PC relative GOT entry relocation
   virtual const MCExpr *getIndirectSymViaGOTPCRel(const MCSymbol *Sym,
                                                   const MCValue &MV,
                                                   int64_t Offset,
@@ -186,6 +202,15 @@ public:
   virtual void emitLinkerFlagsForGlobal(raw_ostream &OS,
                                         const GlobalValue *GV) const {}
 
+  virtual void emitLinkerFlagsForUsed(raw_ostream &OS,
+                                      const GlobalValue *GV) const {}
+
+  /// If supported, return the section to use for the llvm.commandline
+  /// metadata. Otherwise, return nullptr.
+  virtual MCSection *getSectionForCommandLines() const {
+    return nullptr;
+  }
+
 protected:
   virtual MCSection *SelectSectionForGlobal(const GlobalObject *GO,
                                             SectionKind Kind,
@@ -194,4 +219,4 @@ protected:
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_CODEGEN_TARGETLOWERINGOBJECTFILE_H

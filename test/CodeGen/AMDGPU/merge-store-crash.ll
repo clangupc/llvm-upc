@@ -7,7 +7,8 @@
 @tess_lds = external addrspace(3) global [8192 x i32]
 
 ; CHECK-LABEL: {{^}}main:
-; CHECK: ds_write2_b32
+; CHECK: ds_write_b32
+; CHECK: ds_write_b32
 ; CHECK: v_mov_b32_e32 v1, v0
 ; CHECK: tbuffer_store_format_xyzw v[0:3],
 define amdgpu_vs void @main(i32 inreg %arg) {
@@ -26,11 +27,11 @@ main_body:
   %tmp9 = insertelement <4 x i32> %tmp8, i32 %tmp7, i32 1
   %tmp10 = insertelement <4 x i32> %tmp9, i32 undef, i32 2
   %tmp11 = insertelement <4 x i32> %tmp10, i32 undef, i32 3
-  call void @llvm.SI.tbuffer.store.v4i32(<16 x i8> undef, <4 x i32> %tmp11, i32 4, i32 undef, i32 %arg, i32 0, i32 14, i32 4, i32 1, i32 0, i32 1, i32 1, i32 0)
+  call void @llvm.amdgcn.tbuffer.store.v4i32(<4 x i32> %tmp11, <4 x i32> undef, i32 undef, i32 0, i32 %arg, i32 0, i32 14, i32 4, i1 1, i1 1)
   ret void
 }
 
 ; Function Attrs: nounwind
-declare void @llvm.SI.tbuffer.store.v4i32(<16 x i8>, <4 x i32>, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32) #0
+declare void @llvm.amdgcn.tbuffer.store.v4i32(<4 x i32>, <4 x i32>, i32, i32, i32, i32, i32, i32, i1, i1) #0
 
 attributes #0 = { nounwind }

@@ -1,9 +1,8 @@
 //===- CodeGenMapTable.cpp - Instruction Mapping Table Generator ----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 // CodeGenMapTable provides functionality for the TabelGen to create
@@ -243,7 +242,12 @@ void MapTableEmitter::buildRowInstrMap() {
     std::vector<Init*> KeyValue;
     ListInit *RowFields = InstrMapDesc.getRowFields();
     for (Init *RowField : RowFields->getValues()) {
-      Init *CurInstrVal = CurInstr->getValue(RowField)->getValue();
+      RecordVal *RecVal = CurInstr->getValue(RowField);
+      if (RecVal == nullptr)
+        PrintFatalError(CurInstr->getLoc(), "No value " +
+                        RowField->getAsString() + " found in \"" +
+                        CurInstr->getName() + "\" instruction description.");
+      Init *CurInstrVal = RecVal->getValue();
       KeyValue.push_back(CurInstrVal);
     }
 
@@ -367,7 +371,7 @@ unsigned MapTableEmitter::emitBinSearchTable(raw_ostream &OS) {
 
   ArrayRef<const CodeGenInstruction*> NumberedInstructions =
                                             Target.getInstructionsByEnumValue();
-  std::string TargetName = Target.getName();
+  StringRef Namespace = Target.getInstNamespace();
   const std::vector<ListInit*> &ValueCols = InstrMapDesc.getValueCols();
   unsigned NumCol = ValueCols.size();
   unsigned TotalNumInstr = NumberedInstructions.size();
@@ -387,22 +391,22 @@ unsigned MapTableEmitter::emitBinSearchTable(raw_ostream &OS) {
         if (ColInstrs[j] != nullptr) {
           RelExists = 1;
           OutStr += ", ";
-          OutStr += TargetName;
+          OutStr += Namespace;
           OutStr += "::";
           OutStr += ColInstrs[j]->getName();
         } else { OutStr += ", (uint16_t)-1U";}
       }
 
       if (RelExists) {
-        OS << "  { " << TargetName << "::" << CurInstr->getName();
+        OS << "  { " << Namespace << "::" << CurInstr->getName();
         OS << OutStr <<" },\n";
         TableSize++;
       }
     }
   }
   if (!TableSize) {
-    OS << "  { " << TargetName << "::" << "INSTRUCTION_LIST_END, ";
-    OS << TargetName << "::" << "INSTRUCTION_LIST_END }";
+    OS << "  { " << Namespace << "::" << "INSTRUCTION_LIST_END, ";
+    OS << Namespace << "::" << "INSTRUCTION_LIST_END }";
   }
   OS << "}; // End of " << InstrMapDesc.getName() << "Table\n\n";
   return TableSize;
@@ -567,7 +571,7 @@ namespace llvm {
 //===----------------------------------------------------------------------===//
 void EmitMapTable(RecordKeeper &Records, raw_ostream &OS) {
   CodeGenTarget Target(Records);
-  std::string TargetName = Target.getName();
+  StringRef NameSpace = Target.getInstNamespace();
   std::vector<Record*> InstrMapVec;
   InstrMapVec = Records.getAllDerivedDefinitions("InstrMapping");
 
@@ -577,7 +581,7 @@ void EmitMapTable(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#ifdef GET_INSTRMAP_INFO\n";
   OS << "#undef GET_INSTRMAP_INFO\n";
   OS << "namespace llvm {\n\n";
-  OS << "namespace " << TargetName << " {\n\n";
+  OS << "namespace " << NameSpace << " {\n\n";
 
   // Emit coulumn field names and their values as enums.
   emitEnums(OS, Records);
@@ -600,7 +604,7 @@ void EmitMapTable(RecordKeeper &Records, raw_ostream &OS) {
     // Emit map tables and the functions to query them.
     IMap.emitTablesWithFunc(OS);
   }
-  OS << "} // End " << TargetName << " namespace\n";
+  OS << "} // End " << NameSpace << " namespace\n";
   OS << "} // End llvm namespace\n";
   OS << "#endif // GET_INSTRMAP_INFO\n\n";
 }

@@ -1,18 +1,17 @@
 //===- llvm/unittest/IR/UserTest.cpp - User unit tests --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/IR/User.h"
 #include "llvm/AsmParser/Parser.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/User.h"
 #include "llvm/Support/SourceMgr.h"
 #include "gtest/gtest.h"
 using namespace llvm;

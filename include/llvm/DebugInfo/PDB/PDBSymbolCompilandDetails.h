@@ -1,9 +1,8 @@
 //===- PDBSymbolCompilandDetails.h - PDB compiland details ------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,12 +18,8 @@ class raw_ostream;
 namespace pdb {
 
 class PDBSymbolCompilandDetails : public PDBSymbol {
-public:
-  PDBSymbolCompilandDetails(const IPDBSession &PDBSession,
-                            std::unique_ptr<IPDBRawSymbol> Symbol);
-
   DECLARE_PDB_SYMBOL_CONCRETE_TYPE(PDB_SymType::CompilandDetails)
-
+public:
   void dump(PDBSymDumper &Dumper) const override;
 
   void getFrontEndVersion(VersionInfo &Version) const {
@@ -46,7 +41,7 @@ public:
   FORWARD_SYMBOL_METHOD(isLTCG)
   FORWARD_SYMBOL_METHOD(isMSILNetmodule)
   FORWARD_SYMBOL_METHOD(getLanguage)
-  FORWARD_SYMBOL_METHOD(getLexicalParentId)
+  FORWARD_SYMBOL_ID_METHOD(getLexicalParent)
   FORWARD_SYMBOL_METHOD(getPlatform)
   FORWARD_SYMBOL_METHOD(getSourceFileName)
 };

@@ -1,9 +1,8 @@
 //===- llvm/unittest/Support/GlobPatternTest.cpp --------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -66,5 +65,14 @@ TEST_F(GlobPatternTest, Invalid) {
   Expected<GlobPattern> Pat1 = GlobPattern::create("[");
   EXPECT_FALSE((bool)Pat1);
   handleAllErrors(Pat1.takeError(), [&](ErrorInfoBase &EIB) {});
+}
+
+TEST_F(GlobPatternTest, ExtSym) {
+  Expected<GlobPattern> Pat1 = GlobPattern::create("a*\xFF");
+  EXPECT_TRUE((bool)Pat1);
+  EXPECT_TRUE(Pat1->match("axxx\xFF"));
+  Expected<GlobPattern> Pat2 = GlobPattern::create("[\xFF-\xFF]");
+  EXPECT_TRUE((bool)Pat2);
+  EXPECT_TRUE(Pat2->match("\xFF"));
 }
 }

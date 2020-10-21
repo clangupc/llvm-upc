@@ -1,9 +1,8 @@
 //===- CodeEmitterGen.cpp - Code Emitter Generator ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,6 +15,7 @@
 #include "CodeGenInstruction.h"
 #include "CodeGenTarget.h"
 #include "SubtargetFeatureInfo.h"
+#include "Types.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Casting.h"
@@ -187,20 +187,18 @@ AddCodeToMergeInOperand(Record *R, BitsInit *BI, const std::string &VarName,
 std::string CodeEmitterGen::getInstructionCase(Record *R,
                                                CodeGenTarget &Target) {
   std::string Case;
-  
   BitsInit *BI = R->getValueAsBitsInit("Inst");
-  const std::vector<RecordVal> &Vals = R->getValues();
   unsigned NumberedOp = 0;
-
   std::set<unsigned> NamedOpIndices;
+
   // Collect the set of operand indices that might correspond to named
   // operand, and skip these when assigning operands based on position.
   if (Target.getInstructionSet()->
        getValueAsBit("noNamedPositionallyEncodedOperands")) {
     CodeGenInstruction &CGI = Target.getInstruction(R);
-    for (unsigned i = 0, e = Vals.size(); i != e; ++i) {
+    for (const RecordVal &RV : R->getValues()) {
       unsigned OpIdx;
-      if (!CGI.Operands.hasOperandNamed(Vals[i].getName(), OpIdx))
+      if (!CGI.Operands.hasOperandNamed(RV.getName(), OpIdx))
         continue;
 
       NamedOpIndices.insert(OpIdx);
@@ -209,24 +207,34 @@ std::string CodeEmitterGen::getInstructionCase(Record *R,
 
   // Loop over all of the fields in the instruction, determining which are the
   // operands to the instruction.
-  for (unsigned i = 0, e = Vals.size(); i != e; ++i) {
+  for (const RecordVal &RV : R->getValues()) { 
     // Ignore fixed fields in the record, we're looking for values like:
     //    bits<5> RST = { ?, ?, ?, ?, ? };
-    if (Vals[i].getPrefix() || Vals[i].getValue()->isComplete())
+    if (RV.getPrefix() || RV.getValue()->isComplete())
       continue;
     
-    AddCodeToMergeInOperand(R, BI, Vals[i].getName(), NumberedOp,
+    AddCodeToMergeInOperand(R, BI, RV.getName(), NumberedOp,
                             NamedOpIndices, Case, Target);
   }
-  
-  std::string PostEmitter = R->getValueAsString("PostEncoderMethod");
+
+  StringRef PostEmitter = R->getValueAsString("PostEncoderMethod");
   if (!PostEmitter.empty()) {
-    Case += "      Value = " + PostEmitter + "(MI, Value";
+    Case += "      Value = ";
+    Case += PostEmitter;
+    Case += "(MI, Value";
     Case += ", STI";
     Case += ");\n";
   }
   
   return Case;
+}
+
+static std::string
+getNameForFeatureBitset(const std::vector<Record *> &FeatureBitset) {
+  std::string Name = "CEFBS";
+  for (const auto &Feature : FeatureBitset)
+    Name += ("_" + Feature->getName()).str();
+  return Name;
 }
 
 void CodeEmitterGen::run(raw_ostream &o) {
@@ -278,11 +286,11 @@ void CodeEmitterGen::run(raw_ostream &o) {
     if (R->getValueAsString("Namespace") == "TargetOpcode" ||
         R->getValueAsBit("isPseudo"))
       continue;
-    const std::string &InstName = R->getValueAsString("Namespace") + "::"
-      + R->getName().str();
+    std::string InstName =
+        (R->getValueAsString("Namespace") + "::" + R->getName()).str();
     std::string Case = getInstructionCase(R, Target);
 
-    CaseMap[Case].push_back(InstName);
+    CaseMap[Case].push_back(std::move(InstName));
   }
 
   // Emit initial function code
@@ -327,8 +335,8 @@ void CodeEmitterGen::run(raw_ostream &o) {
     << "#include <sstream>\n\n";
 
   // Emit the subtarget feature enumeration.
-  SubtargetFeatureInfo::emitSubtargetFeatureFlagEnumeration(SubtargetFeatures,
-                                                            o);
+  SubtargetFeatureInfo::emitSubtargetFeatureBitEnumeration(SubtargetFeatures,
+                                                           o);
 
   // Emit the name table for error messages.
   o << "#ifndef NDEBUG\n";
@@ -336,39 +344,101 @@ void CodeEmitterGen::run(raw_ostream &o) {
   o << "#endif // NDEBUG\n";
 
   // Emit the available features compute function.
-  SubtargetFeatureInfo::emitComputeAvailableFeatures(
+  SubtargetFeatureInfo::emitComputeAssemblerAvailableFeatures(
       Target.getName(), "MCCodeEmitter", "computeAvailableFeatures",
       SubtargetFeatures, o);
+
+  std::vector<std::vector<Record *>> FeatureBitsets;
+  for (const CodeGenInstruction *Inst : Target.getInstructionsByEnumValue()) {
+    FeatureBitsets.emplace_back();
+    for (Record *Predicate : Inst->TheDef->getValueAsListOfDefs("Predicates")) {
+      const auto &I = SubtargetFeatures.find(Predicate);
+      if (I != SubtargetFeatures.end())
+        FeatureBitsets.back().push_back(I->second.TheDef);
+    }
+  }
+
+  llvm::sort(FeatureBitsets, [&](const std::vector<Record *> &A,
+                                 const std::vector<Record *> &B) {
+    if (A.size() < B.size())
+      return true;
+    if (A.size() > B.size())
+      return false;
+    for (const auto &Pair : zip(A, B)) {
+      if (std::get<0>(Pair)->getName() < std::get<1>(Pair)->getName())
+        return true;
+      if (std::get<0>(Pair)->getName() > std::get<1>(Pair)->getName())
+        return false;
+    }
+    return false;
+  });
+  FeatureBitsets.erase(
+      std::unique(FeatureBitsets.begin(), FeatureBitsets.end()),
+      FeatureBitsets.end());
+  o << "#ifndef NDEBUG\n"
+    << "// Feature bitsets.\n"
+    << "enum : " << getMinimalTypeForRange(FeatureBitsets.size()) << " {\n"
+    << "  CEFBS_None,\n";
+  for (const auto &FeatureBitset : FeatureBitsets) {
+    if (FeatureBitset.empty())
+      continue;
+    o << "  " << getNameForFeatureBitset(FeatureBitset) << ",\n";
+  }
+  o << "};\n\n"
+     << "const static FeatureBitset FeatureBitsets[] {\n"
+     << "  {}, // CEFBS_None\n";
+  for (const auto &FeatureBitset : FeatureBitsets) {
+    if (FeatureBitset.empty())
+      continue;
+    o << "  {";
+    for (const auto &Feature : FeatureBitset) {
+      const auto &I = SubtargetFeatures.find(Feature);
+      assert(I != SubtargetFeatures.end() && "Didn't import predicate?");
+      o << I->second.getEnumBitName() << ", ";
+    }
+    o << "},\n";
+  }
+  o << "};\n"
+    << "#endif // NDEBUG\n\n";
+
 
   // Emit the predicate verifier.
   o << "void " << Target.getName()
     << "MCCodeEmitter::verifyInstructionPredicates(\n"
-    << "    const MCInst &Inst, uint64_t AvailableFeatures) const {\n"
+    << "    const MCInst &Inst, const FeatureBitset &AvailableFeatures) const {\n"
     << "#ifndef NDEBUG\n"
-    << "  static uint64_t RequiredFeatures[] = {\n";
+    << "  static " << getMinimalTypeForRange(FeatureBitsets.size())
+    << " RequiredFeaturesRefs[] = {\n";
   unsigned InstIdx = 0;
   for (const CodeGenInstruction *Inst : Target.getInstructionsByEnumValue()) {
-    o << "    ";
+    o << "    CEFBS";
+    unsigned NumPredicates = 0;
     for (Record *Predicate : Inst->TheDef->getValueAsListOfDefs("Predicates")) {
       const auto &I = SubtargetFeatures.find(Predicate);
-      if (I != SubtargetFeatures.end())
-        o << I->second.getEnumName() << " | ";
+      if (I != SubtargetFeatures.end()) {
+        o << '_' << I->second.TheDef->getName();
+        NumPredicates++;
+      }
     }
-    o << "0, // " << Inst->TheDef->getName() << " = " << InstIdx << "\n";
+    if (!NumPredicates)
+      o << "_None";
+    o << ", // " << Inst->TheDef->getName() << " = " << InstIdx << "\n";
     InstIdx++;
   }
   o << "  };\n\n";
   o << "  assert(Inst.getOpcode() < " << InstIdx << ");\n";
-  o << "  uint64_t MissingFeatures =\n"
-    << "      (AvailableFeatures & RequiredFeatures[Inst.getOpcode()]) ^\n"
-    << "      RequiredFeatures[Inst.getOpcode()];\n"
-    << "  if (MissingFeatures) {\n"
+  o << "  const FeatureBitset &RequiredFeatures = "
+       "FeatureBitsets[RequiredFeaturesRefs[Inst.getOpcode()]];\n";
+  o << "  FeatureBitset MissingFeatures =\n"
+    << "      (AvailableFeatures & RequiredFeatures) ^\n"
+    << "      RequiredFeatures;\n"
+    << "  if (MissingFeatures.any()) {\n"
     << "    std::ostringstream Msg;\n"
     << "    Msg << \"Attempting to emit \" << "
        "MCII.getName(Inst.getOpcode()).str()\n"
     << "        << \" instruction but the \";\n"
-    << "    for (unsigned i = 0; i < 8 * sizeof(MissingFeatures); ++i)\n"
-    << "      if (MissingFeatures & (1ULL << i))\n"
+    << "    for (unsigned i = 0, e = MissingFeatures.size(); i != e; ++i)\n"
+    << "      if (MissingFeatures.test(i))\n"
     << "        Msg << SubtargetFeatureNames[i] << \" \";\n"
     << "    Msg << \"predicate(s) are not met\";\n"
     << "    report_fatal_error(Msg.str());\n"

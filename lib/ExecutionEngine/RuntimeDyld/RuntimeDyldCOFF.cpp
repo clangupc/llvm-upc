@@ -1,9 +1,8 @@
 //===-- RuntimeDyldCOFF.cpp - Run-time dynamic linker for MC-JIT -*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,9 +26,12 @@ using namespace llvm::object;
 namespace {
 
 class LoadedCOFFObjectInfo final
-    : public RuntimeDyld::LoadedObjectInfoHelper<LoadedCOFFObjectInfo> {
+    : public LoadedObjectInfoHelper<LoadedCOFFObjectInfo,
+                                    RuntimeDyld::LoadedObjectInfo> {
 public:
-  LoadedCOFFObjectInfo(RuntimeDyldImpl &RTDyld, ObjSectionToIDMap ObjSecToIDMap)
+  LoadedCOFFObjectInfo(
+      RuntimeDyldImpl &RTDyld,
+      RuntimeDyld::LoadedObjectInfo::ObjSectionToIDMap ObjSecToIDMap)
       : LoadedObjectInfoHelper(RTDyld, std::move(ObjSecToIDMap)) {}
 
   OwningBinary<ObjectFile>
@@ -63,7 +65,7 @@ RuntimeDyldCOFF::loadObject(const object::ObjectFile &O) {
   } else {
     HasError = true;
     raw_string_ostream ErrStream(ErrorStr);
-    logAllUnhandledErrors(ObjSectionToIDOrErr.takeError(), ErrStream, "");
+    logAllUnhandledErrors(ObjSectionToIDOrErr.takeError(), ErrStream);
     return nullptr;
   }
 }

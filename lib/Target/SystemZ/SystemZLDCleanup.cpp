@@ -1,9 +1,8 @@
 //===-- SystemZLDCleanup.cpp - Clean up local-dynamic TLS accesses --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,15 +12,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SystemZTargetMachine.h"
 #include "SystemZMachineFunctionInfo.h"
+#include "SystemZTargetMachine.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetRegisterInfo.h"
 
 using namespace llvm;
 
@@ -64,7 +63,7 @@ void SystemZLDCleanup::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool SystemZLDCleanup::runOnMachineFunction(MachineFunction &F) {
-  if (skipFunction(*F.getFunction()))
+  if (skipFunction(F.getFunction()))
     return false;
 
   TII = static_cast<const SystemZInstrInfo *>(F.getSubtarget().getInstrInfo());
@@ -127,7 +126,7 @@ MachineInstr *SystemZLDCleanup::ReplaceTLSCall(MachineInstr *I,
   return Copy;
 }
 
-// Create a virtal register in *TLSBaseAddrReg, and populate it by
+// Create a virtual register in *TLSBaseAddrReg, and populate it by
 // inserting a copy instruction after I. Returns the new instruction.
 MachineInstr *SystemZLDCleanup::SetRegister(MachineInstr *I,
                                             unsigned *TLSBaseAddrReg) {

@@ -1,9 +1,8 @@
-//===- llvm/ADT/ilist_base.h - Intrusive List Base ---------------*- C++ -*-==//
+//===- llvm/ADT/ilist_base.h - Intrusive List Base --------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,15 +11,13 @@
 
 #include "llvm/ADT/ilist_node_base.h"
 #include <cassert>
-#include <cstddef>
-#include <type_traits>
 
 namespace llvm {
 
 /// Implementations of list algorithms using ilist_node_base.
 template <bool EnableSentinelTracking> class ilist_base {
 public:
-  typedef ilist_node_base<EnableSentinelTracking> node_base_type;
+  using node_base_type = ilist_node_base<EnableSentinelTracking>;
 
   static void insertBeforeImpl(node_base_type &Next, node_base_type &N) {
     node_base_type &Prev = *Next.getPrev();

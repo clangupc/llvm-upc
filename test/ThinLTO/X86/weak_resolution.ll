@@ -7,7 +7,7 @@
 ; non-prevailing ODR are not kept when possible, but non-ODR non-prevailing
 ; are not affected.
 ; RUN: llvm-lto -thinlto-action=promote %t.bc -thinlto-index=%t3.bc -o - | llvm-dis -o - | FileCheck %s --check-prefix=MOD1
-; RUN: llvm-lto -thinlto-action=promote %t.bc -thinlto-index=%t3.bc -exported-symbol=linkoncefunc -o - | llvm-lto -thinlto-action=internalize -thinlto-module-id=%t.bc - -thinlto-index=%t3.bc -exported-symbol=linkoncefunc -o - | llvm-dis -o - | FileCheck %s --check-prefix=MOD1-INT
+; RUN: llvm-lto -thinlto-action=internalize %t.bc -thinlto-index=%t3.bc -exported-symbol=linkoncefunc -o - | llvm-dis -o - | FileCheck %s --check-prefix=MOD1-INT
 ; RUN: llvm-lto -thinlto-action=promote %t2.bc -thinlto-index=%t3.bc -o - | llvm-dis -o - | FileCheck %s --check-prefix=MOD2
 ; When exported, we always preserve a linkonce
 ; RUN: llvm-lto -thinlto-action=promote %t.bc -thinlto-index=%t3.bc -o - --exported-symbol=linkonceodrfuncInSingleModule | llvm-dis -o - | FileCheck %s --check-prefix=EXPORTED
@@ -53,7 +53,7 @@ entry:
 }
 ; MOD1: define weak void @linkoncefunc()
 ; MOD1-INT: define weak void @linkoncefunc()
-; MOD2: define linkonce void @linkoncefunc()
+; MOD2: declare void @linkoncefunc()
 define linkonce void @linkoncefunc() #0 {
 entry:
   ret void
@@ -65,7 +65,7 @@ entry:
   ret void
 }
 ; MOD1: define weak void @weakfunc()
-; MOD2: define weak void @weakfunc()
+; MOD2: declare void @weakfunc()
 define weak void @weakfunc() #0 {
 entry:
   ret void

@@ -1,9 +1,8 @@
 //===- DebugInfo.h - Debug Information Helpers ------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,22 +20,17 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/DebugInfoMetadata.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/Dwarf.h"
-#include "llvm/Support/ErrorHandling.h"
-#include <iterator>
 
 namespace llvm {
-class Module;
+
 class DbgDeclareInst;
 class DbgValueInst;
-template <typename K, typename V, typename KeyInfoT, typename BucketT>
-class DenseMap;
+class Module;
 
-/// \brief Find subprogram that is enclosing this scope.
+/// Find subprogram that is enclosing this scope.
 DISubprogram *getDISubprogram(const MDNode *Scope);
 
-/// \brief Strip debug info in the module if it exists.
+/// Strip debug info in the module if it exists.
 ///
 /// To do this, we remove all calls to the debugger intrinsics and any named
 /// metadata for debugging. We also remove debug locations for instructions.
@@ -56,10 +50,10 @@ bool stripDebugInfo(Function &F);
 ///   All debug type metadata nodes are unreachable and garbage collected.
 bool stripNonLineTableDebugInfo(Module &M);
 
-/// \brief Return Debug Info Metadata Version by checking module flags.
+/// Return Debug Info Metadata Version by checking module flags.
 unsigned getDebugMetadataVersionFromModule(const Module &M);
 
-/// \brief Utility to find all debug info in a module.
+/// Utility to find all debug info in a module.
 ///
 /// DebugInfoFinder tries to list all debug info MDNodes used in a module. To
 /// list debug info MDNodes used by an instruction, DebugInfoFinder uses
@@ -69,39 +63,42 @@ unsigned getDebugMetadataVersionFromModule(const Module &M);
 /// used by the CUs.
 class DebugInfoFinder {
 public:
-  /// \brief Process entire module and collect debug info anchors.
+  /// Process entire module and collect debug info anchors.
   void processModule(const Module &M);
+  /// Process a single instruction and collect debug info anchors.
+  void processInstruction(const Module &M, const Instruction &I);
 
-  /// \brief Process DbgDeclareInst.
+  /// Process DbgDeclareInst.
   void processDeclare(const Module &M, const DbgDeclareInst *DDI);
-  /// \brief Process DbgValueInst.
+  /// Process DbgValueInst.
   void processValue(const Module &M, const DbgValueInst *DVI);
-  /// \brief Process debug info location.
+  /// Process debug info location.
   void processLocation(const Module &M, const DILocation *Loc);
 
-  /// \brief Clear all lists.
+  /// Clear all lists.
   void reset();
 
 private:
   void InitializeTypeMap(const Module &M);
 
-  void processType(DIType *DT);
-  void processSubprogram(DISubprogram *SP);
+  void processCompileUnit(DICompileUnit *CU);
   void processScope(DIScope *Scope);
+  void processSubprogram(DISubprogram *SP);
+  void processType(DIType *DT);
   bool addCompileUnit(DICompileUnit *CU);
   bool addGlobalVariable(DIGlobalVariableExpression *DIG);
+  bool addScope(DIScope *Scope);
   bool addSubprogram(DISubprogram *SP);
   bool addType(DIType *DT);
-  bool addScope(DIScope *Scope);
 
 public:
-  typedef SmallVectorImpl<DICompileUnit *>::const_iterator
-      compile_unit_iterator;
-  typedef SmallVectorImpl<DISubprogram *>::const_iterator subprogram_iterator;
-  typedef SmallVectorImpl<DIGlobalVariableExpression *>::const_iterator
-      global_variable_expression_iterator;
-  typedef SmallVectorImpl<DIType *>::const_iterator type_iterator;
-  typedef SmallVectorImpl<DIScope *>::const_iterator scope_iterator;
+  using compile_unit_iterator =
+      SmallVectorImpl<DICompileUnit *>::const_iterator;
+  using subprogram_iterator = SmallVectorImpl<DISubprogram *>::const_iterator;
+  using global_variable_expression_iterator =
+      SmallVectorImpl<DIGlobalVariableExpression *>::const_iterator;
+  using type_iterator = SmallVectorImpl<DIType *>::const_iterator;
+  using scope_iterator = SmallVectorImpl<DIScope *>::const_iterator;
 
   iterator_range<compile_unit_iterator> compile_units() const {
     return make_range(CUs.begin(), CUs.end());
@@ -140,4 +137,4 @@ private:
 
 } // end namespace llvm
 
-#endif
+#endif // LLVM_IR_DEBUGINFO_H

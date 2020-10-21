@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=x86_64-linux-gnu %s -o - -jump-table-density=40 -verify-machineinstrs | FileCheck %s
+; RUN: llc -mtriple=x86_64-linux-gnu %s -o - -jump-table-density=40 -switch-peel-threshold=101 -verify-machineinstrs | FileCheck %s
 ; RUN: llc -mtriple=x86_64-linux-gnu %s -o - -O0 -jump-table-density=40 -verify-machineinstrs | FileCheck --check-prefix=NOOPT %s
 
 declare void @g(i32)
@@ -318,15 +318,15 @@ return: ret void
 ; NOOPT-LABEL: optimal_jump_table1
 ; NOOPT: testl %edi, %edi
 ; NOOPT: je
-; NOOPT: subl $5, %eax
+; NOOPT: subl $5, [[REG:%e[abcd][xi]]]
 ; NOOPT: je
-; NOOPT: subl $6, %eax
+; NOOPT: subl $6, [[REG]]
 ; NOOPT: je
-; NOOPT: subl $12, %eax
+; NOOPT: subl $12, [[REG]]
 ; NOOPT: je
-; NOOPT: subl $13, %eax
+; NOOPT: subl $13, [[REG]]
 ; NOOPT: je
-; NOOPT: subl $15, %eax
+; NOOPT: subl $15, [[REG]]
 ; NOOPT: je
 }
 
@@ -432,9 +432,9 @@ sw:
 ; Branch directly to the default.
 ; (In optimized builds the switch is removed earlier.)
 ; NOOPT-LABEL: default_only
-; NOOPT: .[[L:[A-Z0-9_]+]]:
+; NOOPT: .LBB[[L:[A-Z0-9_]+]]:
 ; NOOPT-NEXT: retq
-; NOOPT: jmp .[[L]]
+; NOOPT: jmp .LBB[[L]]
 }
 
 
@@ -777,4 +777,31 @@ end:
 ; (-verify-machine-instrs cathces this).
 ; CHECK: btl
 ; CHECK-NOT: btl
+}
+
+
+define void @range_with_unreachable_fallthrough(i32 %i) {
+entry:
+  switch i32 %i, label %default [
+    i32 1, label %bb1
+    i32 2, label %bb1
+    i32 3, label %bb1
+    i32 4, label %bb2
+    i32 5, label %bb2
+    i32 6, label %bb2
+  ]
+bb1: tail call void @g(i32 0) br label %return
+bb2: tail call void @g(i32 1) br label %return
+default: unreachable
+
+return:
+  ret void
+
+; CHECK-LABEL: range_with_unreachable_fallthrough:
+; Since the default is unreachable, either cluster will be reached.
+; Only one comparison should be emitted.
+; CHECK: cmpl
+; CHECK-NOT: cmpl
+; CHECK: jmp g
+; CHECK: jmp g
 }

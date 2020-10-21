@@ -6,6 +6,9 @@ from __future__ import print_function
 
 - Collate raw profiles into one indexed profile.
 - Generate html reports for the given binaries.
+
+Caution: The positional arguments to this script must be specified before any 
+optional arguments, such as --restrict.
 '''
 
 import argparse
@@ -48,7 +51,8 @@ def prepare_html_report(host_llvm_cov, profile, report_dir, binaries,
     subprocess.check_call(invocation)
     with open(os.path.join(report_dir, 'summary.txt'), 'wb') as Summary:
         subprocess.check_call([host_llvm_cov, 'report'] + objects +
-                               ['-instr-profile', profile], stdout=Summary)
+                               ['-instr-profile', profile] + restricted_dirs,
+                               stdout=Summary)
     print('Done!')
 
 def prepare_html_reports(host_llvm_cov, profdata_path, report_dir, binaries,
@@ -84,7 +88,8 @@ if __name__ == '__main__':
                        help='Emit a unified report for all binaries')
     parser.add_argument('--restrict', metavar='R', type=str, nargs='*',
                        default=[],
-                       help='Restrict the reporting to the given source paths')
+                       help='Restrict the reporting to the given source paths'
+                   ' (must be specified after all other positional arguments)')
     args = parser.parse_args()
 
     if args.use_existing_profdata and args.only_merge:

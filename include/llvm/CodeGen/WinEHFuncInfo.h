@@ -1,9 +1,8 @@
-//===-- llvm/CodeGen/WinEHFuncInfo.h ----------------------------*- C++ -*-===//
+//===- llvm/CodeGen/WinEHFuncInfo.h -----------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,28 +16,26 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/TinyPtrVector.h"
-#include "llvm/IR/Instructions.h"
+#include <cstdint>
+#include <limits>
+#include <utility>
 
 namespace llvm {
+
 class AllocaInst;
 class BasicBlock;
-class CatchReturnInst;
-class Constant;
+class FuncletPadInst;
 class Function;
 class GlobalVariable;
+class Instruction;
 class InvokeInst;
-class IntrinsicInst;
-class LandingPadInst;
-class MCExpr;
-class MCSymbol;
 class MachineBasicBlock;
-class Value;
+class MCSymbol;
 
 // The following structs respresent the .xdata tables for various
 // Windows-related EH personalities.
 
-typedef PointerUnion<const BasicBlock *, MachineBasicBlock *> MBBOrBasicBlock;
+using MBBOrBasicBlock = PointerUnion<const BasicBlock *, MachineBasicBlock *>;
 
 struct CxxUnwindMapEntry {
   int ToState;
@@ -99,18 +96,18 @@ struct WinEHFuncInfo {
   SmallVector<WinEHTryBlockMapEntry, 4> TryBlockMap;
   SmallVector<SEHUnwindMapEntry, 4> SEHUnwindMap;
   SmallVector<ClrEHUnwindMapEntry, 4> ClrEHUnwindMap;
-  int UnwindHelpFrameIdx = INT_MAX;
-  int PSPSymFrameIdx = INT_MAX;
+  int UnwindHelpFrameIdx = std::numeric_limits<int>::max();
+  int PSPSymFrameIdx = std::numeric_limits<int>::max();
 
   int getLastStateNumber() const { return CxxUnwindMap.size() - 1; }
 
   void addIPToStateRange(const InvokeInst *II, MCSymbol *InvokeBegin,
                          MCSymbol *InvokeEnd);
 
-  int EHRegNodeFrameIndex = INT_MAX;
-  int EHRegNodeEndOffset = INT_MAX;
-  int EHGuardFrameIndex = INT_MAX;
-  int SEHSetFrameOffset = INT_MAX;
+  int EHRegNodeFrameIndex = std::numeric_limits<int>::max();
+  int EHRegNodeEndOffset = std::numeric_limits<int>::max();
+  int EHGuardFrameIndex = std::numeric_limits<int>::max();
+  int SEHSetFrameOffset = std::numeric_limits<int>::max();
 
   WinEHFuncInfo();
 };
@@ -125,5 +122,7 @@ void calculateSEHStateNumbers(const Function *ParentFn,
                               WinEHFuncInfo &FuncInfo);
 
 void calculateClrEHStateNumbers(const Function *Fn, WinEHFuncInfo &FuncInfo);
-}
+
+} // end namespace llvm
+
 #endif // LLVM_CODEGEN_WINEHFUNCINFO_H

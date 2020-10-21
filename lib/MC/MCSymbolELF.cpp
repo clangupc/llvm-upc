@@ -1,16 +1,14 @@
 //===- lib/MC/MCSymbolELF.cpp ---------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCSymbolELF.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCFixupKindInfo.h"
-#include "llvm/Support/ELF.h"
 
 namespace llvm {
 
@@ -42,6 +40,8 @@ enum {
 
 void MCSymbolELF::setBinding(unsigned Binding) const {
   setIsBindingSet();
+  if (getType() == ELF::STT_SECTION && Binding != ELF::STB_LOCAL)
+    setType(ELF::STT_NOTYPE);
   unsigned Val;
   switch (Binding) {
   default:
@@ -65,7 +65,7 @@ void MCSymbolELF::setBinding(unsigned Binding) const {
 
 unsigned MCSymbolELF::getBinding() const {
   if (isBindingSet()) {
-    uint32_t Val = (getFlags() & (0x3 << ELF_STB_Shift)) >> ELF_STB_Shift;
+    uint32_t Val = (Flags >> ELF_STB_Shift) & 3;
     switch (Val) {
     default:
       llvm_unreachable("Invalid value");
@@ -93,6 +93,8 @@ unsigned MCSymbolELF::getBinding() const {
 
 void MCSymbolELF::setType(unsigned Type) const {
   unsigned Val;
+  if (Type == ELF::STT_SECTION && getBinding() != ELF::STB_LOCAL)
+    return;
   switch (Type) {
   default:
     llvm_unreachable("Unsupported Binding");
@@ -123,7 +125,7 @@ void MCSymbolELF::setType(unsigned Type) const {
 }
 
 unsigned MCSymbolELF::getType() const {
-  uint32_t Val = (getFlags() & (0x7 << ELF_STT_Shift)) >> ELF_STT_Shift;
+  uint32_t Val = (Flags >> ELF_STT_Shift) & 7;
   switch (Val) {
   default:
     llvm_unreachable("Invalid value");
@@ -153,9 +155,7 @@ void MCSymbolELF::setVisibility(unsigned Visibility) {
 }
 
 unsigned MCSymbolELF::getVisibility() const {
-  unsigned Visibility = (getFlags() & (0x3 << ELF_STV_Shift)) >> ELF_STV_Shift;
-  assert(Visibility == ELF::STV_DEFAULT || Visibility == ELF::STV_INTERNAL ||
-         Visibility == ELF::STV_HIDDEN || Visibility == ELF::STV_PROTECTED);
+  unsigned Visibility = (Flags >> ELF_STV_Shift) & 3;
   return Visibility;
 }
 
@@ -168,7 +168,7 @@ void MCSymbolELF::setOther(unsigned Other) {
 }
 
 unsigned MCSymbolELF::getOther() const {
-  unsigned Other = (getFlags() & (0x7 << ELF_STO_Shift)) >> ELF_STO_Shift;
+  unsigned Other = (Flags >> ELF_STO_Shift) & 7;
   return Other << 5;
 }
 

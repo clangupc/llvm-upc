@@ -1,5 +1,5 @@
 ; RUN: llc -mcpu=core2 -mtriple=i686-pc-win32 < %s | FileCheck %s --check-prefix=ASM
-; RUN: llc -mcpu=core2 -mtriple=i686-pc-win32 < %s -filetype=obj | llvm-readobj -codeview | FileCheck %s --check-prefix=OBJ
+; RUN: llc -mcpu=core2 -mtriple=i686-pc-win32 < %s -filetype=obj | llvm-readobj --codeview | FileCheck %s --check-prefix=OBJ
 
 ; This C++ source should run and you should be able to step through the volatile
 ; modifications to x in windbg.
@@ -26,9 +26,9 @@
 ; ASM: _main:                                  # @main
 ; ASM: Lfunc_begin0:
 ; ASM:         .cv_func_id 0
-; ASM: # BB#0:                                 # %entry
+; ASM: # %bb.0:                                 # %entry
 ; ASM:         .cv_file        1 "D:\\src\\llvm\\build\\t.cpp"
-; ASM:         .cv_loc 0 1 9 5 is_stmt 0       # t.cpp:9:5
+; ASM:         .cv_loc 0 1 9 5       # t.cpp:9:5
 ; ASM:         incl    "?x@@3HC"
 ; ASM:         .cv_inline_site_id 1 within 0 inlined_at 1 10 3
 ; ASM:         .cv_loc 1 1 4 5                 # t.cpp:4:5
@@ -63,7 +63,7 @@
 
 ; OBJ: Subsection [
 ; OBJ:   SubSectionType: Symbols (0xF1)
-; OBJ:   ProcStart {
+; OBJ:   {{.*}}Proc{{.*}}Sym {
 ; OBJ:     Kind: S_GPROC32_ID (0x1147)
 ; OBJ:     FunctionType: main (0x1005)
 ; OBJ:     CodeOffset: _main+0x0
@@ -74,8 +74,8 @@
 ; OBJ:     LinkageName: _main
 ; OBJ:   }
 
-; Previously, g's InlineSite referenced t.h, which was wasteful.
-; OBJ:        InlineSite {
+; Previously, g's InlineSiteSym referenced t.h, which was wasteful.
+; OBJ:        InlineSiteSym {
 ; OBJ:          Inlinee: g (0x1002)
 ; OBJ:          BinaryAnnotations [
 ; OBJ-NEXT:       ChangeCodeOffsetAndLineOffset: {CodeOffset: 0x6, LineOffset: 1}
@@ -85,7 +85,7 @@
 ; OBJ-NEXT:     ]
 ; OBJ:        }
 
-; OBJ:   InlineSite {
+; OBJ:   InlineSiteSym {
 ; OBJ:     Inlinee: f (0x1003)
 ; OBJ:     BinaryAnnotations [
 ; OBJ-NEXT:  ChangeCodeOffsetAndLineOffset: {CodeOffset: 0xD, LineOffset: 1}
@@ -135,7 +135,7 @@ attributes #0 = { norecurse nounwind uwtable "disable-tail-calls"="false" "less-
 !llvm.module.flags = !{!8, !9, !10}
 !llvm.ident = !{!11}
 
-!0 = distinct !DIGlobalVariableExpression(var: !1)
+!0 = distinct !DIGlobalVariableExpression(var: !1, expr: !DIExpression())
 !1 = !DIGlobalVariable(name: "x", linkageName: "\01?x@@3HC", scope: !2, file: !3, line: 1, type: !6, isLocal: false, isDefinition: true)
 !2 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !3, producer: "clang version 3.9.0 (trunk 275430) (llvm/trunk 275433)", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !4, globals: !5)
 !3 = !DIFile(filename: "t.cpp", directory: "D:\5Csrc\5Cllvm\5Cbuild")
@@ -147,7 +147,7 @@ attributes #0 = { norecurse nounwind uwtable "disable-tail-calls"="false" "less-
 !9 = !{i32 2, !"Debug Info Version", i32 3}
 !10 = !{i32 1, !"PIC Level", i32 2}
 !11 = !{!"clang version 3.9.0 (trunk 275430) (llvm/trunk 275433)"}
-!12 = distinct !DISubprogram(name: "main", scope: !3, file: !3, line: 8, type: !13, isLocal: false, isDefinition: true, scopeLine: 8, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !4)
+!12 = distinct !DISubprogram(name: "main", scope: !3, file: !3, line: 8, type: !13, isLocal: false, isDefinition: true, scopeLine: 8, flags: DIFlagPrototyped, isOptimized: true, unit: !2, retainedNodes: !4)
 !13 = !DISubroutineType(types: !14)
 !14 = !{!7}
 !15 = !DILocation(line: 9, column: 5, scope: !12)
@@ -156,12 +156,12 @@ attributes #0 = { norecurse nounwind uwtable "disable-tail-calls"="false" "less-
 !18 = !{!"omnipotent char", !19, i64 0}
 !19 = !{!"Simple C++ TBAA"}
 !20 = !DILocation(line: 4, column: 5, scope: !21, inlinedAt: !24)
-!21 = distinct !DISubprogram(name: "g", linkageName: "\01?g@@YAXXZ", scope: !3, file: !3, line: 3, type: !22, isLocal: false, isDefinition: true, scopeLine: 3, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !4)
+!21 = distinct !DISubprogram(name: "g", linkageName: "\01?g@@YAXXZ", scope: !3, file: !3, line: 3, type: !22, isLocal: false, isDefinition: true, scopeLine: 3, flags: DIFlagPrototyped, isOptimized: true, unit: !2, retainedNodes: !4)
 !22 = !DISubroutineType(types: !23)
 !23 = !{null}
 !24 = distinct !DILocation(line: 10, column: 3, scope: !12)
 !25 = !DILocation(line: 2, column: 5, scope: !26, inlinedAt: !28)
-!26 = distinct !DISubprogram(name: "f", linkageName: "\01?f@@YAXXZ", scope: !27, file: !27, line: 1, type: !22, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: true, unit: !2, variables: !4)
+!26 = distinct !DISubprogram(name: "f", linkageName: "\01?f@@YAXXZ", scope: !27, file: !27, line: 1, type: !22, isLocal: false, isDefinition: true, scopeLine: 1, flags: DIFlagPrototyped, isOptimized: true, unit: !2, retainedNodes: !4)
 !27 = !DIFile(filename: "./t.h", directory: "D:\5Csrc\5Cllvm\5Cbuild")
 !28 = distinct !DILocation(line: 5, column: 3, scope: !21, inlinedAt: !24)
 !29 = !DILocation(line: 6, column: 5, scope: !21, inlinedAt: !24)

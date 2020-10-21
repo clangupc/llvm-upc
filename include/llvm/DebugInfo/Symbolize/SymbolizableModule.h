@@ -1,9 +1,8 @@
-//===-- SymbolizableModule.h ------------------------------------ C++ -----===//
+//===- SymbolizableModule.h -------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,12 +13,7 @@
 #define LLVM_DEBUGINFO_SYMBOLIZE_SYMBOLIZABLEMODULE_H
 
 #include "llvm/DebugInfo/DIContext.h"
-
-namespace llvm {
-namespace object {
-class ObjectFile;
-}
-}
+#include <cstdint>
 
 namespace llvm {
 namespace symbolize {
@@ -28,14 +22,18 @@ using FunctionNameKind = DILineInfoSpecifier::FunctionNameKind;
 
 class SymbolizableModule {
 public:
-  virtual ~SymbolizableModule() {}
-  virtual DILineInfo symbolizeCode(uint64_t ModuleOffset,
+  virtual ~SymbolizableModule() = default;
+
+  virtual DILineInfo symbolizeCode(object::SectionedAddress ModuleOffset,
                                    FunctionNameKind FNKind,
                                    bool UseSymbolTable) const = 0;
-  virtual DIInliningInfo symbolizeInlinedCode(uint64_t ModuleOffset,
-                                              FunctionNameKind FNKind,
-                                              bool UseSymbolTable) const = 0;
-  virtual DIGlobal symbolizeData(uint64_t ModuleOffset) const = 0;
+  virtual DIInliningInfo
+  symbolizeInlinedCode(object::SectionedAddress ModuleOffset,
+                       FunctionNameKind FNKind, bool UseSymbolTable) const = 0;
+  virtual DIGlobal
+  symbolizeData(object::SectionedAddress ModuleOffset) const = 0;
+  virtual std::vector<DILocal>
+  symbolizeFrame(object::SectionedAddress ModuleOffset) const = 0;
 
   // Return true if this is a 32-bit x86 PE COFF module.
   virtual bool isWin32Module() const = 0;
@@ -45,7 +43,7 @@ public:
   virtual uint64_t getModulePreferredBase() const = 0;
 };
 
-}  // namespace symbolize
-}  // namespace llvm
+} // end namespace symbolize
+} // end namespace llvm
 
 #endif  // LLVM_DEBUGINFO_SYMBOLIZE_SYMBOLIZABLEMODULE_H

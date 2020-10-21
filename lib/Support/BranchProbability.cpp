@@ -1,9 +1,8 @@
 //===-------------- lib/Support/BranchProbability.cpp -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/BranchProbability.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
@@ -32,7 +32,9 @@ raw_ostream &BranchProbability::print(raw_ostream &OS) const {
                       Percent);
 }
 
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 LLVM_DUMP_METHOD void BranchProbability::dump() const { print(dbgs()) << '\n'; }
+#endif
 
 BranchProbability::BranchProbability(uint32_t Numerator, uint32_t Denominator) {
   assert(Denominator > 0 && "Denominator cannot be 0!");
@@ -85,10 +87,6 @@ static uint64_t scale(uint64_t Num, uint32_t N, uint32_t D) {
 
   // Carry.
   Upper32 += Mid32 < Mid32Partial;
-
-  // Check for overflow.
-  if (Upper32 >= D)
-    return UINT64_MAX;
 
   uint64_t Rem = (uint64_t(Upper32) << 32) | Mid32;
   uint64_t UpperQ = Rem / D;

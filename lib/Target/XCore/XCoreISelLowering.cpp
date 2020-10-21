@@ -1,9 +1,8 @@
 //===-- XCoreISelLowering.cpp - XCore DAG Lowering Implementation ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -34,6 +33,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/KnownBits.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
 
@@ -90,10 +90,6 @@ XCoreTargetLowering::XCoreTargetLowering(const TargetMachine &TM,
   // XCore does not have the NodeTypes below.
   setOperationAction(ISD::BR_CC,     MVT::i32,   Expand);
   setOperationAction(ISD::SELECT_CC, MVT::i32,   Expand);
-  setOperationAction(ISD::ADDC, MVT::i32, Expand);
-  setOperationAction(ISD::ADDE, MVT::i32, Expand);
-  setOperationAction(ISD::SUBC, MVT::i32, Expand);
-  setOperationAction(ISD::SUBE, MVT::i32, Expand);
 
   // 64bit
   setOperationAction(ISD::ADD, MVT::i64, Custom);
@@ -406,28 +402,20 @@ SDValue XCoreTargetLowering::lowerLoadWordFromAlignedBasePlusOffset(
 
 static bool isWordAligned(SDValue Value, SelectionDAG &DAG)
 {
-  APInt KnownZero, KnownOne;
-  DAG.computeKnownBits(Value, KnownZero, KnownOne);
-  return KnownZero.countTrailingOnes() >= 2;
+  KnownBits Known = DAG.computeKnownBits(Value);
+  return Known.countMinTrailingZeros() >= 2;
 }
 
-SDValue XCoreTargetLowering::
-LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
+SDValue XCoreTargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  LLVMContext &Context = *DAG.getContext();
   LoadSDNode *LD = cast<LoadSDNode>(Op);
   assert(LD->getExtensionType() == ISD::NON_EXTLOAD &&
          "Unexpected extension type");
   assert(LD->getMemoryVT() == MVT::i32 && "Unexpected load EVT");
-  if (allowsMisalignedMemoryAccesses(LD->getMemoryVT(),
-                                     LD->getAddressSpace(),
-                                     LD->getAlignment()))
-    return SDValue();
 
-  auto &TD = DAG.getDataLayout();
-  unsigned ABIAlignment = TD.getABITypeAlignment(
-      LD->getMemoryVT().getTypeForEVT(*DAG.getContext()));
-  // Leave aligned load alone.
-  if (LD->getAlignment() >= ABIAlignment)
+  if (allowsMemoryAccess(Context, DAG.getDataLayout(), LD->getMemoryVT(),
+                         *LD->getMemOperand()))
     return SDValue();
 
   SDValue Chain = LD->getChain();
@@ -474,7 +462,7 @@ LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   }
 
   // Lower to a call to __misaligned_load(BasePtr).
-  Type *IntPtrTy = TD.getIntPtrType(*DAG.getContext());
+  Type *IntPtrTy = DAG.getDataLayout().getIntPtrType(Context);
   TargetLowering::ArgListTy Args;
   TargetLowering::ArgListEntry Entry;
 
@@ -494,23 +482,16 @@ LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   return DAG.getMergeValues(Ops, DL);
 }
 
-SDValue XCoreTargetLowering::
-LowerSTORE(SDValue Op, SelectionDAG &DAG) const
-{
+SDValue XCoreTargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
+  LLVMContext &Context = *DAG.getContext();
   StoreSDNode *ST = cast<StoreSDNode>(Op);
   assert(!ST->isTruncatingStore() && "Unexpected store type");
   assert(ST->getMemoryVT() == MVT::i32 && "Unexpected store EVT");
-  if (allowsMisalignedMemoryAccesses(ST->getMemoryVT(),
-                                     ST->getAddressSpace(),
-                                     ST->getAlignment())) {
+
+  if (allowsMemoryAccess(Context, DAG.getDataLayout(), ST->getMemoryVT(),
+                         *ST->getMemOperand()))
     return SDValue();
-  }
-  unsigned ABIAlignment = DAG.getDataLayout().getABITypeAlignment(
-      ST->getMemoryVT().getTypeForEVT(*DAG.getContext()));
-  // Leave aligned store alone.
-  if (ST->getAlignment() >= ABIAlignment) {
-    return SDValue();
-  }
+
   SDValue Chain = ST->getChain();
   SDValue BasePtr = ST->getBasePtr();
   SDValue Value = ST->getValue();
@@ -519,7 +500,7 @@ LowerSTORE(SDValue Op, SelectionDAG &DAG) const
   if (ST->getAlignment() == 2) {
     SDValue Low = Value;
     SDValue High = DAG.getNode(ISD::SRL, dl, MVT::i32, Value,
-                                      DAG.getConstant(16, dl, MVT::i32));
+                               DAG.getConstant(16, dl, MVT::i32));
     SDValue StoreLow = DAG.getTruncStore(
         Chain, dl, Low, BasePtr, ST->getPointerInfo(), MVT::i16,
         /* Alignment = */ 2, ST->getMemOperand()->getFlags());
@@ -532,7 +513,7 @@ LowerSTORE(SDValue Op, SelectionDAG &DAG) const
   }
 
   // Lower to a call to __misaligned_store(BasePtr, Value).
-  Type *IntPtrTy = DAG.getDataLayout().getIntPtrType(*DAG.getContext());
+  Type *IntPtrTy = DAG.getDataLayout().getIntPtrType(Context);
   TargetLowering::ArgListTy Args;
   TargetLowering::ArgListEntry Entry;
 
@@ -545,7 +526,7 @@ LowerSTORE(SDValue Op, SelectionDAG &DAG) const
 
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl).setChain(Chain).setCallee(
-      CallingConv::C, Type::getVoidTy(*DAG.getContext()),
+      CallingConv::C, Type::getVoidTy(Context),
       DAG.getExternalSymbol("__misaligned_store",
                             getPointerTy(DAG.getDataLayout())),
       std::move(Args));
@@ -1013,6 +994,27 @@ LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const {
   return SDValue();
 }
 
+MachineMemOperand::Flags
+XCoreTargetLowering::getMMOFlags(const Instruction &I) const {
+  // Because of how we convert atomic_load and atomic_store to normal loads and
+  // stores in the DAG, we need to ensure that the MMOs are marked volatile
+  // since DAGCombine hasn't been updated to account for atomic, but non
+  // volatile loads.  (See D57601)
+  if (auto *SI = dyn_cast<StoreInst>(&I))
+    if (SI->isAtomic())
+      return MachineMemOperand::MOVolatile;
+  if (auto *LI = dyn_cast<LoadInst>(&I))
+    if (LI->isAtomic())
+      return MachineMemOperand::MOVolatile;
+  if (auto *AI = dyn_cast<AtomicRMWInst>(&I))
+    if (AI->isAtomic())
+      return MachineMemOperand::MOVolatile;
+  if (auto *AI = dyn_cast<AtomicCmpXchgInst>(&I))
+    if (AI->isAtomic())
+      return MachineMemOperand::MOVolatile;
+  return MachineMemOperand::MONone;
+}
+
 //===----------------------------------------------------------------------===//
 //                      Calling Convention Implementation
 //===----------------------------------------------------------------------===//
@@ -1045,7 +1047,7 @@ XCoreTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   switch (CallConv)
   {
     default:
-      llvm_unreachable("Unsupported calling convention");
+      report_fatal_error("Unsupported calling convention");
     case CallingConv::Fast:
     case CallingConv::C:
       return LowerCCCCallTo(Chain, Callee, CallConv, isVarArg, isTailCall,
@@ -1130,8 +1132,7 @@ SDValue XCoreTargetLowering::LowerCCCCallTo(
   unsigned NumBytes = RetCCInfo.getNextStackOffset();
   auto PtrVT = getPointerTy(DAG.getDataLayout());
 
-  Chain = DAG.getCALLSEQ_START(Chain,
-                               DAG.getConstant(NumBytes, dl, PtrVT, true), dl);
+  Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, dl);
 
   SmallVector<std::pair<unsigned, SDValue>, 4> RegsToPass;
   SmallVector<SDValue, 12> MemOpChains;
@@ -1243,7 +1244,7 @@ SDValue XCoreTargetLowering::LowerFormalArguments(
   switch (CallConv)
   {
     default:
-      llvm_unreachable("Unsupported calling convention");
+      report_fatal_error("Unsupported calling convention");
     case CallingConv::C:
     case CallingConv::Fast:
       return LowerCCCArguments(Chain, CallConv, isVarArg,
@@ -1601,13 +1602,12 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
       if (OutVal.hasOneUse()) {
         unsigned BitWidth = OutVal.getValueSizeInBits();
         APInt DemandedMask = APInt::getLowBitsSet(BitWidth, 8);
-        APInt KnownZero, KnownOne;
+        KnownBits Known;
         TargetLowering::TargetLoweringOpt TLO(DAG, !DCI.isBeforeLegalize(),
                                               !DCI.isBeforeLegalizeOps());
         const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-        if (TLO.ShrinkDemandedConstant(OutVal, DemandedMask) ||
-            TLI.SimplifyDemandedBits(OutVal, DemandedMask, KnownZero, KnownOne,
-                                     TLO))
+        if (TLI.ShrinkDemandedConstant(OutVal, DemandedMask, TLO) ||
+            TLI.SimplifyDemandedBits(OutVal, DemandedMask, Known, TLO))
           DCI.CommitTargetLoweringOpt(TLO);
       }
       break;
@@ -1618,13 +1618,12 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
       if (Time.hasOneUse()) {
         unsigned BitWidth = Time.getValueSizeInBits();
         APInt DemandedMask = APInt::getLowBitsSet(BitWidth, 16);
-        APInt KnownZero, KnownOne;
+        KnownBits Known;
         TargetLowering::TargetLoweringOpt TLO(DAG, !DCI.isBeforeLegalize(),
                                               !DCI.isBeforeLegalizeOps());
         const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-        if (TLO.ShrinkDemandedConstant(Time, DemandedMask) ||
-            TLI.SimplifyDemandedBits(Time, DemandedMask, KnownZero, KnownOne,
-                                     TLO))
+        if (TLI.ShrinkDemandedConstant(Time, DemandedMask, TLO) ||
+            TLI.SimplifyDemandedBits(Time, DemandedMask, Known, TLO))
           DCI.CommitTargetLoweringOpt(TLO);
       }
       break;
@@ -1655,11 +1654,10 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
     // fold (ladd x, 0, y) -> 0, add x, y iff carry is unused and y has only the
     // low bit set
     if (N1C && N1C->isNullValue() && N->hasNUsesOfValue(0, 1)) {
-      APInt KnownZero, KnownOne;
       APInt Mask = APInt::getHighBitsSet(VT.getSizeInBits(),
                                          VT.getSizeInBits() - 1);
-      DAG.computeKnownBits(N2, KnownZero, KnownOne);
-      if ((KnownZero & Mask) == Mask) {
+      KnownBits Known = DAG.computeKnownBits(N2);
+      if ((Known.Zero & Mask) == Mask) {
         SDValue Carry = DAG.getConstant(0, dl, VT);
         SDValue Result = DAG.getNode(ISD::ADD, dl, VT, N0, N2);
         SDValue Ops[] = { Result, Carry };
@@ -1678,11 +1676,10 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
 
     // fold (lsub 0, 0, x) -> x, -x iff x has only the low bit set
     if (N0C && N0C->isNullValue() && N1C && N1C->isNullValue()) {
-      APInt KnownZero, KnownOne;
       APInt Mask = APInt::getHighBitsSet(VT.getSizeInBits(),
                                          VT.getSizeInBits() - 1);
-      DAG.computeKnownBits(N2, KnownZero, KnownOne);
-      if ((KnownZero & Mask) == Mask) {
+      KnownBits Known = DAG.computeKnownBits(N2);
+      if ((Known.Zero & Mask) == Mask) {
         SDValue Borrow = N2;
         SDValue Result = DAG.getNode(ISD::SUB, dl, VT,
                                      DAG.getConstant(0, dl, VT), N2);
@@ -1694,11 +1691,10 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
     // fold (lsub x, 0, y) -> 0, sub x, y iff borrow is unused and y has only the
     // low bit set
     if (N1C && N1C->isNullValue() && N->hasNUsesOfValue(0, 1)) {
-      APInt KnownZero, KnownOne;
       APInt Mask = APInt::getHighBitsSet(VT.getSizeInBits(),
                                          VT.getSizeInBits() - 1);
-      DAG.computeKnownBits(N2, KnownZero, KnownOne);
-      if ((KnownZero & Mask) == Mask) {
+      KnownBits Known = DAG.computeKnownBits(N2);
+      if ((Known.Zero & Mask) == Mask) {
         SDValue Borrow = DAG.getConstant(0, dl, VT);
         SDValue Result = DAG.getNode(ISD::SUB, dl, VT, N0, N2);
         SDValue Ops[] = { Result, Borrow };
@@ -1782,11 +1778,10 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
   break;
   case ISD::STORE: {
     // Replace unaligned store of unaligned load with memmove.
-    StoreSDNode *ST  = cast<StoreSDNode>(N);
+    StoreSDNode *ST = cast<StoreSDNode>(N);
     if (!DCI.isBeforeLegalize() ||
-        allowsMisalignedMemoryAccesses(ST->getMemoryVT(),
-                                       ST->getAddressSpace(),
-                                       ST->getAlignment()) ||
+        allowsMemoryAccess(*DAG.getContext(), DAG.getDataLayout(),
+                           ST->getMemoryVT(), *ST->getMemOperand()) ||
         ST->isVolatile() || ST->isIndexed()) {
       break;
     }
@@ -1795,12 +1790,7 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
     unsigned StoreBits = ST->getMemoryVT().getStoreSizeInBits();
     assert((StoreBits % 8) == 0 &&
            "Store size in bits must be a multiple of 8");
-    unsigned ABIAlignment = DAG.getDataLayout().getABITypeAlignment(
-        ST->getMemoryVT().getTypeForEVT(*DCI.DAG.getContext()));
     unsigned Alignment = ST->getAlignment();
-    if (Alignment >= ABIAlignment) {
-      break;
-    }
 
     if (LoadSDNode *LD = dyn_cast<LoadSDNode>(ST->getValue())) {
       if (LD->hasNUsesOfValue(1, 0) && ST->getMemoryVT() == LD->getMemoryVT() &&
@@ -1822,19 +1812,19 @@ SDValue XCoreTargetLowering::PerformDAGCombine(SDNode *N,
 }
 
 void XCoreTargetLowering::computeKnownBitsForTargetNode(const SDValue Op,
-                                                        APInt &KnownZero,
-                                                        APInt &KnownOne,
+                                                        KnownBits &Known,
+                                                        const APInt &DemandedElts,
                                                         const SelectionDAG &DAG,
                                                         unsigned Depth) const {
-  KnownZero = KnownOne = APInt(KnownZero.getBitWidth(), 0);
+  Known.resetAll();
   switch (Op.getOpcode()) {
   default: break;
   case XCoreISD::LADD:
   case XCoreISD::LSUB:
     if (Op.getResNo() == 1) {
       // Top bits of carry / borrow are clear.
-      KnownZero = APInt::getHighBitsSet(KnownZero.getBitWidth(),
-                                        KnownZero.getBitWidth() - 1);
+      Known.Zero = APInt::getHighBitsSet(Known.getBitWidth(),
+                                         Known.getBitWidth() - 1);
     }
     break;
   case ISD::INTRINSIC_W_CHAIN:
@@ -1843,24 +1833,24 @@ void XCoreTargetLowering::computeKnownBitsForTargetNode(const SDValue Op,
       switch (IntNo) {
       case Intrinsic::xcore_getts:
         // High bits are known to be zero.
-        KnownZero = APInt::getHighBitsSet(KnownZero.getBitWidth(),
-                                          KnownZero.getBitWidth() - 16);
+        Known.Zero = APInt::getHighBitsSet(Known.getBitWidth(),
+                                           Known.getBitWidth() - 16);
         break;
       case Intrinsic::xcore_int:
       case Intrinsic::xcore_inct:
         // High bits are known to be zero.
-        KnownZero = APInt::getHighBitsSet(KnownZero.getBitWidth(),
-                                          KnownZero.getBitWidth() - 8);
+        Known.Zero = APInt::getHighBitsSet(Known.getBitWidth(),
+                                           Known.getBitWidth() - 8);
         break;
       case Intrinsic::xcore_testct:
         // Result is either 0 or 1.
-        KnownZero = APInt::getHighBitsSet(KnownZero.getBitWidth(),
-                                          KnownZero.getBitWidth() - 1);
+        Known.Zero = APInt::getHighBitsSet(Known.getBitWidth(),
+                                           Known.getBitWidth() - 1);
         break;
       case Intrinsic::xcore_testwct:
         // Result is in the range 0 - 4.
-        KnownZero = APInt::getHighBitsSet(KnownZero.getBitWidth(),
-                                          KnownZero.getBitWidth() - 3);
+        Known.Zero = APInt::getHighBitsSet(Known.getBitWidth(),
+                                           Known.getBitWidth() - 3);
         break;
       }
     }
@@ -1891,7 +1881,8 @@ static inline bool isImmUs4(int64_t val)
 /// by AM is legal for this target, for a load/store of the specified type.
 bool XCoreTargetLowering::isLegalAddressingMode(const DataLayout &DL,
                                                 const AddrMode &AM, Type *Ty,
-                                                unsigned AS) const {
+                                                unsigned AS,
+                                                Instruction *I) const {
   if (Ty->getTypeID() == Type::VoidTyID)
     return AM.Scale == 0 && isImmUs(AM.BaseOffs) && isImmUs4(AM.BaseOffs);
 
