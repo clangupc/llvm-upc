@@ -4,7 +4,7 @@ echo "##########################################################################
 echo "The LLVM project no longer supports building with configure & make."
 echo ""
 echo "Please migrate to the CMake-based build system."
-echo "For more information see: http://llvm.org/docs/CMake.html"
+echo "For more information visit: https://clangupc.github.io/clang-upc2c/"
 echo "################################################################################"
 echo "################################################################################"
 exit 1
