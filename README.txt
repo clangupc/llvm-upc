@@ -1,20 +1,19 @@
-llvm-upc: Low Level Virtual Machine (LLVM) for Clang UPC
-========================================================
+llvm-upc: Low Level Virtual Machine (LLVM) for Clang UPC2C
+==========================================================
 
 This directory and its subdirectories contain source code for LLVM,
 a toolkit for the construction of highly optimized compilers,
 optimizers, and runtime environments.
 
 This version of LLVM (llvm-upc) includes extensions needed
-by the Clang-UPC compiler.
+by the Clang UPC2C translator.
 
-For details on how to build, install, and use Clang UPC,
-consult the wiki at:
-  https://github.com/Intrepid/clang-upc/wiki.
+For details on how to build, install, and use Clang UPC2C, visit
+  https://clangupc.github.io/clang-upc2c/
 
-If you find a bug in Clang UPC, please file it in the
-Clang UPC issue tracker:
-  https://github.com/Intrepid/clang-upc/issues
+If you find a bug in Clang UPC2C, please file it in the
+Clang UPC2C issue tracker:
+  https://github.com/clangupc/upc2c/issues
 
 LLVM is open source software. You may freely distribute it under the terms of
 the license agreement found in LICENSE.txt.
